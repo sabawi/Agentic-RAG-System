@@ -117,7 +117,7 @@ class ServerConfig:
     
     # Threading configuration
     MAX_WORKERS = 10
-    TIMEOUT_SECONDS = 600  # 10 minutes
+    TIMEOUT_SECONDS = 7200  # 8 minutes
     
     # File upload configuration
     UPLOAD_FOLDER = 'uploads'

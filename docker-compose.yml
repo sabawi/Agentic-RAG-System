@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # FastAPI Application
+  fastapi-server:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=mysql-db
+      - DB_USER=root
+      - DB_PASSWORD=Down2earth!
+      - DB_NAME=mystocks
+      - REDIS_URL=redis://redis-cache:6379/0
+      - DEBUG=false
+    depends_on:
+      - mysql-db
+      - redis-cache
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MySQL Database
+  mysql-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: Down2earth!
+      MYSQL_DATABASE: mystocks
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pDown2earth!"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis Cache
+  redis-cache:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Commander (Optional - for Redis management)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis-cache:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis-cache
+    profiles:
+      - tools
+
+  # phpMyAdmin (Optional - for MySQL management)
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    environment:
+      PMA_HOST: mysql-db
+      PMA_USER: root
+      PMA_PASSWORD: Down2earth!
+    ports:
+      - "8080:80"
+    depends_on:
+      - mysql-db
+    profiles:
+      - tools
+
+volumes:
+  mysql_data:
+  redis_data:

@@ -14,7 +14,7 @@ import tempfile
 USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
 
 class SeleniumCrawler:
-    def __init__(self, base_url, max_depth=2, max_url_count=2,timeout_response=30):
+    def __init__(self, base_url, max_depth=2, max_url_count=2,timeout_response=50):
         self.base_url = base_url
         self.domain = urlparse(base_url).netloc
         self.max_depth = max_depth
@@ -35,7 +35,7 @@ class SeleniumCrawler:
         chrome_options.add_argument(f'--user-data-dir={temp_dir}')
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--ignore-certificate-errors")
-        chrome_options.add_argument(f"--timeout 40000")
+        chrome_options.add_argument(f"--timeout 60000")  # Increased to 60 seconds (60000ms)
         chrome_options.add_argument(f"user-agent={USER_AGENT}")
 
         # seleniumwire_options = {'verify_ssl':False, 'connection_timeout':timeout_response, 'read_timeout':timeout_response}
@@ -49,7 +49,7 @@ class SeleniumCrawler:
         # Set various timeouts
         self.driver.set_page_load_timeout(self.timeout)  # Page load timeout
         self.driver.set_script_timeout(self.timeout)     # Async script timeout
-        self.driver.implicitly_wait(5)        # Implicit wait for finding elements
+        self.driver.implicitly_wait(10)       # Increased implicit wait for slow websites
         
         self.robot_parser = self.setup_robot_parser()
         
@@ -87,7 +87,7 @@ class SeleniumCrawler:
         try:
             # Use Selenium to load the page
             self.driver.get(url)
-            time.sleep(2)  # Wait for the page to load
+            time.sleep(5)  # Increased wait time for slow websites to fully render
 
             # Parse the rendered HTML
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
@@ -111,10 +111,25 @@ class SeleniumCrawler:
                     self.crawl(full_url, depth + 1)
 
         except TimeoutException as e:
-                print(f"An error occurred while waiting for the element: {str(e)}")
+                print(f"Page load timeout after {self.timeout} seconds for {url}: {str(e)}")
                 self.driver.execute_script("window.stop();")  # Stop page loading
+                # Try to get partial content if available
+                try:
+                    soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+                    title = soup.title.string if soup.title else 'No Title (Timeout)'
+                    readable_text = self.extract_readable_text(soup)
+                    if readable_text.strip():  # Only add if we got some content
+                        self.results.append({
+                            "title": title + " (Partial)",
+                            "url": url,
+                            "content": readable_text
+                        })
+                        self.url_count += 1
+                        print(f"Partial content captured for {url}")
+                except Exception as partial_e:
+                    print(f"Could not capture partial content: {partial_e}")
         except Exception as e:
-            print(f"An error occurred. Error: {e}")
+            print(f"An error occurred while crawling {url}. Error: {e}")
 
         
     def extract_readable_text(self, soup):
