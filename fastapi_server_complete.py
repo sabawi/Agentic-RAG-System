@@ -55,6 +55,8 @@ try:
     from text_chunker import TextChunker
     import PyPDF2
     import magic
+    import trafilatura
+    from urllib.parse import urlparse
     TOOLS_AVAILABLE = True
 except ImportError as e:
     print(f"WARNING: Some tools not available: {e}")
@@ -684,7 +686,7 @@ class AsyncToolManager:
         except Exception as e:
             return f"Web search error: {str(e)}"
     
-    async def lookup_website(self, args: str) -> str:
+    async def lookup_website_old(self, args: str) -> str:
         """
         Retrieve and extract comprehensive text content from a specified website URL.
         Uses the original working implementation from find_eps_estimate.py with both Selenium and BeautifulSoup
@@ -842,6 +844,280 @@ class AsyncToolManager:
             )
         except Exception as e:
             return f"Website lookup error: {str(e)}"
+    
+    def _is_pdf_url(self, url: str) -> bool:
+        """Check if URL points to a PDF file."""
+        parsed = urlparse(url.lower())
+        return (
+            parsed.path.endswith(".pdf")
+            or "pdf" in parsed.path
+            or url.lower().endswith(".pdf")
+        )
+    
+    def _extract_pdf_content(self, url: str) -> dict:
+        """Extract content from a PDF URL and format like HTML scraping."""
+        try:
+            print(f"Extracting PDF from {url}", flush=True)
+            # Download PDF
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+
+            # Check if we actually got a PDF
+            content_type = response.headers.get("content-type", "").lower()
+            if "pdf" not in content_type and not url.lower().endswith(".pdf"):
+                print(f"Error: URL does not appear to be a PDF (content-type: {content_type})", flush=True)
+                return {
+                    "success": False,
+                    "error": f"URL does not appear to be a PDF (content-type: {content_type})",
+                }
+
+            # Create PDF reader from bytes
+            pdf_file = io.BytesIO(response.content)
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+
+            # Check if PDF is readable
+            if len(pdf_reader.pages) == 0:
+                print("Error: PDF contains no readable pages", flush=True)
+                return {"success": False, "error": "PDF contains no readable pages"}
+
+            # Extract metadata
+            metadata = pdf_reader.metadata if pdf_reader.metadata else {}
+
+            title = None
+            author = None
+            if metadata:
+                title = (
+                    metadata.get("/Title", "").strip()
+                    if metadata.get("/Title")
+                    else None
+                )
+                author = (
+                    metadata.get("/Author", "").strip()
+                    if metadata.get("/Author")
+                    else None
+                )
+
+            # Extract ALL text as one continuous document
+            all_text = []
+            successful_pages = 0
+
+            for page_num, page in enumerate(pdf_reader.pages):
+                try:
+                    # Try multiple extraction methods
+                    page_text = page.extract_text()
+
+                    # If default extraction fails, try with layout mode
+                    if not page_text.strip():
+                        try:
+                            page_text = page.extract_text(extraction_mode="layout")
+                        except:
+                            pass
+
+                    if page_text.strip():
+                        # Clean up common PDF extraction artifacts
+                        page_text = page_text.replace("\x00", "")  # Remove null bytes
+                        page_text = page_text.replace("\n\n\n", "\n\n")  # Reduce excessive newlines
+                        all_text.append(page_text.strip())
+                        successful_pages += 1
+                except Exception as e:
+                    print(f"Error extracting page {page_num + 1}: {e}", flush=True)
+                    continue
+
+            if successful_pages == 0:
+                print(f"Error: Could not extract text from any of the {len(pdf_reader.pages)} pages", flush=True)
+                return {
+                    "success": False,
+                    "error": f"Could not extract text from any of the {len(pdf_reader.pages)} pages",
+                }
+
+            # Join all text with double newlines
+            full_text = "\n\n".join(all_text)
+
+            # Clean up and format like HTML scraping output
+            full_text = " ".join(full_text.split())  # Replace multiple spaces with single spaces
+            full_text = full_text.replace(". ", ".\n\n")  # Add paragraph breaks
+            full_text = full_text.replace("? ", "?\n\n")
+            full_text = full_text.replace("! ", "!\n\n")
+            full_text = full_text.replace("\n\n\n", "\n\n")  # Clean up triple newlines
+
+            # If no title in metadata, try to extract from beginning of text
+            if not title and full_text:
+                first_part = full_text[:500]
+                sentences = first_part.split("\n\n")[:5]
+
+                for sentence in sentences:
+                    sentence = sentence.strip()
+                    if (
+                        len(sentence) > 10
+                        and len(sentence) < 200
+                        and not sentence.lower().startswith("draft")
+                        and not "arxiv:" in sentence.lower()
+                        and not sentence.startswith("Typeset")
+                        and not "@" in sentence
+                        and not sentence.replace(".", "").isdigit()
+                    ):
+                        title = sentence
+                        break
+
+            print(f"PDF extraction successful: {successful_pages}/{len(pdf_reader.pages)} pages, {len(full_text)} chars", flush=True)
+            
+            return {
+                "success": True,
+                "title": title or "PDF Document",
+                "author": author,
+                "content": full_text,
+                "page_count": len(pdf_reader.pages),
+                "extracted_pages": successful_pages,
+            }
+
+        except Exception as e:
+            print(f"Error extracting PDF content from {url}: {str(e)}", flush=True)
+            return {
+                "success": False,
+                "error": f"Error extracting PDF content from {url}: {str(e)}",
+            }
+
+    def _extract_web_content(self, url: str) -> dict:
+        """Extract content from a regular web page using trafilatura."""
+        try:
+            print(f"Extracting web content from {url}", flush=True)
+            downloaded = trafilatura.fetch_url(url)
+            if downloaded is None:
+                return {
+                    "success": False,
+                    "error": f"Failed to download content from {url}",
+                }
+
+            # Extract content and metadata separately
+            extracted = trafilatura.extract(downloaded)
+            metadata = trafilatura.extract_metadata(downloaded)
+
+            if extracted is None:
+                return {"success": False, "error": f"No content found at {url}"}
+
+            # Get title and author from metadata if available
+            title = None
+            author = None
+            date = None
+
+            if metadata:
+                title = metadata.title
+                author = metadata.author
+                date = metadata.date
+
+            print(f"Web extraction successful: {len(extracted)} chars", flush=True)
+
+            return {
+                "success": True,
+                "title": title or "Web Article",
+                "author": author,
+                "date": date,
+                "content": extracted,
+            }
+
+        except Exception as e:
+            print(f"Error extracting content from {url}: {e}", flush=True)
+            return {
+                "success": False,
+                "error": f"Error extracting content from {url}: {e}",
+            }
+
+    def _safe_truncate(self, content: str, max_chars: int = 10000) -> str:
+        """Simple, safe truncation that guarantees we stay under buffer limits."""
+        if len(content) <= max_chars:
+            return content
+
+        print(f"Content too large ({len(content)} chars), truncating to {max_chars}", flush=True)
+        
+        # Simple truncation with clear notice
+        truncated = content[:max_chars]
+
+        # Try to end at a complete sentence
+        last_period = truncated.rfind(". ")
+        if last_period > max_chars * 0.8:  # If we can cut at a sentence near the end
+            truncated = truncated[: last_period + 1]
+
+        # Add clear truncation notice
+        total_chars = len(content)
+        total_words = len(content.split())
+        shown_words = len(truncated.split())
+
+        truncated += f"\n\n--- CONTENT TRUNCATED ---\n"
+        truncated += f"Showing: {shown_words} words of {total_words} total\n"
+        truncated += f"Original size: {total_chars} characters\n"
+        truncated += f"Reason: Context window limit\n"
+        truncated += f"Note: Full content was extracted successfully"
+
+        return truncated
+
+    async def lookup_website(self, args: str) -> str:
+        """
+        Enhanced website content extractor using trafilatura for better HTML parsing.
+        Handles both web pages and PDFs with improved content extraction.
+        """
+        try:
+            def sync_website_extraction():
+                # Handle parameter parsing
+                if isinstance(args, str):
+                    try:
+                        data = json.loads(args) if args.startswith('{') else {'url': args}
+                    except:
+                        data = {'url': args}
+                else:
+                    data = args if isinstance(args, dict) else {'url': str(args)}
+                
+                url = data.get('url', '').strip()
+                print(f"Website extraction URL: {url}", flush=True)
+                
+                if not url:
+                    return "Error: No URL provided for website lookup."
+                
+                today = datetime.now()
+                todayStr = today.strftime("%A, %B %d, %Y %I:%M:%S %p")
+                
+                # Determine content type and extract accordingly
+                if self._is_pdf_url(url):
+                    result = self._extract_pdf_content(url)
+                    content_type = "PDF"
+                else:
+                    result = self._extract_web_content(url)
+                    content_type = "Web Page"
+
+                # Handle extraction errors
+                if not result["success"]:
+                    return f"ERROR: Failed to extract content from {url}: {result['error']}"
+
+                # Apply safe truncation to avoid buffer overflow
+                content = self._safe_truncate(result["content"])
+
+                # Format response similar to original but cleaner
+                response_parts = [
+                    f"\nAs of [Current Date and Time: {todayStr}] here are the website lookup results:",
+                    f"Title: {result['title']}",
+                    f"URL: {url}",
+                    f"Type: {content_type}",
+                    f"Content:\n{content}"
+                ]
+
+                if result.get('author'):
+                    response_parts.insert(-1, f"Author: {result['author']}")
+                
+                if result.get('date'):
+                    response_parts.insert(-1, f"Published: {result['date']}")
+
+                final_response = '\n'.join(response_parts)
+                
+                print(f"Website extraction completed: {len(final_response)} chars", flush=True)
+                return final_response
+            
+            return await asyncio.get_event_loop().run_in_executor(
+                thread_pool, sync_website_extraction
+            )
+        except Exception as e:
+            return f"Website extraction error: {str(e)}"
     
     async def safe_function_call(self, func_name: str, args: str) -> str:
         """Safely execute a function"""
