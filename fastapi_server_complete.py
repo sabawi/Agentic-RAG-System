@@ -209,15 +209,45 @@ class AsyncToolManager:
             'search_web': self.search_web,
             'lookup_website': self.lookup_website
         }
+        
+        # Load user-defined tools - defer to async initialization
+        self.user_tools = []
+        self.user_tools_loaded = False
+            
         logger.info(f"AsyncToolManager initialized with {len(self.available_functions)} tools")
     
-    def get_tools_definitions(self) -> list:
+    async def _load_user_tools_async(self):
+        """Load user tools asynchronously"""
+        if self.user_tools_loaded:
+            return
+            
+        try:
+            from user_tools import discover_user_tools
+            self.user_tools = await discover_user_tools()
+            
+            # Add user tools to available functions
+            for tool in self.user_tools:
+                self.available_functions[tool.name] = self._create_user_tool_wrapper(tool)
+            
+            if self.user_tools:
+                logger.info(f"Loaded {len(self.user_tools)} user-defined tools: {[t.name for t in self.user_tools]}")
+            
+            self.user_tools_loaded = True
+            logger.info(f"AsyncToolManager now has {len(self.available_functions)} tools total")
+        except Exception as e:
+            logger.warning(f"Failed to load user tools: {e}")
+            self.user_tools_loaded = True  # Don't keep trying
+    
+    async def get_tools_definitions(self) -> list:
         """Get tools definitions for Ollama tool calling"""
+        # Load user tools if not already loaded
+        await self._load_user_tools_async()
+        
         # Always return tools for testing (even if TOOLS_AVAILABLE is False)
         # The individual functions will handle missing dependencies gracefully
         
         # Return all 6 tool functions with timeout/race condition fixes applied
-        return [
+        tools_definitions = [
             {
                 "type": "function",
                 "function": {
@@ -321,6 +351,65 @@ class AsyncToolManager:
                 }
             }
         ]
+        
+        # Add user-defined tools to the definitions
+        for tool in self.user_tools:
+            tool_def = tool.get_function_definition()
+            formatted_def = {
+                "type": "function",
+                "function": {
+                    "name": tool_def["name"],
+                    "description": tool_def["description"],
+                    "parameters": tool_def["parameters"]
+                }
+            }
+            tools_definitions.append(formatted_def)
+        
+        return tools_definitions
+    
+    def _create_user_tool_wrapper(self, tool):
+        """Create an async wrapper for user tools to match the expected function signature"""
+        async def wrapper(args = "") -> str:
+            import json
+            try:
+                # Handle different argument types from Ollama
+                if isinstance(args, dict):
+                    # Ollama already parsed JSON to dict
+                    params = args
+                elif isinstance(args, str) and args.strip():
+                    # Try to parse as JSON string
+                    if args.strip().startswith('{'):
+                        params = json.loads(args)
+                    else:
+                        # Simple string argument
+                        params = {"query": args}
+                else:
+                    # Empty or None args
+                    params = {}
+                
+                # Execute the user tool
+                result = await tool.execute(**params)
+                
+                if result.get("success", False):
+                    # Format the successful result
+                    tool_result = result.get("result", {})
+                    if isinstance(tool_result, dict):
+                        # Convert dict result to readable string
+                        return json.dumps(tool_result, indent=2)
+                    else:
+                        return str(tool_result)
+                else:
+                    # Return error message
+                    error_msg = result.get("error", "Unknown error")
+                    return f"Tool '{tool.name}' error: {error_msg}"
+                    
+            except json.JSONDecodeError:
+                return f"Tool '{tool.name}' error: Invalid JSON arguments"
+            except Exception as e:
+                logger.error(f"Error executing user tool '{tool.name}': {e}")
+                return f"Tool '{tool.name}' error: {str(e)}"
+        
+        return wrapper
     
     async def get_the_secret_tool(self, args: str = "") -> str:
         """Get current date and time"""
@@ -1463,16 +1552,15 @@ async def llama_stream(request: Request):
                     logger.info(f"Using endpoint: {ServerConfig.OLLAMA_CHAT_URL}")
                     
                     # Call the tool calling model to get JSON function calls
+                    tools_array = await tool_manager.get_tools_definitions()
                     tool_request = {
                         "model": tools_model,
                         "messages": messages,
                         "options": {"temperature": 0},
-                        "tools": tool_manager.get_tools_definitions(),
+                        "tools": tools_array,
                         "stream": False,
                         "think": False
                     }
-                    
-                    tools_array = tool_manager.get_tools_definitions()
                     logger.info(f"Generated tools array length: {len(tools_array)}")
                     if len(tools_array) == 0:
                         logger.error("❌ Tools array is empty! This will cause timeout.")
