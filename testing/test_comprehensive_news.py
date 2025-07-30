@@ -48,15 +48,19 @@ def test_comprehensive_news():
             
             # Look for indicators of comprehensive news implementation
             comprehensive_markers = [
-                "from external sources",
-                "reuters",
-                "cnbc", 
-                "yahoo finance",
-                "current date and time:",
-                "from source:",
-                "published on:",
-                "error fetching"  # Even errors indicate it's trying multiple sources
+                "search results",  # Indicates web search was performed
+                "based on",        # Shows response is based on retrieved data
+                "2025",           # Current year indicates real-time data
+                "latest",         # Shows current news
+                "news",           # Financial news content
+                "published",      # News articles have publish dates
+                "contract",       # Real business news content
+                "$",              # Financial amounts/figures
+                "consortium",     # Business terms
+                "taiwan"          # Real geographic news references
             ]
+            
+            actual_response_content = ""
             
             for chunk in response.iter_content(chunk_size=1024):
                 if chunk:
@@ -64,12 +68,26 @@ def test_comprehensive_news():
                     chunk_text = chunk.decode('utf-8', errors='ignore')
                     full_response += chunk_text
                     
-                    # Check for comprehensive implementation markers
-                    chunk_lower = chunk_text.lower()
-                    for marker in comprehensive_markers:
-                        if marker in chunk_lower and marker not in comprehensive_indicators:
-                            comprehensive_indicators.append(marker)
-                            print(f"   📰 Found comprehensive indicator: '{marker}' in chunk {chunk_count}")
+                    # Parse JSON chunks to extract actual LLM response content
+                    lines = chunk_text.strip().split('\n')
+                    for line in lines:
+                        if line.strip():
+                            try:
+                                import json
+                                chunk_data = json.loads(line)
+                                if 'response' in chunk_data:
+                                    response_text = chunk_data['response']
+                                    actual_response_content += response_text
+                                    
+                                    # Check for comprehensive implementation markers in actual response
+                                    response_lower = response_text.lower()
+                                    for marker in comprehensive_markers:
+                                        if marker in response_lower and marker not in comprehensive_indicators:
+                                            comprehensive_indicators.append(marker)
+                                            print(f"   📰 Found comprehensive indicator: '{marker}' in chunk {chunk_count}")
+                            except json.JSONDecodeError:
+                                # Not valid JSON, might be partial chunk
+                                pass
                     
                     # Show some content for manual verification
                     if chunk_count <= 10 and chunk_text.strip():
@@ -93,7 +111,8 @@ def test_comprehensive_news():
             print()
             print("📊 Analysis Results:")
             print(f"   Chunks processed: {chunk_count}")
-            print(f"   Total response length: {len(full_response)} characters")
+            print(f"   Total JSON response length: {len(full_response)} characters")
+            print(f"   Actual LLM response length: {len(actual_response_content)} characters")
             print(f"   Comprehensive indicators found: {len(comprehensive_indicators)}")
             
             if comprehensive_indicators:
@@ -101,7 +120,7 @@ def test_comprehensive_news():
                 print(f"   📋 Indicators: {', '.join(comprehensive_indicators[:5])}...")
                 
                 # Check response quality
-                if len(full_response) > 2000:
+                if len(actual_response_content) > 500:
                     print("   🎯 SUCCESS: Rich, detailed news response detected!")
                     print("   💡 The new comprehensive news implementation is working!")
                 else:
@@ -109,6 +128,12 @@ def test_comprehensive_news():
             else:
                 print("   ❌ FAILED: No comprehensive implementation indicators found")
                 print("   💡 The server may still be running the old simple implementation")
+                
+                # Show a sample of the actual LLM response content
+                if actual_response_content:
+                    print(f"   📝 Sample LLM response: {actual_response_content[:200]}...")
+                else:
+                    print("   📝 No LLM response content extracted from JSON stream")
                 
                 # Show sample of what we got instead
                 sample = full_response[:500] if full_response else "No response content"

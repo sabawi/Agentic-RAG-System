@@ -1111,7 +1111,18 @@ async def llama_stream(request: Request):
                         * Apply relevant keyword as parameter
                         * Focus on financial keywords related to the stock/sector
 
-                    3. Current Events, Up-to-date Data, and Local Information
+                    3. Website Content and URL Analysis:
+                    - When the user provides a specific URL or web address, ALWAYS call lookup_website() with that exact URL
+                    - Use lookup_website() for:
+                        * Academic papers (arXiv, research papers)
+                        * Documentation and technical content
+                        * Articles and blog posts
+                        * Any specific webpage the user wants analyzed
+                        * PDFs linked via URL
+                    - Example: If user says "Explain this paper: URL: https://arxiv.org/html/..." -> call lookup_website({'url': 'https://arxiv.org/html/...'})
+                    - CRITICAL: Never guess or hallucinate content when a URL is provided - always fetch it first
+
+                    4. Current Events, Up-to-date Data, and Local Information
                     - Use search_web() for:
                         * Local events
                         * Current business information
@@ -1120,7 +1131,7 @@ async def llama_stream(request: Request):
                         * Real-time local context
                     - For deeper and current news context, supplement with get_news_summaries()
 
-                    4. News and Current Affairs:
+                    5. News and Current Affairs:
                     - Use get_news_summaries() for:
                         * Latest developments in major topics
                         * Global/national events
@@ -1128,7 +1139,7 @@ async def llama_stream(request: Request):
                     - When local news is needed, include location specifics 
                         (city, state, country) in the parameter
 
-                    5. Travel and Lifestyle Information:
+                    6. Travel and Lifestyle Information:
                     - Employ search_web() for comprehensive queries about:
                         * Flight details
                         * Hotel availability
@@ -1137,7 +1148,7 @@ async def llama_stream(request: Request):
                         * Tourist attractions
                     - Use full, detailed query strings
                     
-                    6. Encyclopedia and Factual Information: 
+                    7. Encyclopedia and Factual Information: 
                     - Divide the question into partial questions. Use wikipedia_query() only if needed. Call wikipedia_query() once per question as parameter for the following cases:
                         * Historical events
                         * Academic facts
