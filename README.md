@@ -16,7 +16,11 @@ A high-performance FastAPI-based agentic RAG (Retrieval-Augmented Generation) sy
 1. **get_the_secret_tool** - System date/time retrieval
 2. **get_news_summaries** - Enhanced news with full article content extraction
 3. **search_web** - DuckDuckGo web search with content extraction
-4. **lookup_website** - Website content retrieval and processing
+4. **lookup_website** - Enhanced website & PDF content extraction (trafilatura-based)
+   - **HTML Pages**: Clean content extraction from any webpage
+   - **PDF Documents**: Complete text extraction from all pages
+   - **arXiv Papers**: Perfect for academic papers (HTML & PDF versions)
+   - **Smart Truncation**: Handles large documents intelligently
 5. **wikipedia_query** - Wikipedia information retrieval
 6. **get_stock_and_company_data** - Financial data and analysis
 
@@ -24,9 +28,11 @@ A high-performance FastAPI-based agentic RAG (Retrieval-Augmented Generation) sy
 - **FastAPI** - Modern async web framework
 - **Ollama** - Local LLM processing
 - **aiomysql** - Async database connectivity
-- **BeautifulSoup** + **Selenium** - Web scraping
+- **trafilatura** - Advanced web content & PDF extraction  
+- **BeautifulSoup** + **Selenium** - Web scraping (fallback)
 - **newspaper3k** - Article content extraction
 - **ddgs** - DuckDuckGo search integration
+- **PyPDF2** - PDF document processing
 - **yfinance** - Financial data
 - **Wikipedia-API** - Wikipedia integration
 
@@ -95,13 +101,27 @@ python3 fastapi_server_complete.py
 - `GET /retrieve_system_prompts` - Available system prompts
 - `GET /ollama/models` - Available Ollama models
 
-### Example Request
+### Example Requests
+
+**News Analysis:**
 ```bash
 curl -X POST "http://localhost:5000/llama3_1b/stream" \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "Look up the latest news about AI developments",
     "model": "qwen3:8b",
+    "toolsInUse": true,
+    "system": "You are a helpful assistant."
+  }'
+```
+
+**Academic Paper Analysis:**
+```bash
+curl -X POST "http://localhost:5000/llama3_1b/stream" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Explain this paper in details: URL: https://arxiv.org/pdf/2501.00139v2.pdf",
+    "model": "llama3.2:3b",
     "toolsInUse": true,
     "system": "You are a helpful assistant."
   }'
