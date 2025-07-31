@@ -109,7 +109,7 @@ class OllamaStreamRequest(BaseModel):
     toolsInUse: Optional[bool] = Field(default=True, description="Enable tools")
     searchWebInUse: Optional[bool] = Field(default=False, description="Enable web search")
     images: Optional[List[str]] = Field(default=["noimage"], description="Image data")
-    tools_calling_model: Optional[str] = Field(default="llama3.2:3b", description="Model for tool calls")
+    tools_calling_model: Optional[str] = Field(default="qwen3:8b", description="Model for tool calls")
     
     # Make validation more flexible like the original Flask version
     class Config:
@@ -1428,7 +1428,7 @@ async def llama_stream(request: Request):
     # Other parameters
     model = data.get('model', ServerConfig.DEFAULT_MODEL)
     images = data.get('images', ['noimage'])
-    tools_calling_model = data.get('tools_calling_model', 'llama3.2:3b')
+    tools_calling_model = data.get('tools_calling_model', 'qwen3:8b')
     
     # Handle images exactly like original
     image_exists = False
@@ -1447,11 +1447,9 @@ async def llama_stream(request: Request):
                 logger.info("---> Tools are in use")
                 
                 # STAGE 1: Call tool calling model to generate JSON function calls
-                # Using the exact system prompt from the original
-                messages = [
-                    {
-                        "role": "system",
-                        "content": """BEFORE YOU MAKE FUNCTION CALLS, FOLLOW THIS GUIDELINE:
+                # Using the exact system prompt from the original, with user's system prompt integration
+                user_system_prompt = data.get('system', '').strip()
+                system_content = """BEFORE YOU MAKE FUNCTION CALLS, FOLLOW THIS GUIDELINE:
                         Tool Call Generation Guidelines -->:
                     DO NOT USE MORE THAN THREE (3) DIFFERENT FUNCTIONS. YOU CAN CALL THE SAME FUNCTION MULTIPLE TIMES WIth DIFFERENT PARAMETERS  :
                     
@@ -1536,6 +1534,15 @@ async def llama_stream(request: Request):
                         * Breaking stories
                     
                     """
+                
+                # Add user's system prompt if provided, especially for math operations
+                if user_system_prompt:
+                    system_content += f"\n\nADDITIONAL USER INSTRUCTIONS:\n{user_system_prompt}"
+                
+                messages = [
+                    {
+                        "role": "system",
+                        "content": system_content
                     },
                     {
                         "role": "user",
@@ -1546,7 +1553,7 @@ async def llama_stream(request: Request):
                 ]
                 
                 try:
-                    tools_model = data.get('tools_calling_model', 'llama3.2:3b').strip()
+                    tools_model = data.get('tools_calling_model', 'qwen3:8b').strip()
                     logger.info(f"Calling Tools Model ==> {tools_model}")
                     logger.info(f"Tools available count: {len(data.get('tools', []))}")
                     logger.info(f"Using endpoint: {ServerConfig.OLLAMA_CHAT_URL}")

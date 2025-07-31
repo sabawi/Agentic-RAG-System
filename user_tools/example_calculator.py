@@ -96,7 +96,9 @@ class CalculatorTool(BaseUserTool):
                     "operation": operation,
                     "operands": [a, b],
                     "result": result,
-                    "expression": f"{a} {self._get_operator_symbol(operation)} {b} = {result}"
+                    "expression": f"{a} {self._get_operator_symbol(operation)} {b} = {result}",
+                    "answer": result,
+                    "calculation_verified": f"VERIFIED: {a} {self._get_operator_symbol(operation)} {b} equals exactly {result}"
                 },
                 "error": None
             }
