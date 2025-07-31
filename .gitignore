@@ -85,4 +85,7 @@ coverage.xml
 # mypy
 .mypy_cache/
 .dmypy.json
-dmypy.json
+dmypy.jsoncredentials.json
+token.pickle
+server_complete.pid
+*.log
