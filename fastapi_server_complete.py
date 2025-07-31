@@ -1335,6 +1335,31 @@ async def check_ollama_health() -> bool:
     except:
         return False
 
+def _build_enhanced_primary_system_prompt(original_system, tools_were_executed=False, tools_results_summary=""):
+    """
+    Build enhanced system prompt for primary LLM when tools have been executed.
+    This prevents the primary LLM from redoing work already completed by tool calling model.
+    """
+    if not tools_were_executed:
+        return original_system
+    
+    enhanced_instructions = """
+
+CRITICAL WORKFLOW INSTRUCTIONS:
+- Tools have already been executed and completed their tasks
+- Your role is to REPORT and ANALYZE the results, NOT to redo the work
+- DO NOT recreate, rewrite, or duplicate what the tools have already accomplished
+- Focus on summarizing what was accomplished and suggesting next steps
+- Present the results clearly and offer analysis or follow-up options
+
+TOOLS EXECUTION SUMMARY:
+""" + tools_results_summary + """
+
+Remember: The work is DONE. Your job is to present the results and provide insights, not to start over.
+"""
+    
+    return original_system + enhanced_instructions
+
 # ==============================================================================
 # OLLAMA LLM ENDPOINTS
 # ==============================================================================
@@ -1371,8 +1396,15 @@ async def llama_prompt(request: OllamaPromptRequest):
                 if request.stream:
                     # Return streaming response
                     async def stream_generator():
-                        async for chunk in response.content.iter_chunked(1024):
-                            yield chunk
+                        try:
+                            async for chunk in response.content.iter_chunked(1024):
+                                if chunk:
+                                    yield chunk
+                        except Exception as e:
+                            logger.error(f"Streaming error: {e}")
+                            # Send error message as final chunk
+                            error_response = {"error": f"Streaming interrupted: {str(e)}"}
+                            yield json.dumps(error_response).encode() + b'\n'
                     
                     return StreamingResponse(
                         stream_generator(),
@@ -1725,12 +1757,20 @@ END OF CONTEXT
             in_prompt = "Context: " + tools_results_summary + " \n" + user_prompt
             logger.info(f"in_prompt size = {len(in_prompt)} bytes")
             
-            # Stream response from Ollama
+            # Enhanced system prompt for primary LLM when tools have been executed
+            original_system = data.get('system', '')
+            enhanced_system = _build_enhanced_primary_system_prompt(
+                original_system, 
+                tools_were_executed=(len(tools_results.strip()) > 0),
+                tools_results_summary=tools_results_summary
+            )
+            
+            # Stream response from Ollama  
             async with aiohttp.ClientSession() as session:
                 stream_payload = {
                     "model": model,
                     "prompt": in_prompt,
-                    "system": data.get('system', ''),
+                    "system": enhanced_system,
                     "options": {
                         "temperature": data.get('temperature', 0.7),
                         "top_k": data.get('top_k', 40),
