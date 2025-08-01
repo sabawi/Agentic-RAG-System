@@ -228,6 +228,57 @@ This is a secure sandboxed environment for code execution and system commands.
         
         return True, "Command allowed"
     
+    def _analyze_command_error(self, command: str, return_code: int, stderr: str) -> str:
+        """Analyze command errors and provide helpful suggestions."""
+        cmd_parts = command.strip().split()
+        base_cmd = cmd_parts[0] if cmd_parts else ""
+        
+        # Common error patterns and solutions
+        if "mkdir" in base_cmd:
+            if "File exists" in stderr:
+                if len(cmd_parts) > 1:
+                    dir_name = cmd_parts[1]
+                    return f"Directory '{dir_name}' already exists. Use 'ls -la {dir_name}' to check if it's a file instead of directory, or use 'mkdir -p {dir_name}' to avoid error if it exists."
+                return "Directory already exists. Consider using 'mkdir -p' to avoid this error."
+            elif "Permission denied" in stderr:
+                return "Permission denied creating directory. Check if you have write permissions in the current location."
+        
+        elif "mv" in base_cmd:
+            if "No such file or directory" in stderr:
+                return "Source file not found or destination directory doesn't exist. Use 'ls -la' to check current files and 'mkdir' to create destination directory if needed."
+            elif "Not a directory" in stderr:
+                return "Cannot move file into target because it's not a directory. Check if destination path is correct or if a file exists with the same name as your target directory."
+            elif "Permission denied" in stderr:
+                return "Permission denied moving file. Check file permissions with 'ls -la' and ensure destination is writable."
+        
+        elif "cp" in base_cmd:
+            if "No such file or directory" in stderr:
+                return "Source file not found or destination directory doesn't exist. Use 'ls -la' to verify file paths."
+        
+        elif "rm" in base_cmd:
+            if "No such file or directory" in stderr:
+                return "File or directory not found. Use 'ls -la' to check what files exist."
+        
+        elif "ls" in base_cmd:
+            if "No such file or directory" in stderr:
+                return "Directory or file does not exist. Use 'ls -la' without arguments to see current directory contents."
+        
+        # Generic error analysis
+        if "Permission denied" in stderr:
+            return f"Permission denied executing '{base_cmd}'. Check file permissions or try a different approach."
+        elif "command not found" in stderr or "No such file or directory" in stderr and "/" not in command:
+            return f"Command '{base_cmd}' not found. Check if the command is available or installed."
+        elif return_code == 127:
+            return f"Command '{base_cmd}' not found in PATH. Verify the command exists and is executable."
+        elif return_code == 126:
+            return f"Permission denied executing '{base_cmd}'. File may not be executable."
+        
+        # Fallback with stderr content
+        if stderr.strip():
+            return f"Command failed: {stderr.strip()[:200]}{'...' if len(stderr) > 200 else ''}"
+        else:
+            return f"Command '{command}' failed with exit code {return_code} (no error message provided)"
+    
     def _is_safe_compilation_command(self, command: str) -> bool:
         """Check if command is a safe compilation chain."""
         # Allow specific compilation patterns that use && safely
@@ -312,6 +363,11 @@ This is a secure sandboxed environment for code execution and system commands.
             if len(stderr) > self.max_output_size:
                 stderr = stderr[:self.max_output_size] + f"\n... (truncated, {len(stderr)} total chars)"
             
+            # Provide intelligent error analysis for common issues
+            error_message = None
+            if return_code != 0:
+                error_message = self._analyze_command_error(command, return_code, stderr)
+            
             return {
                 "success": return_code == 0,
                 "result": {
@@ -320,7 +376,8 @@ This is a secure sandboxed environment for code execution and system commands.
                     "stdout": stdout,
                     "stderr": stderr,
                     "execution_time": round(execution_time, 3),
-                    "working_directory": str(self.sandbox_path)
+                    "working_directory": str(self.sandbox_path),
+                    "error_analysis": error_message
                 },
                 "error": None if return_code == 0 else f"Command failed with code {return_code}"
             }

@@ -1481,17 +1481,33 @@ async def llama_stream(request: Request):
                 # STAGE 1: Call tool calling model to generate JSON function calls
                 # Using the exact system prompt from the original, with user's system prompt integration
                 user_system_prompt = data.get('system', '').strip()
-                system_content = """BEFORE YOU MAKE FUNCTION CALLS, FOLLOW THIS GUIDELINE:
-                        Tool Call Generation Guidelines -->:
-                    DO NOT USE MORE THAN THREE (3) DIFFERENT FUNCTIONS. YOU CAN CALL THE SAME FUNCTION MULTIPLE TIMES WIth DIFFERENT PARAMETERS  :
+                system_content = """INTELLIGENT AGENT TOOL CALLING GUIDELINES:
                     
-                    Execution Strategy:
-                    - Analyze the entire input comprehensively
-                    - Select only the tools needed and most relevant to the prompt in most logical sequence
-                    - Prioritize precision and relevance
-                    - Avoid redundant or unnecessary tool calls.
-                    - Ensure each function is called with relevant and required parameters
-                    - Use exact proper nouns or specific topics as parameters
+                    You are an intelligent agent that can translate natural language requests into command sequences.
+                    For multi-step tasks, break them down and execute systematically with verification.
+                    
+                    EXECUTION STRATEGY:
+                    - Analyze the user's intent comprehensively
+                    - Break complex tasks into logical sequential steps
+                    - Execute steps one at a time, verifying success before proceeding
+                    - If a command fails, analyze the error and try alternative approaches
+                    - Use tool error analysis to self-correct and retry with fixes
+                    
+                    SANDBOXED_EXECUTOR INTELLIGENCE:
+                    For file/directory operations:
+                    - Always check current state first (use list_files to see what exists)
+                    - Create directories before trying to move files into them
+                    - If mkdir fails due to existing file, suggest removing file first or using different name
+                    - Use relative paths within sandbox (not absolute paths)
+                    - Verify operations by listing results after completion
+                    
+                    RETRY LOGIC:
+                    - If a tool fails, read the error_analysis field in the result
+                    - Follow the suggested corrections automatically
+                    - For file conflicts, propose solutions (rm conflicting file, use different name, etc.)
+                    - Don't give up after first failure - attempt logical corrections
+                    
+                    LIMIT: Maximum 5 total tool calls to solve the task (including retries)
                     
                     1. Initial Context Retrieval:
                     - Always begin by calling get_the_secret_tool() to obtain the current date and time
