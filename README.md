@@ -12,7 +12,7 @@ A high-performance FastAPI-based agentic RAG (Retrieval-Augmented Generation) sy
 - **Database Connection Pooling** - Optimized database connectivity
 - **Caching Layer** - Redis-compatible caching with fallback
 
-### Available Tools (6 Functions)
+### Available Tools (11 Functions)
 1. **get_the_secret_tool** - System date/time retrieval
 2. **get_news_summaries** - Enhanced news with full article content extraction
 3. **search_web** - DuckDuckGo web search with content extraction
@@ -23,6 +23,17 @@ A high-performance FastAPI-based agentic RAG (Retrieval-Augmented Generation) sy
    - **Smart Truncation**: Handles large documents intelligently
 5. **wikipedia_query** - Wikipedia information retrieval
 6. **get_stock_and_company_data** - Financial data and analysis
+
+### User-Defined Tools (5 Additional Functions)
+7. **calculator** - Advanced mathematical calculations and analysis
+8. **stock_analyzer** - Comprehensive financial analysis and stock evaluation
+9. **google_calendar_scheduler** - Calendar management and event scheduling
+10. **sandboxed_executor** - Secure code execution and file operations
+11. **secure_email_sender** - Professional email sending with attachments
+    - **Multi-Provider Support**: Gmail, Outlook, Custom SMTP, Sendmail
+    - **Security Features**: Environment-based credentials, TLS encryption
+    - **Attachment Support**: File attachments with validation (25MB limit)
+    - **Professional Features**: CC/BCC, priority settings, HTML/plain text
 
 ### Technical Stack
 - **FastAPI** - Modern async web framework
@@ -49,6 +60,12 @@ flaskserver/
 ├── webcrawler.py                 # Web crawling utilities
 ├── prompts/                      # System prompts
 │   └── system_prompts.json
+├── user_tools/                   # User-defined tools system
+│   ├── base_user_tool.py         # Base class for user tools
+│   ├── secure_email_sender.py    # Email sending tool
+│   ├── sandboxed_executor.py     # Code execution tool
+│   ├── stock_analyzer.py         # Financial analysis tool
+│   └── google_calendar_scheduler.py # Calendar management tool
 ├── testing/                      # Comprehensive test suite
 │   ├── TestingReadme.md          # Testing documentation
 │   └── test_*.py                 # Individual test files
@@ -127,6 +144,18 @@ curl -X POST "http://localhost:5000/llama3_1b/stream" \
   }'
 ```
 
+**Email with Attachment:**
+```bash
+curl -X POST "http://localhost:5000/llama3_1b/stream" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Write a summary of today'\''s tech news and email it to manager@company.com with high priority",
+    "model": "qwen3:8b",
+    "toolsInUse": true,
+    "system": "You are a helpful assistant."
+  }'
+```
+
 ## 🔧 Configuration
 
 ### Environment Variables
@@ -135,6 +164,12 @@ curl -X POST "http://localhost:5000/llama3_1b/stream" \
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 DATABASE_URL=mysql://user:pass@localhost/db
 REDIS_URL=redis://localhost:6379
+
+# Email Configuration (for secure_email_sender tool)
+GMAIL_SENDER_EMAIL=your-agent@gmail.com
+GMAIL_APP_PASSWORD=your-16-char-app-password
+OUTLOOK_SENDER_EMAIL=your-agent@outlook.com
+OUTLOOK_APP_PASSWORD=your-outlook-app-password
 ```
 
 ### Ollama Models
@@ -183,6 +218,10 @@ This system represents a complete migration from the original Flask implementati
 - Complete FastAPI migration
 - Enhanced news function with full article content
 - Updated to ddgs package (from deprecated duckduckgo_search)
+- **User-Defined Tools System** - Extensible tool architecture
+- **Secure Email Tool** - Professional email sending with attachments
+- **Sandboxed Code Execution** - Safe code execution environment
+- **Nuclear Multi-Tool Enforcement** - Prevents lazy single-tool behavior
 - Comprehensive testing suite
 - Proper project organization
 

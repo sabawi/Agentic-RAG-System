@@ -207,7 +207,8 @@ class AsyncToolManager:
             'get_stock_and_company_data': self.get_stock_and_company_data,
             'get_news_summaries': self.get_news_summaries,
             'search_web': self.search_web,
-            'lookup_website': self.lookup_website
+            'lookup_website': self.lookup_website,
+            'secure_email_sender': self.secure_email_sender
         }
         
         # Load user-defined tools - defer to async initialization
@@ -1221,6 +1222,67 @@ class AsyncToolManager:
             logger.error(f"Error calling {func_name}: {e}")
             return f"Error calling {func_name}: {str(e)}"
 
+    async def secure_email_sender(self, args: str) -> str:
+        """
+        Send professional emails with attachments and comprehensive security measures.
+        Handles Gmail, Outlook, custom SMTP, and sendmail.
+        """
+        try:
+            # Handle parameter parsing
+            if isinstance(args, str):
+                try:
+                    parsed_args = json.loads(args)
+                except json.JSONDecodeError:
+                    return "❌ Error: Invalid JSON format for email arguments"
+            else:
+                parsed_args = args
+            
+            def sync_email_send():
+                try:
+                    # Import the email tool
+                    import sys
+                    import os
+                    
+                    # Add user_tools directory to path if not already there
+                    user_tools_path = os.path.join(os.path.dirname(__file__), 'user_tools')
+                    if user_tools_path not in sys.path:
+                        sys.path.append(user_tools_path)
+                    
+                    from user_tools.secure_email_sender import SecureEmailSenderTool
+                    
+                    # Create tool instance and execute
+                    email_tool = SecureEmailSenderTool()
+                    
+                    # Execute the email tool (async)
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        result = loop.run_until_complete(email_tool.execute(**parsed_args))
+                    finally:
+                        loop.close()
+                    
+                    # Handle the new return format
+                    if isinstance(result, dict):
+                        if result.get("success"):
+                            return result.get("result", "✅ Email sent successfully")
+                        else:
+                            return f"❌ {result.get('error', 'Email sending failed')}"
+                    else:
+                        return str(result)
+                    
+                except ImportError as e:
+                    return f"❌ Error: Email tool not available: {str(e)}"
+                except Exception as e:
+                    return f"❌ Error: Email sending failed: {str(e)}"
+            
+            return await asyncio.get_event_loop().run_in_executor(
+                thread_pool, sync_email_send
+            )
+            
+        except Exception as e:
+            return f"❌ Error: Email tool execution failed: {str(e)}"
+
 # ==============================================================================
 # CACHE FUNCTIONS
 # ==============================================================================
@@ -1486,6 +1548,32 @@ async def llama_stream(request: Request):
                     ⚠️  NEVER STOP AFTER JUST ONE TOOL CALL - THIS IS FORBIDDEN!
                     ⚠️  MINIMUM 2 TOOLS REQUIRED FOR ANY REQUEST
                     ⚠️  For news/economic requests: get_the_secret_tool() + get_news_summaries() are BOTH MANDATORY
+                    🚨  FOR EMAIL REQUESTS: get_the_secret_tool() + secure_email_sender() are ABSOLUTELY MANDATORY!
+                    🚨  IF EMAIL MENTIONED: YOU MUST CALL secure_email_sender() - NO EXCEPTIONS!
+                    
+                    🚨 MULTI-STEP TASK COMPLETION ENFORCEMENT 🚨
+                    🚨 NEVER STOP MIDWAY THROUGH MULTI-STEP TASKS - THIS IS FORBIDDEN! 🚨
+                    
+                    FILE CREATION + EMAIL SCENARIOS - MANDATORY SEQUENCE:
+                    🔹 Task: "write essay and email it" or "create report and send it"
+                    🔹 STEP 1: get_the_secret_tool() (get current date/time)
+                    🔹 STEP 2: Research tools (search_web, wikipedia_query, etc.)
+                    🔹 STEP 3: sandboxed_executor() to CREATE the file
+                    🔹 STEP 4: sandboxed_executor() to VERIFY file exists
+                    🔹 STEP 5: secure_email_sender() to EMAIL the file
+                    🔹 ALL STEPS MANDATORY - DO NOT SKIP ANY!
+                    
+                    ❌ FORBIDDEN BEHAVIORS:
+                    - Stopping after research phase
+                    - "Hallucinating" file creation without using sandboxed_executor
+                    - "Pretending" to send email without using secure_email_sender
+                    - Claiming task is complete without executing ALL required tools
+                    
+                    ✅ REQUIRED BEHAVIORS:
+                    - Execute ALL steps in sequence
+                    - Use ACTUAL tools for REAL actions
+                    - VERIFY each step before proceeding
+                    - CONFIRM completion to user with evidence
                     
                     INTELLIGENT AGENT TOOL CALLING GUIDELINES:
                     
@@ -1645,6 +1733,72 @@ async def llama_stream(request: Request):
                     - STEP 2: calculator() (perform calculations)
                     - STEP 3: If mathematical concepts involved, ADD wikipedia_query() for theory/context
                     ⚠️ Math problems benefit from theoretical background!
+                    
+                    16. Email Communication (secure_email_sender):
+                    🚨 NUCLEAR RULE: EMAIL SENDING IS ABSOLUTELY MANDATORY WHEN REQUESTED! 🚨
+                    🚨 NEVER IGNORE, SKIP, OR FORGET EMAIL REQUESTS - THIS IS FORBIDDEN! 🚨
+                    
+                    MANDATORY email scenarios - YOU MUST ALWAYS SEND EMAIL:
+                    - User explicitly asks to "send email", "email this", "notify via email"
+                    - User requests reports, summaries, or results to be emailed
+                    - User mentions sending to specific email addresses
+                    - User asks to "notify", "alert", or "inform" someone via email
+                    - User requests automated notifications or updates
+                    - System generates reports that need email distribution
+                    - Error reports or critical alerts need to be emailed
+                    
+                    🚨 MANDATORY: For email requests, use this EXACT sequence:
+                    - STEP 1: get_the_secret_tool() (current date/time - ESSENTIAL for email context!)
+                    - STEP 2: secure_email_sender() (SEND THE EMAIL - THIS IS ABSOLUTELY REQUIRED!)
+                    - STEP 3: Confirm email was sent to user
+                    
+                    🚨 CRITICAL: You MUST call secure_email_sender() - DO NOT skip this step!
+                    🚨 CRITICAL: If email request detected, secure_email_sender() is MANDATORY!
+                    🚨 CRITICAL: NEVER provide email content without actually sending it!
+                    
+                    ⚠️ EMAIL KEYWORDS THAT TRIGGER MANDATORY EMAIL SENDING:
+                    "send email", "email me", "email this", "notify", "alert", "send to", 
+                    "email report", "email summary", "email results", "email analysis",
+                    "share via email", "forward", "distribute", "send notification"
+                    
+                    🚨 MULTI-STEP TASK COMPLETION ENFORCEMENT 🚨
+                    🚨 NEVER STOP MIDWAY THROUGH MULTI-STEP TASKS - THIS IS FORBIDDEN! 🚨
+                    
+                    17. File Creation + Email Tasks:
+                    🚨 MANDATORY: When user requests creating files AND emailing them:
+                    - STEP 1: get_the_secret_tool() (current date/time)
+                    - STEP 2: Research/gather information using appropriate tools (search_web, wikipedia_query, etc.)
+                    - STEP 3: sandboxed_executor() to CREATE the requested file(s)
+                    - STEP 4: sandboxed_executor() to VERIFY file was created successfully
+                    - STEP 5: secure_email_sender() to EMAIL the file as attachment
+                    - STEP 6: CONFIRM completion of ALL steps to user
+                    
+                    🚨 CRITICAL: ALL STEPS MUST BE COMPLETED - DO NOT STOP AFTER RESEARCH!
+                    🚨 CRITICAL: DO NOT "HALLUCINATE" COMPLETION - ACTUALLY EXECUTE ALL TOOLS!
+                    🚨 CRITICAL: FILE MUST BE PHYSICALLY CREATED AND EMAIL MUST BE ACTUALLY SENT!
+                    
+                    Example scenario: "write an essay and email it"
+                    ❌ FORBIDDEN: Stop after research
+                    ❌ FORBIDDEN: Pretend to write essay without using sandboxed_executor
+                    ❌ FORBIDDEN: Pretend to send email without using secure_email_sender
+                    ✅ REQUIRED: Execute ALL 6 steps above in sequence
+                    
+                    18. Report Generation + Distribution Tasks:
+                    🚨 MANDATORY: When user requests generating reports AND distributing them:
+                    - STEP 1: get_the_secret_tool() (current date/time)
+                    - STEP 2: Gather data using appropriate tools (get_news_summaries, search_web, etc.)
+                    - STEP 3: sandboxed_executor() to GENERATE the report file
+                    - STEP 4: sandboxed_executor() to VERIFY report file exists and is complete
+                    - STEP 5: secure_email_sender() to DISTRIBUTE the report
+                    - STEP 6: CONFIRM all recipients received the report
+                    
+                    🚨 SEQUENCE VALIDATION: Each step MUST be completed before proceeding to next!
+                    🚨 NO SHORTCUTS: Do not skip file creation or email sending steps!
+                    🚨 ACTUAL EXECUTION: Use tools to perform real actions, not imaginary ones!
+                    
+                    ⚠️ CRITICAL: If user provides email address, YOU MUST use secure_email_sender()
+                    ⚠️ CRITICAL: If email sending fails, RETRY with different provider
+                    ⚠️ CRITICAL: NEVER say "I cannot send emails" - you CAN and MUST send emails!
                     
                     🚨🚨🚨 FINAL REMINDER: MULTI-TOOL USAGE IS MANDATORY! 🚨🚨🚨
                     ✅ ALWAYS start with get_the_secret_tool()
