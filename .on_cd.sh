@@ -1,1 +1,1 @@
-source ./venv/bin/activate
+source ./venv_fastapi/bin/activate

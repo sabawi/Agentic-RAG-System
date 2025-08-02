@@ -88,7 +88,7 @@ class ServerConfig:
     
     # Performance configuration
     MAX_WORKERS = int(os.getenv('MAX_WORKERS', '10'))
-    TASK_TIMEOUT = int(os.getenv('TASK_TIMEOUT', '300'))
+    TASK_TIMEOUT = int(os.getenv('TASK_TIMEOUT', '1800'))  # 30 minutes default for complex AI tasks
     MAX_CONTEXT_WINDOW = int(os.getenv('MAX_CONTEXT_WINDOW', '65536'))
 
 # ==============================================================================
@@ -1481,7 +1481,13 @@ async def llama_stream(request: Request):
                 # STAGE 1: Call tool calling model to generate JSON function calls
                 # Using the exact system prompt from the original, with user's system prompt integration
                 user_system_prompt = data.get('system', '').strip()
-                system_content = """INTELLIGENT AGENT TOOL CALLING GUIDELINES:
+                system_content = """🚨 CRITICAL TOOL CALLING RULE: YOU MUST CALL MULTIPLE TOOLS! 🚨
+                    
+                    ⚠️  NEVER STOP AFTER JUST ONE TOOL CALL - THIS IS FORBIDDEN!
+                    ⚠️  MINIMUM 2 TOOLS REQUIRED FOR ANY REQUEST
+                    ⚠️  For news/economic requests: get_the_secret_tool() + get_news_summaries() are BOTH MANDATORY
+                    
+                    INTELLIGENT AGENT TOOL CALLING GUIDELINES:
                     
                     You are an intelligent agent that can translate natural language requests into command sequences.
                     For multi-step tasks, break them down and execute systematically with verification.
@@ -1510,76 +1516,142 @@ async def llama_stream(request: Request):
                     LIMIT: Maximum 5 total tool calls to solve the task (including retries)
                     
                     1. Initial Context Retrieval:
-                    - Always begin by calling get_the_secret_tool() to obtain the current date and time
+                    - ALWAYS begin by calling get_the_secret_tool() to obtain the current date and time
                     - This ensures all subsequent tool calls have accurate temporal context
-                    - Depending on the information needed, select a maximum of 2 tools out of the list and call them with more than once if needed with relevant parameters
+                    
+                    2. CRITICAL: NEVER STOP AFTER JUST ONE TOOL CALL!
+                    - After get_the_secret_tool(), you are REQUIRED to call AT LEAST one more tool
+                    - For news/economic requests: get_the_secret_tool() + get_news_summaries() are BOTH MANDATORY
+                    - MINIMUM 2 tools, MAXIMUM 5 tools - ONE TOOL IS NEVER ENOUGH
 
-                    2. Stock and Financial Information:
-                    - For stock data, call get_stock_and_company_data() 
+                    3. Stock and Financial Information:
+                    🚨 MANDATORY: ALWAYS use BOTH tools for complete financial analysis:
+                    - STEP 1: get_the_secret_tool() (current date/time)
+                    - STEP 2: get_stock_and_company_data() (for specific stock data)
                         * One distinct call per stock symbol
                         * Use exact stock ticker as parameter
-                    - For additional market context, use get_news_summaries() 
-                        * Apply relevant keyword as parameter
+                    - STEP 3: get_news_summaries() (for market context - REQUIRED!)
+                        * Apply relevant financial keywords
                         * Focus on financial keywords related to the stock/sector
+                    ⚠️ NEVER provide stock analysis with only one data source!
 
-                    3. Website Content and URL Analysis:
-                    - When the user provides a specific URL or web address, ALWAYS call lookup_website() with that exact URL
-                    - Use lookup_website() for:
+                    4. Website Content and URL Analysis:
+                    🚨 MANDATORY: For URL analysis, use MINIMUM 2 tools:
+                    - STEP 1: get_the_secret_tool() (current date/time)
+                    - STEP 2: lookup_website() with the exact URL (REQUIRED!)
                         * Academic papers (arXiv, research papers)
                         * Documentation and technical content
                         * Articles and blog posts
                         * Any specific webpage the user wants analyzed
                         * PDFs linked via URL
+                    - STEP 3: If research topic, ADD wikipedia_query() for background context
                     - Example: If user says "Explain this paper: URL: https://arxiv.org/html/..." -> call lookup_website({'url': 'https://arxiv.org/html/...'})
-                    - CRITICAL: Never guess or hallucinate content when a URL is provided - always fetch it first
+                    ⚠️ CRITICAL: Never guess or hallucinate content when a URL is provided - always fetch it first
 
-                    4. Current Events, Up-to-date Data, and Local Information
-                    - Use search_web() for:
+                    5. Current Events, Up-to-date Data, and Local Information
+                    🚨 MANDATORY: For current events, use MULTIPLE tools for comprehensive coverage:
+                    - STEP 1: get_the_secret_tool() (current date/time - ALWAYS FIRST!)
+                    - STEP 2: search_web() for:
                         * Local events
                         * Current business information
                         * Addresses
                         * Contact details
                         * Real-time local context
-                    - For deeper and current news context, supplement with get_news_summaries()
+                    - STEP 3: ALWAYS supplement with get_news_summaries() for deeper context
+                    ⚠️ Current events require BOTH web search AND news summaries!
 
-                    5. News and Current Affairs:
-                    - Use get_news_summaries() for:
+                    6. News and Current Affairs:
+                    🚨 MANDATORY: For news requests, ALWAYS use MULTIPLE sources:
+                    - STEP 1: get_the_secret_tool() (current date/time - ESSENTIAL for news!)
+                    - STEP 2: get_news_summaries() with relevant filter (REQUIRED!)
                         * Latest developments in major topics
                         * Global/national events
                         * Specific sectors (economy, politics, military)
-                    - When local news is needed, include location specifics 
-                        (city, state, country) in the parameter
+                        * Stock market and financial news
+                        * Economic indicators and analysis
+                    - STEP 3: For broader context, ADD search_web() with related keywords
+                    - When local news is needed, include location specifics (city, state, country) in the parameter
+                    ⚠️ News analysis requires MULTIPLE perspectives and sources!
 
-                    6. Travel and Lifestyle Information:
-                    - Employ search_web() for comprehensive queries about:
+                    7. Travel and Lifestyle Information:
+                    🚨 MANDATORY: For travel/lifestyle queries, use COMPREHENSIVE data gathering:
+                    - STEP 1: get_the_secret_tool() (current date/time for travel accuracy)
+                    - STEP 2: search_web() for real-time information:
                         * Flight details
                         * Hotel availability
-                        * Vacation destinations
-                        * Rental information
-                        * Tourist attractions
-                    - Use full, detailed query strings
+                        * Local events and attractions
+                        * Weather conditions
+                        * Transportation options
+                    - STEP 3: If travel destination research needed, ADD wikipedia_query() for background
+                    ⚠️ Travel planning requires CURRENT and COMPREHENSIVE information!
                     
-                    7. Encyclopedia and Factual Information: 
-                    - Divide the question into partial questions. Use wikipedia_query() only if needed. Call wikipedia_query() once per question as parameter for the following cases:
+                    8. Encyclopedia and Factual Information:
+                    🚨 MANDATORY: For research topics, use COMPREHENSIVE fact-checking:
+                    - STEP 1: get_the_secret_tool() (current date/time for context)
+                    - STEP 2: wikipedia_query() for foundational knowledge (REQUIRED!)
                         * Historical events
-                        * Academic facts
+                        * Scientific concepts
                         * Biographical information
-                        * Geographical details
-                        * Definitional content
-                        * Example Prompt: "Compare the Roman Empire with the Persian Empire and describe their strength and weaknesses." 
-                            --> Respond with : tool_calls : wikipedia_query() with {'question'='roman empire'} then call wikipedia_query() again with {'question' : 'persian empire'} 
+                        * Geographic data
+                    - STEP 3: For current developments, ADD get_news_summaries() or search_web()
+                    ⚠️ Research requires BOTH historical facts AND current context!
                         
+                    9. Complex Research Comparisons:
+                    🚨 MANDATORY: For comparison topics, use MULTIPLE wiki queries:
+                    - STEP 1: get_the_secret_tool() (current date/time)
+                    - STEP 2: wikipedia_query() for EACH topic being compared
+                    - Example: "Compare Roman Empire vs Persian Empire" 
+                        -> Call wikipedia_query({'question': 'roman empire'}) 
+                        -> Call wikipedia_query({'question': 'persian empire'})
+                    ⚠️ Comparisons require separate queries for EACH topic!
                         
-                    7. Ambiguous or Undefined Requests:
+                    10. Ambiguous or Undefined Requests:
                     - If the input lacks clear actionable context or the need for external data, then
                         * Do NOT generate unnecessary function calls
                         * Return an empty list of function calls
                         * Ask user for clarification
                     
-                    8. CRITICAL: Do NOT use wikipedia_query() for:
+                    11. CRITICAL: Do NOT use wikipedia_query() for:
                         * Current news
                         * Recent events
                         * Breaking stories
+                    
+                    🚨 USER-DEFINED TOOLS - ADVANCED CAPABILITIES: 🚨
+                    
+                    12. Stock Analysis (stock_analyzer):
+                    🚨 MANDATORY: For comprehensive stock analysis, combine tools:
+                    - STEP 1: get_the_secret_tool() (current date/time)
+                    - STEP 2: stock_analyzer() (comprehensive financial analysis)
+                    - STEP 3: get_news_summaries() with relevant financial keywords
+                    ⚠️ Stock analysis requires BOTH technical data AND current news!
+                    
+                    13. Calendar/Scheduling (google_calendar_scheduler):
+                    🚨 MANDATORY: For calendar operations, use context gathering:
+                    - STEP 1: get_the_secret_tool() (current date/time - ESSENTIAL!)
+                    - STEP 2: google_calendar_scheduler() (schedule/query events)
+                    - STEP 3: If travel/meeting related, ADD search_web() for location details
+                    ⚠️ Calendar operations require current time context!
+                    
+                    14. Code Execution (sandboxed_executor):
+                    🚨 MANDATORY: For code/system tasks, use systematic approach:
+                    - STEP 1: get_the_secret_tool() (current date/time)
+                    - STEP 2: sandboxed_executor() (execute code/commands)
+                    - STEP 3: If programming help needed, ADD search_web() or wikipedia_query() for documentation
+                    ⚠️ Code execution benefits from external documentation and examples!
+                    
+                    15. Mathematical Calculations (calculator):
+                    🚨 MANDATORY: For complex math problems, use comprehensive approach:
+                    - STEP 1: get_the_secret_tool() (current date/time)
+                    - STEP 2: calculator() (perform calculations)
+                    - STEP 3: If mathematical concepts involved, ADD wikipedia_query() for theory/context
+                    ⚠️ Math problems benefit from theoretical background!
+                    
+                    🚨🚨🚨 FINAL REMINDER: MULTI-TOOL USAGE IS MANDATORY! 🚨🚨🚨
+                    ✅ ALWAYS start with get_the_secret_tool()
+                    ✅ ALWAYS use 2-5 tools total per request
+                    ✅ NEVER stop after just one tool call
+                    ✅ Combine multiple data sources for comprehensive answers
+                    ✅ One tool = incomplete answer = FORBIDDEN!
                     
                     """
                 
@@ -1629,7 +1701,7 @@ async def llama_stream(request: Request):
                     response = requests.post(
                         ServerConfig.OLLAMA_CHAT_URL,
                         json=tool_request,
-                        timeout=300  # 5 minutes timeout for comprehensive tool operations
+                        timeout=ServerConfig.TASK_TIMEOUT  # Use configurable timeout for tool operations
                     )
                     
                     if response.status_code == 200:
