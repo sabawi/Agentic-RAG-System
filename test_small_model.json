@@ -1,0 +1,7 @@
+{
+  "model": "llama3.2:1b",
+  "prompt": "Hello! Please tell me a joke.",
+  "toolsInUse": false,
+  "system": "You are a helpful assistant.",
+  "temperature": 0.7
+}

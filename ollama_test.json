@@ -1,0 +1,5 @@
+{
+  "model": "qwen3:8b",
+  "prompt": "Hello! Please tell me a joke.",
+  "stream": false
+}

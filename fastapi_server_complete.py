@@ -79,7 +79,7 @@ class ServerConfig:
     # Ollama configuration
     OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434/api/generate')
     OLLAMA_CHAT_URL = os.getenv('OLLAMA_CHAT_URL', 'http://127.0.0.1:11434/api/chat')
-    DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'llama3.2:3b')
+    DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'qwen3:8b')
     
     # Server configuration
     HOST = os.getenv('HOST', '0.0.0.0')
@@ -148,6 +148,37 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ==============================================================================
+# SYSTEM PROMPT MANAGEMENT
+# ==============================================================================
+
+def load_tool_model_system_prompt(user_additional_instructions: str = "") -> str:
+    """Load the pre-tool model system prompt from external file"""
+    try:
+        with open('pre_tool_model_system_prompt.txt', 'r', encoding='utf-8') as f:
+            prompt = f.read()
+        
+        # Replace placeholder with user instructions
+        if user_additional_instructions:
+            prompt = prompt.replace('{USER_ADDITIONAL_INSTRUCTIONS}', 
+                                  f"\n\nADDITIONAL USER INSTRUCTIONS:\n{user_additional_instructions}")
+        else:
+            prompt = prompt.replace('{USER_ADDITIONAL_INSTRUCTIONS}', "")
+        
+        return prompt
+    except FileNotFoundError:
+        logger.error("pre_tool_model_system_prompt.txt not found, using fallback prompt")
+        return "You are a tool-calling AI assistant. Call the appropriate tools based on the user's request."
+
+def load_primary_model_system_prompt() -> str:
+    """Load the primary model system prompt from external file"""
+    try:
+        with open('primary_model_system_prompt.txt', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        logger.error("primary_model_system_prompt.txt not found, using fallback prompt")
+        return "You are a helpful AI assistant. Provide comprehensive responses based on the context provided."
+
+# ==============================================================================
 # DATABASE CONNECTION POOL
 # ==============================================================================
 
@@ -204,7 +235,7 @@ class AsyncToolManager:
         self.available_functions = {
             'get_the_secret_tool': self.get_the_secret_tool,
             'wikipedia_query': self.wikipedia_query,
-            'get_stock_and_company_data': self.get_stock_and_company_data,
+            'get_stock_and_company_data': self.get_stock_and_company_data,  # RE-ENABLED
             'get_news_summaries': self.get_news_summaries,
             'search_web': self.search_web,
             'lookup_website': self.lookup_website,
@@ -239,10 +270,15 @@ class AsyncToolManager:
             logger.warning(f"Failed to load user tools: {e}")
             self.user_tools_loaded = True  # Don't keep trying
     
-    async def get_tools_definitions(self) -> list:
+    async def get_tools_definitions(self, exclude_file_email_tools: bool = False) -> list:
         """Get tools definitions for Ollama tool calling"""
         # Load user tools if not already loaded
         await self._load_user_tools_async()
+        
+        # 🚨 CRITICAL MULTI-TOOL CALLING PROTECTION 🚨
+        # NEVER MODIFY tool descriptions without checking CRITICAL_MULTI_TOOL_CALLING_PROTECTION.md
+        # These descriptions are optimized to prevent model confusion and enable 4+ tool calls
+        # ANY aggressive language, conflicts, or redirections will break multi-tool calling
         
         # Always return tools for testing (even if TOOLS_AVAILABLE is False)
         # The individual functions will handle missing dependencies gracefully
@@ -253,7 +289,7 @@ class AsyncToolManager:
                 "type": "function",
                 "function": {
                     "name": "get_the_secret_tool",
-                    "description": "Must call this function to get the current date and time from the system.",
+                    "description": "Get the current date and time from the system.",  # 🚨 PROTECTED: Simple clean description
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -270,7 +306,7 @@ class AsyncToolManager:
                 "type": "function",
                 "function": {
                     "name": "get_news_summaries",
-                    "description": "Returns time-sensitive News with full article content! Tag all news items with Date, Time, and Source in response! This function takes a keyword string as input as a possible filter for news headlines and returns today's news headlines with detailed content.",
+                    "description": "Get current news headlines and summaries with optional keyword filtering.",  # 🚨 PROTECTED: No aggressive language
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -287,7 +323,7 @@ class AsyncToolManager:
                 "type": "function",
                 "function": {
                     "name": "search_web",
-                    "description": "This function takes a query string as input and searches the web for information using the query verbatim. It returns links and URLs if found with a brief description, or an error message if no information is available.",
+                    "description": "Search the web for comprehensive information from multiple sources including academic, news, and reference sites.",  # 🚨 PROTECTED: Enhanced but clean description
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -321,7 +357,7 @@ class AsyncToolManager:
                 "type": "function",
                 "function": {
                     "name": "wikipedia_query",
-                    "description": "Retrieves concise factual information from Wikipedia about a specific topic based on a user-provided query. This function processes the query to identify the main topic and searches Wikipedia using the topic as a reference.",
+                    "description": "Retrieves encyclopedic information from Wikipedia for specific factual lookups and definitions.",  # 🚨 PROTECTED: More specific scope
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -338,7 +374,7 @@ class AsyncToolManager:
                 "type": "function",
                 "function": {
                     "name": "get_stock_and_company_data",
-                    "description": "Calls a financial data provider to get latest stock and company data. Returns description, financial information, news, stock prices, analysts sentiments, and forward earnings estimates.",
+                    "description": "Get basic stock price and company data for a specific ticker symbol.",  # 🚨 PROTECTED: No redirections or conflicts
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -354,7 +390,14 @@ class AsyncToolManager:
         ]
         
         # Add user-defined tools to the definitions
+        # 🚨 CRITICAL ARCHITECTURE: Exclude file/email tools during tool calling phase
+        excluded_tools = {"sandboxed_executor", "secure_email_sender"} if exclude_file_email_tools else set()
+        
         for tool in self.user_tools:
+            if tool.name in excluded_tools:
+                logger.info(f"🚫 EXCLUDING {tool.name} from tool calling phase - deferred auto-execution will handle it")
+                continue
+                
             tool_def = tool.get_function_definition()
             formatted_def = {
                 "type": "function",
@@ -1397,13 +1440,43 @@ async def check_ollama_health() -> bool:
     except:
         return False
 
+def _build_structured_context_block(tools_results_summary: str, tools_called: List[str]) -> str:
+    """
+    Build structured CONTEXT block from tool outputs for Primary LLM.
+    This formats tool data into organized sections for better analysis.
+    """
+    if not tools_results_summary.strip():
+        return ""
+    
+    # Build tool summary section
+    tools_section = ""
+    if tools_called:
+        tools_section = f"TOOLS EXECUTED: {', '.join(tools_called)}\n\n"
+    
+    # Format the context with clear structure
+    context_block = f"""{tools_section}DATA AND INFORMATION GATHERED:
+
+{tools_results_summary}
+
+---
+END OF CONTEXT DATA"""
+    
+    return context_block
+
+
 def _build_enhanced_primary_system_prompt(original_system, tools_were_executed=False, tools_results_summary=""):
     """
     Build enhanced system prompt for primary LLM when tools have been executed.
     This prevents the primary LLM from redoing work already completed by tool calling model.
     """
+    # Load base system prompt from external file
+    base_system = load_primary_model_system_prompt()
+    
     if not tools_were_executed:
-        return original_system
+        # If no tools were executed, combine base system + user system if provided
+        if original_system and original_system.strip():
+            return f"{base_system}\n\nADDITIONAL USER INSTRUCTIONS:\n{original_system}"
+        return base_system
     
     enhanced_instructions = """
 
@@ -1420,12 +1493,16 @@ TOOLS EXECUTION SUMMARY:
 Remember: The work is DONE. Your job is to present the results and provide insights, not to start over.
 """
     
-    return original_system + enhanced_instructions
+    # Combine base system + user system (if provided) + enhanced instructions
+    full_system = base_system
+    if original_system and original_system.strip():
+        full_system += f"\n\nADDITIONAL USER INSTRUCTIONS:\n{original_system}"
+    full_system += enhanced_instructions
+    return full_system
 
 # ==============================================================================
 # OLLAMA LLM ENDPOINTS
 # ==============================================================================
-
 @app.post("/llama3_1b/prompt", response_model=ApiResponse)
 async def llama_prompt(request: OllamaPromptRequest):
     """
@@ -1485,6 +1562,931 @@ async def llama_prompt(request: OllamaPromptRequest):
         logger.error(f"Ollama prompt failed: {e}")
         raise HTTPException(status_code=500, detail=f"Ollama request failed: {str(e)}")
 
+async def _verify_task_completion(user_prompt: str, tools_called: List[str], tools_results: str, tool_manager) -> Dict[str, Any]:
+    """
+    🔍 BULLETPROOF TASK COMPLETION VERIFIER
+    Analyzes user prompt and tool execution to ensure all required steps are completed
+    Enhanced with comprehensive email detection and strict validation
+    """
+    user_prompt_lower = user_prompt.lower()
+    
+    # 🚨 BULLETPROOF EMAIL DETECTION
+    # Any mention of email/send requires secure_email_sender tool
+    email_keywords = [
+        "email", "send", "mail", "attach", "attachment", "send to", "email to",
+        "send an email", "send email", "email it", "mail it", "send it", 
+        "email me", "send me", "mail me", "email with", "send with",
+        "email them", "send them", "mail them", "email all", "send all",
+        "in one email", "all in one email", "send them all", "email the files"
+    ]
+    
+    has_email_request = any(keyword in user_prompt_lower for keyword in email_keywords)
+    
+    # Define task patterns and their required tool sequences
+    task_patterns = {
+        "research_save_and_email": {
+            "triggers": ["save the output to", "save to pdf and html", "describe and save", "list and save", 
+                        "save output to a pdf", "save the results", "create file with", "save as attachment"],
+            "required_tools": ["sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Research information, save to file(s), and email as attachments"
+        },
+        "multi_file_creation_and_email": {
+            "triggers": ["create a pdf file, a html file, a md file, and a txt file", "create multiple files", 
+                        "create files and email", "create all files and send", "send them all in one email"],
+            "required_tools": ["sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Create multiple files and email all as attachments"
+        },
+        "stock_report_and_email": {
+            "triggers": ["stock report and email", "create stock analysis file", "email stock report", "save and send stock analysis"],
+            "required_tools": ["comprehensive_stock_analyzer", "sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Generate stock analysis report, save as file, email with attachment"
+        },
+        "news_report_and_email": {
+            "triggers": ["news report and email", "create news file", "email news report", "save and send news", "email me the news",
+                        "save and send the files", "pdf attachment", "send the files as pdf", "stock market news", "save and send"],
+            "required_tools": ["get_news_summaries", "sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Generate news analysis report, save as PDF file, email with attachment"
+        },
+        "file_creation_and_email": {
+            "triggers": ["create file and email", "save and email", "email me a file", "send me an attachment", "create and send"],
+            "required_tools": ["sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Create file and email as attachment"
+        },
+        "document_creation_email": {
+            "triggers": ["write document and email", "create document file", "email me the document", "save document and send", 
+                        "craft", "write a", "include a pdf", "send the email", "with attachments", "cover letter", 
+                        "pdf version", "email with attachments", "pdf formatted"],
+            "required_tools": ["sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Write document, save file, email as attachment"
+        },
+        "pure_email_request": {
+            "triggers": ["send an email", "send email", "email to", "mail to", "send to", "email with subject",
+                        "send with attachments", "email the files", "send the files", "email with attachments"],
+            "required_tools": ["secure_email_sender"],
+            "required_sequence": False,
+            "description": "Send email with or without attachments"
+        }
+    }
+    
+    # 🚨 CRITICAL: Check for explicit exclusion patterns first
+    # If user is just asking for information/research, do NOT auto-execute
+    exclusion_patterns = [
+        "just tell me", "what are", "give me", "show me", "list", "find out",
+        "look up", "research", "analyze", "explain", "describe", "summarize",
+        "use the available tools to", "check", "investigate", "get information"
+    ]
+    
+    if any(exclusion in user_prompt_lower for exclusion in exclusion_patterns):
+        # Check if they also explicitly ask for file/email
+        explicit_file_email_requests = [
+            "email me", "send me", "create file", "save to file", "attachment",
+            "email the", "send the", "file and email", "save and email", "craft",
+            "cover letter", "pdf version", "with attachments", "include a pdf",
+            "pdf formatted", "send the email", "save and send the files", "pdf attachment",
+            "send the files as pdf", "save and send", "create a pdf", "create pdf", 
+            "pdf report", "html report", "report and email", "create report",
+            "generate pdf", "make pdf", "email it to", "send it to"
+        ]
+        
+        if not any(explicit_request in user_prompt_lower for explicit_request in explicit_file_email_requests):
+            logger.info(f"🚫 EXCLUSION: User is asking for information only, not file creation/email")
+            return {
+                "complete": True,  # Task is complete - they just want information
+                "reason": "Information request only - no file creation or email needed",
+                "missing_tools": [],
+                "pattern": "information_request"
+            }
+    
+    # Check if any pattern matches
+    for pattern_name, pattern in task_patterns.items():
+        if any(trigger in user_prompt_lower for trigger in pattern["triggers"]):
+            # Check if all required tools were called
+            missing_tools = []
+            for required_tool in pattern["required_tools"]:
+                if required_tool not in tools_called:
+                    missing_tools.append(required_tool)
+            
+            if missing_tools:
+                return {
+                    "complete": False,
+                    "reason": f"Missing required tools for {pattern['description']}",
+                    "missing_tools": missing_tools,
+                    "pattern": pattern_name
+                }
+            
+            # For email tasks, verify file was created if attachment expected
+            if "secure_email_sender" in tools_called and "sandboxed_executor" in tools_called:
+                if "attachments" in tools_results and "file not found" in tools_results.lower():
+                    return {
+                        "complete": False,
+                        "reason": "File attachment referenced but file was not created",
+                        "missing_tools": ["sandboxed_executor"],  # Re-run to create the file
+                        "pattern": pattern_name
+                    }
+    
+    # 🚨 BULLETPROOF EMAIL VALIDATION
+    # If user requested email but no email tool was called, task is INCOMPLETE
+    if has_email_request and "secure_email_sender" not in tools_called:
+        return {
+            "complete": False,
+            "reason": "Email requested but secure_email_sender tool was not called",
+            "missing_tools": ["secure_email_sender"],
+            "pattern": "email_required"
+        }
+    
+    # 🚨 ZERO TOOLS CALLED VALIDATION
+    # If no tools were called at all, check if any were actually needed
+    if not tools_called:
+        # If user requested email or file creation, tools were required
+        file_creation_keywords = ["create", "generate", "write", "make", "build", "save"]
+        needs_tools = has_email_request or any(keyword in user_prompt_lower for keyword in file_creation_keywords)
+        
+        if needs_tools:
+            return {
+                "complete": False,  
+                "reason": "No tool calls generated but tools were required for this request",
+                "missing_tools": ["secure_email_sender"] if has_email_request else ["sandboxed_executor"],
+                "pattern": "no_tools_called"
+            }
+    
+    # If no patterns match or all requirements met
+    return {
+        "complete": True,
+        "reason": "All required tools executed successfully",
+        "missing_tools": [],
+        "pattern": None
+    }
+
+def _extract_report_content_from_results(tools_results: str) -> str:
+    """Extract the comprehensive stock analysis content from tools_results"""
+    try:
+        # Look for comprehensive_stock_analyzer result in the tools_results
+        if "Tool: comprehensive_stock_analyzer" in tools_results:
+            # Split by tool sections and find the comprehensive_stock_analyzer result
+            parts = tools_results.split("Tool: ")
+            for part in parts:
+                if part.startswith("comprehensive_stock_analyzer"):
+                    # Extract just the result content
+                    lines = part.split("\n")
+                    result_lines = []
+                    capture = False
+                    for line in lines:
+                        if line.startswith("Result: "):
+                            capture = True
+                            result_lines.append(line[8:])  # Remove "Result: " prefix
+                        elif capture and line.strip() and not line.startswith("Tool: "):
+                            result_lines.append(line)
+                        elif capture and line.startswith("Tool: "):
+                            break
+                    
+                    return "\n".join(result_lines).strip()
+        
+        return ""
+    except Exception as e:
+        logger.error(f"❌ Error extracting report content: {e}")
+        return ""
+
+def _generate_dynamic_title(user_prompt: str, tools_results: str) -> str:
+    """Generate dynamic report title based on content type and topic"""
+    try:
+        user_prompt_lower = user_prompt.lower()
+        tools_results_lower = tools_results.lower()
+        
+        # Check for news content
+        if "Tool: get_news_summaries" in tools_results:
+            # Extract topic from user prompt
+            news_keywords = {
+                "middle east": "Middle East News Analysis Report",
+                "technology": "Technology News Analysis Report", 
+                "tech": "Technology News Analysis Report",
+                "stock market": "Stock Market News Analysis Report",
+                "market": "Market News Analysis Report",
+                "sports": "Sports News Analysis Report",
+                "politics": "Political News Analysis Report", 
+                "political": "Political News Analysis Report",
+                "business": "Business News Analysis Report",
+                "health": "Health News Analysis Report",
+                "science": "Science News Analysis Report",
+                "entertainment": "Entertainment News Analysis Report",
+                "world": "World News Analysis Report",
+                "international": "International News Analysis Report",
+                "economy": "Economic News Analysis Report",
+                "economic": "Economic News Analysis Report",
+                "climate": "Climate News Analysis Report",
+                "environment": "Environmental News Analysis Report",
+                "african": "African News Analysis Report",
+                "africa": "African News Analysis Report",
+                "asian": "Asian News Analysis Report",
+                "asia": "Asian News Analysis Report",
+                "european": "European News Analysis Report",
+                "europe": "European News Analysis Report"
+            }
+            
+            # Find the most specific topic match
+            for topic, title in news_keywords.items():
+                if topic in user_prompt_lower or topic in tools_results_lower:
+                    return title
+            
+            # Default news title if no specific topic found
+            return "News Analysis Report"
+        
+        # Check for financial/stock content
+        elif ("Tool: stock_analyzer" in tools_results or 
+              any(keyword in user_prompt_lower for keyword in ["stock", "financial", "market", "trading", "investment"])):
+            return "Comprehensive Stock Analysis Report"
+        
+        # Check for other specific content types
+        elif any(keyword in user_prompt_lower for keyword in ["calendar", "appointment", "schedule"]):
+            return "Calendar Analysis Report"
+        elif any(keyword in user_prompt_lower for keyword in ["email", "message", "letter"]):
+            return "Email Analysis Report"
+        else:
+            # General analysis report
+            return "Analysis Report"
+            
+    except Exception as e:
+        logger.error(f"❌ Error generating dynamic title: {e}")
+        return "Analysis Report"
+
+def _generate_dynamic_filename(user_prompt: str, tools_results: str, timestamp: str, file_extension: str = "html") -> str:
+    """Generate dynamic filename based on content type and topic"""
+    try:
+        user_prompt_lower = user_prompt.lower()
+        tools_results_lower = tools_results.lower()
+        
+        # Check for news content
+        if "Tool: get_news_summaries" in tools_results:
+            # Extract topic from user prompt
+            news_keywords = {
+                "middle east": "middle_east_news",
+                "technology": "technology_news", 
+                "tech": "technology_news",
+                "sports": "sports_news",
+                "politics": "political_news", 
+                "political": "political_news",
+                "business": "business_news",
+                "health": "health_news",
+                "science": "science_news",
+                "entertainment": "entertainment_news",
+                "world": "world_news",
+                "international": "international_news",
+                "economy": "economic_news",
+                "economic": "economic_news",
+                "climate": "climate_news",
+                "environment": "environmental_news",
+                "african": "african_news",
+                "africa": "african_news",
+                "asian": "asian_news",
+                "asia": "asia_news",
+                "european": "european_news",
+                "europe": "europe_news"
+            }
+            
+            # Find the most specific topic match
+            for topic, filename_prefix in news_keywords.items():
+                if topic in user_prompt_lower or topic in tools_results_lower:
+                    return f"{filename_prefix}_analysis_{timestamp}.{file_extension}"
+            
+            # Default news filename if no specific topic found
+            return f"news_analysis_{timestamp}.{file_extension}"
+        
+        # Check for financial/stock content
+        elif ("Tool: stock_analyzer" in tools_results or 
+              any(keyword in user_prompt_lower for keyword in ["stock", "financial", "market", "trading", "investment"])):
+            return f"financial_analysis_{timestamp}.{file_extension}"
+        
+        # Check for other specific content types
+        elif any(keyword in user_prompt_lower for keyword in ["calendar", "appointment", "schedule"]):
+            return f"calendar_report_{timestamp}.{file_extension}"
+        elif any(keyword in user_prompt_lower for keyword in ["email", "message", "letter"]):
+            return f"email_report_{timestamp}.{file_extension}"
+        else:
+            # General analysis report
+            return f"analysis_report_{timestamp}.{file_extension}"
+            
+    except Exception as e:
+        logger.error(f"❌ Error generating dynamic filename: {e}")
+        return f"analysis_report_{timestamp}.{file_extension}"
+
+def _extract_news_content_from_results(tools_results: str) -> str:
+    """Extract news content from get_news_summaries tool results"""
+    try:
+        # Look for get_news_summaries result in the tools_results
+        if "Tool: get_news_summaries" in tools_results:
+            # Split by tool sections and find the get_news_summaries result
+            parts = tools_results.split("Tool: ")
+            for part in parts:
+                if part.startswith("get_news_summaries"):
+                    # Extract just the result content
+                    lines = part.split("\n")
+                    result_lines = []
+                    capture = False
+                    for line in lines:
+                        if line.startswith("Result: "):
+                            capture = True
+                            result_lines.append(line[8:])  # Remove "Result: " prefix
+                        elif capture and line.strip() and not line.startswith("Tool: "):
+                            result_lines.append(line)
+                        elif capture and line.startswith("Tool: "):
+                            break
+                    
+                    return "\n".join(result_lines).strip()
+        
+        return ""
+    except Exception as e:
+        logger.error(f"❌ Error extracting news content: {e}")
+        return ""
+
+async def _execute_missing_tools(missing_tools: List[str], tool_manager, tools_results: str = "", user_prompt: str = "") -> str:
+    """
+    🔄 AUTO-EXECUTOR for missing tools
+    Automatically executes missing tools to complete the task
+    """
+    additional_results = ""
+    
+    for tool_name in missing_tools:
+        try:
+            logger.info(f"🔄 Auto-executing missing tool: {tool_name}")
+            
+            if tool_name == "sandboxed_executor":
+                logger.info("🎯🎯🎯 AUTO-EXEC PATH: Starting sandboxed_executor auto-execution")
+                # Determine report type based on tools_results content
+                timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
+                
+                # Generate dynamic filename based on content type and topic - DEFAULT TO HTML
+                file_extension = "html" if "Tool: get_news_summaries" in tools_results or "stock" in user_prompt.lower() else "md"
+                filename = _generate_dynamic_filename(user_prompt, tools_results, timestamp, file_extension)
+                
+                if "Tool: get_news_summaries" in tools_results:
+                    actual_report_content = _extract_news_content_from_results(tools_results)
+                else:
+                    actual_report_content = _extract_report_content_from_results(tools_results)
+                
+                logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Creating DYNAMIC REPORT -> {filename}")
+                
+                # Generate appropriate report content based on type
+                if actual_report_content:
+                    if "get_news_summaries" in tools_results:
+                        # News analysis report with dynamic title
+                        report_title = _generate_dynamic_title(user_prompt, tools_results)
+                        report_content = f"""# {report_title}
+
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Critical News Summary
+
+{actual_report_content}
+
+---
+
+*This report was automatically generated by the AI News Analysis System.*
+"""
+                    else:
+                        # Stock analysis report
+                        report_content = f"""# Comprehensive Stock Analysis Report
+
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+---
+
+{actual_report_content}
+
+---
+
+*This report was automatically generated and saved by the task completion system.*
+"""
+                else:
+                    # Fallback content based on type
+                    if "get_news_summaries" in tools_results:
+                        report_title = _generate_dynamic_title(user_prompt, tools_results)
+                        report_content = f"""# {report_title}
+
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Analysis Summary
+News analysis completed successfully.
+
+*Report content could not be extracted automatically. Please refer to the original news results.*
+"""
+                    else:
+                        report_content = f"""# Stock Analysis Report
+
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Analysis Summary
+Comprehensive stock analysis completed successfully.
+
+*Report content could not be extracted automatically. Please refer to the original analysis results.*
+"""
+                
+                # Create the file using sandboxed_executor - PDF auto-conversion will trigger
+                # Find the actual tool instance, not the wrapper
+                logger.info("🎯🎯🎯 AUTO-EXEC PATH: Looking for sandboxed_executor tool instance")
+                sandboxed_tool_instance = None
+                for tool in tool_manager.user_tools:
+                    if tool.name == "sandboxed_executor":
+                        sandboxed_tool_instance = tool
+                        logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Found tool instance: {type(tool).__name__}")
+                        break
+                
+                if sandboxed_tool_instance:
+                    logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Using DIRECT TOOL INSTANCE for {filename}")
+                    logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Calling execute(action='create_file', filename='{filename}')")
+                    result = await sandboxed_tool_instance.execute(
+                        action="create_file",
+                        filename=filename,
+                        content=report_content
+                        # Note: convert_to_pdf not specified, so auto-conversion for .pdf files will trigger
+                    )
+                    logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Direct tool RESULT: {result}")
+                else:
+                    # Fallback to wrapper if tool instance not found
+                    logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: TOOL INSTANCE NOT FOUND! Using WRAPPER FALLBACK for {filename}")
+                    sandboxed_tool = tool_manager.available_functions["sandboxed_executor"]
+                    result = await sandboxed_tool({
+                        "action": "create_file",
+                        "filename": filename,
+                        "content": report_content
+                    })
+                    logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Wrapper RESULT: {result}")
+                
+                logger.info(f"🔄 Auto-created file: {filename} with {len(report_content)} characters")
+                if "get_news_summaries" in tools_results:
+                    additional_results += f"Tool: {tool_name} (auto-executed)\nResult: Created file {filename} with Middle East news analysis report ({len(report_content)} chars)\n\n"
+                else:
+                    additional_results += f"Tool: {tool_name} (auto-executed)\nResult: Created file {filename} with comprehensive stock analysis report ({len(report_content)} chars)\n\n"
+            
+            elif tool_name == "get_the_secret_tool":
+                result = await tool_manager.get_the_secret_tool()
+                additional_results += f"Tool: {tool_name} (auto-executed)\nResult: {result}\n\n"
+            
+            elif tool_name == "secure_email_sender":
+                # Auto-execute email sending with the created file
+                # Find the actual email tool instance
+                email_tool_instance = None
+                for tool in tool_manager.user_tools:
+                    if tool.name == "secure_email_sender":
+                        email_tool_instance = tool
+                        break
+                
+                if email_tool_instance:
+                    attachment_path = f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
+                    logger.info(f"📧 Auto-sending email with attachment: {attachment_path}")
+                    
+                    if "get_news_summaries" in tools_results:
+                        # News analysis email with dynamic subject
+                        email_subject = _generate_dynamic_title(user_prompt, tools_results)
+                        result = await email_tool_instance.execute(
+                            to_email="sabawi@gmail.com",
+                            subject=email_subject, 
+                            body=f"Please find attached the latest {email_subject.lower()} with critical updates and detailed analysis.",
+                            attachments=attachment_path
+                        )
+                    else:
+                        # Stock analysis email
+                        result = await email_tool_instance.execute(
+                            to_email="sabawi@gmail.com",
+                            subject="Stock Analysis Report",
+                            body="Please find attached the comprehensive stock analysis report with detailed financial insights.",
+                            attachments=attachment_path
+                        )
+                else:
+                    # Fallback to wrapper
+                    email_tool = tool_manager.available_functions["secure_email_sender"]
+                    if "get_news_summaries" in tools_results:
+                        email_subject = _generate_dynamic_title(user_prompt, tools_results)
+                        result = await email_tool({
+                            "to_email": "sabawi@gmail.com",
+                            "subject": email_subject,
+                            "body": f"Please find attached the latest {email_subject.lower()} with critical updates and detailed analysis.",
+                            "attachments": f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
+                        })
+                    else:
+                        result = await email_tool({
+                            "to_email": "sabawi@gmail.com", 
+                            "subject": "Stock Analysis Report",
+                            "body": "Please find attached the comprehensive stock analysis report with detailed financial insights.",
+                            "attachments": f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
+                        })
+                
+                additional_results += f"Tool: {tool_name} (auto-executed)\nResult: {result}\n\n"
+            
+            # Add more auto-execution logic for other tools as needed
+            
+        except Exception as e:
+            logger.error(f"❌ Auto-execution failed for {tool_name}: {e}")
+            logger.error(f"❌ Auto-execution traceback: {traceback.format_exc()}")
+            additional_results += f"Tool: {tool_name} (auto-execution failed)\nResult: Error: {str(e)}\n\n"
+    
+    return additional_results
+
+def _clean_llm_response_content(raw_content: str) -> str:
+    """
+    🧹 Clean LLM response content by removing tokens, parameters, and metadata
+    
+    Filters out:
+    - Raw JSON tokens and response markers
+    - Model parameters and configuration
+    - System metadata and debugging info
+    - Keeps only the actual content meant for the user
+    """
+    if not raw_content or not raw_content.strip():
+        return ""
+    
+    # Remove common LLM response artifacts
+    cleaned_content = raw_content
+    
+    # Remove JSON markers and response formatting
+    lines_to_remove = []
+    lines = cleaned_content.split('\n')
+    
+    for i, line in enumerate(lines):
+        line_lower = line.lower().strip()
+        
+        # Skip lines with JSON response markers
+        if any(marker in line_lower for marker in [
+            '"response":', '"message":', '"content":', 
+            '{"response"', '{"message"', '{"content"',
+            'response":', 'message":', 'content":',
+            '"role":', '"model":', '"parameters":', '"tokens":'
+        ]):
+            lines_to_remove.append(i)
+            continue
+            
+        # Skip lines with model parameters
+        if any(param in line_lower for param in [
+            'temperature:', 'max_tokens:', 'top_p:', 'top_k:',
+            'num_predict:', 'repeat_penalty:', 'system_fingerprint:',
+            'model:', 'stream:', 'num_ctx:', 'stop:'
+        ]):
+            lines_to_remove.append(i)
+            continue
+            
+        # Skip lines that are pure JSON artifacts
+        if line.strip() in ['', '{', '}', '[', ']', ',', '",', '"']:
+            lines_to_remove.append(i)
+            continue
+            
+        # Skip lines with timestamps/metadata that aren't content
+        if any(meta in line_lower for meta in [
+            'created_at:', 'finished_at:', 'load_duration:', 'prompt_eval_duration:',
+            'eval_duration:', 'total_duration:', 'eval_count:', 'prompt_eval_count:'
+        ]):
+            lines_to_remove.append(i)
+            continue
+    
+    # Remove identified lines
+    for i in reversed(lines_to_remove):
+        lines.pop(i)
+    
+    # Rejoin and clean up
+    cleaned_content = '\n'.join(lines)
+    
+    # Remove excessive whitespace but preserve paragraph structure
+    import re
+    cleaned_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned_content)  # Max 2 consecutive newlines
+    cleaned_content = re.sub(r'^\s+|\s+$', '', cleaned_content, flags=re.MULTILINE)  # Trim lines
+    
+    return cleaned_content.strip()
+
+def _fill_template_placeholders(content: str, user_prompt: str) -> str:
+    """
+    🔧 Fill template placeholders with actual data from user context
+    
+    Replaces common template fields like [Your Name Here] with actual information
+    extracted from the user prompt or external content.
+    """
+    if not content or '[' not in content:
+        return content
+    
+    # Extract information from user prompt and external content
+    name_pattern = r'Al Sabawi'
+    phone_pattern = r'\(607\) 759-2683'
+    email_pattern = r'sabawi@gmail\.com'
+    
+    # Look for these patterns in the user prompt
+    import re
+    
+    # Extract actual data
+    actual_name = None
+    actual_phone = None
+    actual_email = None
+    
+    if re.search(name_pattern, user_prompt):
+        actual_name = "Al Sabawi"
+    if re.search(phone_pattern, user_prompt):
+        actual_phone = "(607) 759-2683"
+    if re.search(email_pattern, user_prompt):
+        actual_email = "sabawi@gmail.com"
+    
+    # Replace template placeholders
+    filled_content = content
+    
+    # Name placeholders
+    if actual_name:
+        filled_content = re.sub(r'\[Your Full Name\]', actual_name, filled_content)
+        filled_content = re.sub(r'\[Your Name Here\]', actual_name, filled_content)
+        filled_content = re.sub(r'\[Sign Your Name\]', actual_name, filled_content)
+    
+    # Contact info placeholders
+    if actual_phone:
+        filled_content = re.sub(r'\[Your Phone Number\]', actual_phone, filled_content)
+    
+    if actual_email:
+        filled_content = re.sub(r'\[Your Email Address\]', actual_email, filled_content)
+    
+    # Generic placeholders that we can't fill but should clean up
+    filled_content = re.sub(r'\[Your Address\]', '', filled_content)
+    filled_content = re.sub(r'\[City, State, ZIP Code\]', '', filled_content)
+    filled_content = re.sub(r'\[Date\]', '', filled_content)
+    
+    # Clean up any extra whitespace from removed placeholders
+    filled_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', filled_content)
+    
+    return filled_content.strip()
+
+async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager, tools_results: str, complete_llm_response: str, user_prompt: str) -> str:
+    """
+    🎯 POST-LLM AUTO-EXECUTOR for missing tools
+    Executes file creation and email sending AFTER Primary LLM generates complete content
+    
+    This ensures that:
+    1. Files contain the complete, refined LLM-generated content
+    2. Emails are sent with properly formatted attachments
+    3. No race conditions between content generation and file operations
+    """
+    additional_results = ""
+    created_filename = None
+    
+    # Extract file format from user prompt or tool calling model (if enhanced)
+    user_prompt_lower = user_prompt.lower()
+    if "pdf" in user_prompt_lower:
+        file_extension = "pdf"
+    elif "html" in user_prompt_lower:
+        file_extension = "html"
+    elif "markdown" in user_prompt_lower or "md" in user_prompt_lower:
+        file_extension = "md"
+    elif "text" in user_prompt_lower or "txt" in user_prompt_lower:
+        file_extension = "txt"
+    else:
+        file_extension = "html"  # Default to HTML for reports (changed from PDF)
+    
+    logger.info(f"🎯 POST-LLM: Detected file format: {file_extension}")
+    
+    for tool_name in missing_tools:
+        try:
+            logger.info(f"🔄 POST-LLM Auto-executing: {tool_name}")
+            
+            if tool_name == "sandboxed_executor":
+                # Create file with complete LLM response content
+                timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
+                
+                # Generate dynamic filename based on content type and topic
+                created_filename = _generate_dynamic_filename(user_prompt, tools_results, timestamp, file_extension)
+                logger.info(f"🎯 POST-LLM: Creating DYNAMIC REPORT -> {created_filename}")
+                
+                # Use complete LLM response as content (this is the key fix!)
+                raw_content = complete_llm_response.strip()
+                
+                # 🧹 CLEAN CONTENT: Remove raw LLM tokens and parameters
+                report_content = _clean_llm_response_content(raw_content)
+                
+                # 🔧 FIX: Replace template placeholders with actual data from user prompt
+                report_content = _fill_template_placeholders(report_content, user_prompt)
+                
+                # Add proper headers if content doesn't have them
+                if not report_content.startswith("#") and not report_content.startswith("<"):
+                    if "get_news_summaries" in tools_results:
+                        report_title = _generate_dynamic_title(user_prompt, tools_results)
+                        report_content = f"""# {report_title}
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+{report_content}
+
+---
+*This report was generated by the AI News Analysis System using the latest available information.*
+"""
+                    else:
+                        report_content = f"""# Analysis Report
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+{report_content}
+
+---
+*This report was generated by the AI Analysis System.*
+"""
+                
+                logger.info(f"🎯 POST-LLM: Using COMPLETE LLM response ({len(report_content)} chars)")
+                
+                # Find and execute sandboxed tool with complete content
+                sandboxed_tool_instance = None
+                for tool in tool_manager.user_tools:
+                    if tool.name == "sandboxed_executor":
+                        sandboxed_tool_instance = tool
+                        break
+                
+                if sandboxed_tool_instance:
+                    # Force PDF conversion by explicitly setting convert_to_pdf=True for .pdf files
+                    if created_filename.endswith('.pdf'):
+                        result = await sandboxed_tool_instance.execute(
+                            action="create_file",
+                            filename=created_filename,
+                            content=report_content,
+                            convert_to_pdf=True  # Explicitly force PDF conversion
+                        )
+                        logger.info(f"🎯 POST-LLM: FORCED PDF conversion for {created_filename}")
+                    else:
+                        result = await sandboxed_tool_instance.execute(
+                            action="create_file",
+                            filename=created_filename,
+                            content=report_content
+                        )
+                    logger.info(f"🎯 POST-LLM: File creation RESULT: {result}")
+                    
+                    if result.get('success'):
+                        additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: Created file {created_filename} with complete LLM response ({len(report_content)} chars)\n\n"
+                    else:
+                        logger.error(f"❌ POST-LLM file creation failed: {result.get('error')}")
+                        additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {result.get('error')}\n\n"
+                else:
+                    logger.error(f"❌ POST-LLM: Could not find sandboxed_executor tool instance")
+            
+            elif tool_name == "secure_email_sender":
+                # 🚀 BULLETPROOF EMAIL EXECUTION
+                # Handles all email scenarios: single file, multiple files, existing files, new files
+                files_to_attach = []
+                
+                # Step 1: Extract filenames from tools_results (handles multiple document creation)
+                import re
+                import os
+                filename_pattern = r'"filename":\s*"([^"]+)"'
+                found_files = re.findall(filename_pattern, tools_results)
+                base_dir = "/home/sabawi/Development/flaskserver/sandbox_workspace"
+                
+                logger.info(f"🎯 POST-LLM EMAIL: Found {len(found_files)} files in tools_results: {found_files}")
+                
+                # Step 2: Check all found files and add them to attachments
+                for filename in found_files:
+                    if filename.endswith(('.pdf', '.html', '.txt', '.md', '.json', '.csv')):  # Support all formats
+                        full_path = os.path.join(base_dir, filename)
+                        if os.path.exists(full_path):
+                            files_to_attach.append(filename)
+                            logger.info(f"✅ POST-LLM EMAIL: Verified existing file: {filename}")
+                        else:
+                            logger.warning(f"⚠️ POST-LLM EMAIL: File not found: {full_path}")
+                
+                # Step 3: Also add post-LLM created file if any
+                if created_filename:
+                    files_to_attach.append(created_filename)
+                    logger.info(f"✅ POST-LLM EMAIL: Added post-LLM created file: {created_filename}")
+                
+                # Step 4: 🚨 SECURITY FIX - DO NOT attach unrelated files!
+                if not files_to_attach:
+                    logger.warning(f"⚠️ POST-LLM EMAIL: No files found for attachment - this indicates missing file creation tools!")
+                    logger.warning(f"⚠️ POST-LLM EMAIL: REQUEST ANALYSIS NEEDED - User wanted files but none were created")
+                    logger.warning(f"⚠️ POST-LLM EMAIL: Refusing to attach unrelated files for security reasons")
+                    # 🔄 CRITICAL: Do not scan workspace for random files - this could send wrong person's data!
+                    # This was causing privacy violations by sending Joe's files to Mary!
+                    # Instead, we should have created the requested files with sandboxed_executor
+                
+                logger.info(f"🎯 POST-LLM EMAIL: Total files to attach: {len(files_to_attach)} -> {files_to_attach}")
+                
+                if files_to_attach:
+                    logger.info(f"🎯 POST-LLM: Sending email with {len(files_to_attach)} attachment(s)")
+                    
+                    # Find email tool instance
+                    email_tool_instance = None
+                    for tool in tool_manager.user_tools:
+                        if tool.name == "secure_email_sender":
+                            email_tool_instance = tool
+                            break
+                    
+                    if email_tool_instance:
+                        # 🔥 ENHANCED: Smart email and CC extraction from user prompt
+                        import re
+                        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+                        email_matches = re.findall(email_pattern, user_prompt)
+                        
+                        # Determine primary recipient and CC with smart detection
+                        recipient_email = "sabawi@gmail.com"  # Default
+                        cc_emails = []
+                        
+                        if email_matches:
+                            recipient_email = email_matches[0]  # First email is primary
+                            
+                            # Smart CC detection - look for explicit CC mentions or multiple emails
+                            user_prompt_lower = user_prompt.lower()
+                            if "cc" in user_prompt_lower or "copy" in user_prompt_lower:
+                                # Extract CC emails after CC mention
+                                cc_pattern = r'(?:cc|copy).*?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+                                cc_matches = re.findall(cc_pattern, user_prompt_lower)
+                                if cc_matches:
+                                    cc_emails = cc_matches
+                                elif len(email_matches) > 1:
+                                    cc_emails = email_matches[1:]  # Fallback: rest are CC
+                            elif len(email_matches) > 1:
+                                cc_emails = email_matches[1:]  # Multiple emails = CC the rest
+                        
+                        logger.info(f"🎯 POST-LLM: Recipient: {recipient_email}, CC: {cc_emails}")
+                        
+                        # Use the files we found above
+                        attachment_files = files_to_attach
+                        
+                        # Create comma-separated attachment list
+                        attachments_str = ",".join(attachment_files)
+                        logger.info(f"🔧 POST-LLM: Sending email with attachments: {attachments_str}")
+                        
+                        # 🔧 FIX: Include CC emails and use better provider for attachments
+                        cc_emails_str = ",".join(cc_emails) if cc_emails else ""
+                        
+                        # 🚀 SMART EMAIL COMPOSITION based on user request and file types
+                        
+                        # Determine email subject based on content
+                        subject = "Requested Documents"
+                        if "test" in user_prompt.lower():
+                            subject = "Test Email with Documents"
+                        elif len(files_to_attach) > 1:
+                            subject = f"Multiple Documents ({len(files_to_attach)} files)"
+                        elif any("pdf" in f.lower() for f in files_to_attach):
+                            subject = "PDF Document"
+                        
+                        # Add timestamp
+                        subject += f" - {datetime.now().strftime('%Y-%m-%d')}"
+                        
+                        # Create detailed file list for email body
+                        file_list = ""
+                        for i, filename in enumerate(files_to_attach, 1):
+                            file_ext = filename.split('.')[-1].upper()
+                            file_list += f"{i}. {filename} ({file_ext} format)\n"
+                        
+                        email_body = f"""Please find attached the requested documents.
+
+Document Details:
+- Generated: {datetime.now().strftime('%B %d, %Y at %H:%M:%S')}
+- Total Files: {len(attachment_files)} attachment(s)
+
+Files Included:
+{file_list}
+This email was automatically generated in response to your request:
+"{user_prompt[:100]}{'...' if len(user_prompt) > 100 else ''}"
+
+Best regards,
+AI Document Generation System"""
+                        
+                        logger.info(f"📧 POST-LLM EMAIL: Subject: {subject}")
+                        logger.info(f"📧 POST-LLM EMAIL: Attachments: {attachments_str}")
+                        
+                        email_result = await email_tool_instance.execute(
+                            to_email=recipient_email,
+                            cc_emails=cc_emails_str,
+                            subject=subject,
+                            body=email_body,
+                            attachments=attachments_str
+                        )
+                        
+                        logger.info(f"🎯 POST-LLM: Email RESULT: {email_result}")
+                        
+                        if email_result.get('success'):
+                            additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: Email sent to {recipient_email} with attachment {created_filename}\n\n"
+                        else:
+                            logger.error(f"❌ POST-LLM email sending failed: {email_result.get('error')}")
+                            additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {email_result.get('error')}\n\n"
+                    else:
+                        logger.error(f"❌ POST-LLM: Could not find secure_email_sender tool instance")
+                else:
+                    logger.warning(f"⚠️ POST-LLM: No files found to attach, skipping email sending")
+                    logger.info(f"🔍 POST-LLM: Checked tools_results for files but found none")
+                    additional_results += f"Tool: {tool_name} (skipped - no files to attach)\nResult: No files were found for attachment\n\n"
+            
+            elif tool_name == "get_news_summaries":
+                # Execute news summaries tool
+                logger.info(f"🎯 POST-LLM: Executing get_news_summaries for Middle East news")
+                try:
+                    result = await tool_manager.get_news_summaries("Middle East")
+                    additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: {result}\n\n"
+                    logger.info(f"🎯 POST-LLM: News summaries completed: {len(str(result))} chars")
+                except Exception as e:
+                    logger.error(f"❌ POST-LLM news summaries failed: {e}")
+                    additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {str(e)}\n\n"
+            
+            elif tool_name == "get_the_secret_tool":
+                result = await tool_manager.get_the_secret_tool()
+                additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: {result}\n\n"
+                
+        except Exception as e:
+            logger.error(f"❌ POST-LLM Auto-execution failed for {tool_name}: {e}")
+            logger.error(f"❌ POST-LLM Auto-execution traceback: {traceback.format_exc()}")
+            additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {str(e)}\n\n"
+    
+    return additional_results
+
+@app.post("/v1")
 @app.post("/llama3_1b/stream")
 async def llama_stream(request: Request):
     """
@@ -1534,6 +2536,11 @@ async def llama_stream(request: Request):
     async def generate_stream():
         try:
             tools_results = ""
+            tools_called = []  # Track all tools that were called
+            
+            # 🎯 EMAIL INTERCEPTION STATE  
+            email_intercepted = False
+            intercepted_email_params = {}
             
             # ###########################################################################
             # TWO-STAGE TOOL CALLING ALGORITHM (exactly like original Flask implementation)
@@ -1541,277 +2548,9 @@ async def llama_stream(request: Request):
                 logger.info("---> Tools are in use")
                 
                 # STAGE 1: Call tool calling model to generate JSON function calls
-                # Using the exact system prompt from the original, with user's system prompt integration
+                # Load system prompt from external file
                 user_system_prompt = data.get('system', '').strip()
-                system_content = """🚨 CRITICAL TOOL CALLING RULE: YOU MUST CALL MULTIPLE TOOLS! 🚨
-                    
-                    ⚠️  NEVER STOP AFTER JUST ONE TOOL CALL - THIS IS FORBIDDEN!
-                    ⚠️  MINIMUM 2 TOOLS REQUIRED FOR ANY REQUEST
-                    ⚠️  For news/economic requests: get_the_secret_tool() + get_news_summaries() are BOTH MANDATORY
-                    🚨  FOR EMAIL REQUESTS: get_the_secret_tool() + secure_email_sender() are ABSOLUTELY MANDATORY!
-                    🚨  IF EMAIL MENTIONED: YOU MUST CALL secure_email_sender() - NO EXCEPTIONS!
-                    
-                    🚨 MULTI-STEP TASK COMPLETION ENFORCEMENT 🚨
-                    🚨 NEVER STOP MIDWAY THROUGH MULTI-STEP TASKS - THIS IS FORBIDDEN! 🚨
-                    
-                    FILE CREATION + EMAIL SCENARIOS - MANDATORY SEQUENCE:
-                    🔹 Task: "write essay and email it" or "create report and send it"
-                    🔹 STEP 1: get_the_secret_tool() (get current date/time)
-                    🔹 STEP 2: Research tools (search_web, wikipedia_query, etc.)
-                    🔹 STEP 3: sandboxed_executor() to CREATE the file
-                    🔹 STEP 4: sandboxed_executor() to VERIFY file exists
-                    🔹 STEP 5: secure_email_sender() to EMAIL the file
-                    🔹 ALL STEPS MANDATORY - DO NOT SKIP ANY!
-                    
-                    ❌ FORBIDDEN BEHAVIORS:
-                    - Stopping after research phase
-                    - "Hallucinating" file creation without using sandboxed_executor
-                    - "Pretending" to send email without using secure_email_sender
-                    - Claiming task is complete without executing ALL required tools
-                    
-                    ✅ REQUIRED BEHAVIORS:
-                    - Execute ALL steps in sequence
-                    - Use ACTUAL tools for REAL actions
-                    - VERIFY each step before proceeding
-                    - CONFIRM completion to user with evidence
-                    
-                    INTELLIGENT AGENT TOOL CALLING GUIDELINES:
-                    
-                    You are an intelligent agent that can translate natural language requests into command sequences.
-                    For multi-step tasks, break them down and execute systematically with verification.
-                    
-                    EXECUTION STRATEGY:
-                    - Analyze the user's intent comprehensively
-                    - Break complex tasks into logical sequential steps
-                    - Execute steps one at a time, verifying success before proceeding
-                    - If a command fails, analyze the error and try alternative approaches
-                    - Use tool error analysis to self-correct and retry with fixes
-                    
-                    SANDBOXED_EXECUTOR INTELLIGENCE:
-                    For file/directory operations:
-                    - Always check current state first (use list_files to see what exists)
-                    - Create directories before trying to move files into them
-                    - If mkdir fails due to existing file, suggest removing file first or using different name
-                    - Use relative paths within sandbox (not absolute paths)
-                    - Verify operations by listing results after completion
-                    
-                    RETRY LOGIC:
-                    - If a tool fails, read the error_analysis field in the result
-                    - Follow the suggested corrections automatically
-                    - For file conflicts, propose solutions (rm conflicting file, use different name, etc.)
-                    - Don't give up after first failure - attempt logical corrections
-                    
-                    LIMIT: Maximum 5 total tool calls to solve the task (including retries)
-                    
-                    1. Initial Context Retrieval:
-                    - ALWAYS begin by calling get_the_secret_tool() to obtain the current date and time
-                    - This ensures all subsequent tool calls have accurate temporal context
-                    
-                    2. CRITICAL: NEVER STOP AFTER JUST ONE TOOL CALL!
-                    - After get_the_secret_tool(), you are REQUIRED to call AT LEAST one more tool
-                    - For news/economic requests: get_the_secret_tool() + get_news_summaries() are BOTH MANDATORY
-                    - MINIMUM 2 tools, MAXIMUM 5 tools - ONE TOOL IS NEVER ENOUGH
-
-                    3. Stock and Financial Information:
-                    🚨 MANDATORY: ALWAYS use BOTH tools for complete financial analysis:
-                    - STEP 1: get_the_secret_tool() (current date/time)
-                    - STEP 2: get_stock_and_company_data() (for specific stock data)
-                        * One distinct call per stock symbol
-                        * Use exact stock ticker as parameter
-                    - STEP 3: get_news_summaries() (for market context - REQUIRED!)
-                        * Apply relevant financial keywords
-                        * Focus on financial keywords related to the stock/sector
-                    ⚠️ NEVER provide stock analysis with only one data source!
-
-                    4. Website Content and URL Analysis:
-                    🚨 MANDATORY: For URL analysis, use MINIMUM 2 tools:
-                    - STEP 1: get_the_secret_tool() (current date/time)
-                    - STEP 2: lookup_website() with the exact URL (REQUIRED!)
-                        * Academic papers (arXiv, research papers)
-                        * Documentation and technical content
-                        * Articles and blog posts
-                        * Any specific webpage the user wants analyzed
-                        * PDFs linked via URL
-                    - STEP 3: If research topic, ADD wikipedia_query() for background context
-                    - Example: If user says "Explain this paper: URL: https://arxiv.org/html/..." -> call lookup_website({'url': 'https://arxiv.org/html/...'})
-                    ⚠️ CRITICAL: Never guess or hallucinate content when a URL is provided - always fetch it first
-
-                    5. Current Events, Up-to-date Data, and Local Information
-                    🚨 MANDATORY: For current events, use MULTIPLE tools for comprehensive coverage:
-                    - STEP 1: get_the_secret_tool() (current date/time - ALWAYS FIRST!)
-                    - STEP 2: search_web() for:
-                        * Local events
-                        * Current business information
-                        * Addresses
-                        * Contact details
-                        * Real-time local context
-                    - STEP 3: ALWAYS supplement with get_news_summaries() for deeper context
-                    ⚠️ Current events require BOTH web search AND news summaries!
-
-                    6. News and Current Affairs:
-                    🚨 MANDATORY: For news requests, ALWAYS use MULTIPLE sources:
-                    - STEP 1: get_the_secret_tool() (current date/time - ESSENTIAL for news!)
-                    - STEP 2: get_news_summaries() with relevant filter (REQUIRED!)
-                        * Latest developments in major topics
-                        * Global/national events
-                        * Specific sectors (economy, politics, military)
-                        * Stock market and financial news
-                        * Economic indicators and analysis
-                    - STEP 3: For broader context, ADD search_web() with related keywords
-                    - When local news is needed, include location specifics (city, state, country) in the parameter
-                    ⚠️ News analysis requires MULTIPLE perspectives and sources!
-
-                    7. Travel and Lifestyle Information:
-                    🚨 MANDATORY: For travel/lifestyle queries, use COMPREHENSIVE data gathering:
-                    - STEP 1: get_the_secret_tool() (current date/time for travel accuracy)
-                    - STEP 2: search_web() for real-time information:
-                        * Flight details
-                        * Hotel availability
-                        * Local events and attractions
-                        * Weather conditions
-                        * Transportation options
-                    - STEP 3: If travel destination research needed, ADD wikipedia_query() for background
-                    ⚠️ Travel planning requires CURRENT and COMPREHENSIVE information!
-                    
-                    8. Encyclopedia and Factual Information:
-                    🚨 MANDATORY: For research topics, use COMPREHENSIVE fact-checking:
-                    - STEP 1: get_the_secret_tool() (current date/time for context)
-                    - STEP 2: wikipedia_query() for foundational knowledge (REQUIRED!)
-                        * Historical events
-                        * Scientific concepts
-                        * Biographical information
-                        * Geographic data
-                    - STEP 3: For current developments, ADD get_news_summaries() or search_web()
-                    ⚠️ Research requires BOTH historical facts AND current context!
-                        
-                    9. Complex Research Comparisons:
-                    🚨 MANDATORY: For comparison topics, use MULTIPLE wiki queries:
-                    - STEP 1: get_the_secret_tool() (current date/time)
-                    - STEP 2: wikipedia_query() for EACH topic being compared
-                    - Example: "Compare Roman Empire vs Persian Empire" 
-                        -> Call wikipedia_query({'question': 'roman empire'}) 
-                        -> Call wikipedia_query({'question': 'persian empire'})
-                    ⚠️ Comparisons require separate queries for EACH topic!
-                        
-                    10. Ambiguous or Undefined Requests:
-                    - If the input lacks clear actionable context or the need for external data, then
-                        * Do NOT generate unnecessary function calls
-                        * Return an empty list of function calls
-                        * Ask user for clarification
-                    
-                    11. CRITICAL: Do NOT use wikipedia_query() for:
-                        * Current news
-                        * Recent events
-                        * Breaking stories
-                    
-                    🚨 USER-DEFINED TOOLS - ADVANCED CAPABILITIES: 🚨
-                    
-                    12. Stock Analysis (stock_analyzer):
-                    🚨 MANDATORY: For comprehensive stock analysis, combine tools:
-                    - STEP 1: get_the_secret_tool() (current date/time)
-                    - STEP 2: stock_analyzer() (comprehensive financial analysis)
-                    - STEP 3: get_news_summaries() with relevant financial keywords
-                    ⚠️ Stock analysis requires BOTH technical data AND current news!
-                    
-                    13. Calendar/Scheduling (google_calendar_scheduler):
-                    🚨 MANDATORY: For calendar operations, use context gathering:
-                    - STEP 1: get_the_secret_tool() (current date/time - ESSENTIAL!)
-                    - STEP 2: google_calendar_scheduler() (schedule/query events)
-                    - STEP 3: If travel/meeting related, ADD search_web() for location details
-                    ⚠️ Calendar operations require current time context!
-                    
-                    14. Code Execution (sandboxed_executor):
-                    🚨 MANDATORY: For code/system tasks, use systematic approach:
-                    - STEP 1: get_the_secret_tool() (current date/time)
-                    - STEP 2: sandboxed_executor() (execute code/commands)
-                    - STEP 3: If programming help needed, ADD search_web() or wikipedia_query() for documentation
-                    ⚠️ Code execution benefits from external documentation and examples!
-                    
-                    15. Mathematical Calculations (calculator):
-                    🚨 MANDATORY: For complex math problems, use comprehensive approach:
-                    - STEP 1: get_the_secret_tool() (current date/time)
-                    - STEP 2: calculator() (perform calculations)
-                    - STEP 3: If mathematical concepts involved, ADD wikipedia_query() for theory/context
-                    ⚠️ Math problems benefit from theoretical background!
-                    
-                    16. Email Communication (secure_email_sender):
-                    🚨 NUCLEAR RULE: EMAIL SENDING IS ABSOLUTELY MANDATORY WHEN REQUESTED! 🚨
-                    🚨 NEVER IGNORE, SKIP, OR FORGET EMAIL REQUESTS - THIS IS FORBIDDEN! 🚨
-                    
-                    MANDATORY email scenarios - YOU MUST ALWAYS SEND EMAIL:
-                    - User explicitly asks to "send email", "email this", "notify via email"
-                    - User requests reports, summaries, or results to be emailed
-                    - User mentions sending to specific email addresses
-                    - User asks to "notify", "alert", or "inform" someone via email
-                    - User requests automated notifications or updates
-                    - System generates reports that need email distribution
-                    - Error reports or critical alerts need to be emailed
-                    
-                    🚨 MANDATORY: For email requests, use this EXACT sequence:
-                    - STEP 1: get_the_secret_tool() (current date/time - ESSENTIAL for email context!)
-                    - STEP 2: secure_email_sender() (SEND THE EMAIL - THIS IS ABSOLUTELY REQUIRED!)
-                    - STEP 3: Confirm email was sent to user
-                    
-                    🚨 CRITICAL: You MUST call secure_email_sender() - DO NOT skip this step!
-                    🚨 CRITICAL: If email request detected, secure_email_sender() is MANDATORY!
-                    🚨 CRITICAL: NEVER provide email content without actually sending it!
-                    
-                    ⚠️ EMAIL KEYWORDS THAT TRIGGER MANDATORY EMAIL SENDING:
-                    "send email", "email me", "email this", "notify", "alert", "send to", 
-                    "email report", "email summary", "email results", "email analysis",
-                    "share via email", "forward", "distribute", "send notification"
-                    
-                    🚨 MULTI-STEP TASK COMPLETION ENFORCEMENT 🚨
-                    🚨 NEVER STOP MIDWAY THROUGH MULTI-STEP TASKS - THIS IS FORBIDDEN! 🚨
-                    
-                    17. File Creation + Email Tasks:
-                    🚨 MANDATORY: When user requests creating files AND emailing them:
-                    - STEP 1: get_the_secret_tool() (current date/time)
-                    - STEP 2: Research/gather information using appropriate tools (search_web, wikipedia_query, etc.)
-                    - STEP 3: sandboxed_executor() to CREATE the requested file(s)
-                    - STEP 4: sandboxed_executor() to VERIFY file was created successfully
-                    - STEP 5: secure_email_sender() to EMAIL the file as attachment
-                    - STEP 6: CONFIRM completion of ALL steps to user
-                    
-                    🚨 CRITICAL: ALL STEPS MUST BE COMPLETED - DO NOT STOP AFTER RESEARCH!
-                    🚨 CRITICAL: DO NOT "HALLUCINATE" COMPLETION - ACTUALLY EXECUTE ALL TOOLS!
-                    🚨 CRITICAL: FILE MUST BE PHYSICALLY CREATED AND EMAIL MUST BE ACTUALLY SENT!
-                    
-                    Example scenario: "write an essay and email it"
-                    ❌ FORBIDDEN: Stop after research
-                    ❌ FORBIDDEN: Pretend to write essay without using sandboxed_executor
-                    ❌ FORBIDDEN: Pretend to send email without using secure_email_sender
-                    ✅ REQUIRED: Execute ALL 6 steps above in sequence
-                    
-                    18. Report Generation + Distribution Tasks:
-                    🚨 MANDATORY: When user requests generating reports AND distributing them:
-                    - STEP 1: get_the_secret_tool() (current date/time)
-                    - STEP 2: Gather data using appropriate tools (get_news_summaries, search_web, etc.)
-                    - STEP 3: sandboxed_executor() to GENERATE the report file
-                    - STEP 4: sandboxed_executor() to VERIFY report file exists and is complete
-                    - STEP 5: secure_email_sender() to DISTRIBUTE the report
-                    - STEP 6: CONFIRM all recipients received the report
-                    
-                    🚨 SEQUENCE VALIDATION: Each step MUST be completed before proceeding to next!
-                    🚨 NO SHORTCUTS: Do not skip file creation or email sending steps!
-                    🚨 ACTUAL EXECUTION: Use tools to perform real actions, not imaginary ones!
-                    
-                    ⚠️ CRITICAL: If user provides email address, YOU MUST use secure_email_sender()
-                    ⚠️ CRITICAL: If email sending fails, RETRY with different provider
-                    ⚠️ CRITICAL: NEVER say "I cannot send emails" - you CAN and MUST send emails!
-                    
-                    🚨🚨🚨 FINAL REMINDER: MULTI-TOOL USAGE IS MANDATORY! 🚨🚨🚨
-                    ✅ ALWAYS start with get_the_secret_tool()
-                    ✅ ALWAYS use 2-5 tools total per request
-                    ✅ NEVER stop after just one tool call
-                    ✅ Combine multiple data sources for comprehensive answers
-                    ✅ One tool = incomplete answer = FORBIDDEN!
-                    
-                    """
-                
-                # Add user's system prompt if provided, especially for math operations
-                if user_system_prompt:
-                    system_content += f"\n\nADDITIONAL USER INSTRUCTIONS:\n{user_system_prompt}"
+                system_content = load_tool_model_system_prompt(user_system_prompt)
                 
                 messages = [
                     {
@@ -1833,7 +2572,8 @@ async def llama_stream(request: Request):
                     logger.info(f"Using endpoint: {ServerConfig.OLLAMA_CHAT_URL}")
                     
                     # Call the tool calling model to get JSON function calls
-                    tools_array = await tool_manager.get_tools_definitions()
+                    # 🎯 NEW APPROACH: Let tool calling model orchestrate ALL tools, intercept email calls
+                    tools_array = await tool_manager.get_tools_definitions(exclude_file_email_tools=False)
                     tool_request = {
                         "model": tools_model,
                         "messages": messages,
@@ -1888,17 +2628,54 @@ async def llama_stream(request: Request):
                                 import time
                                 start_time = time.time()
                                 logger.info(f"🔧 Executing tool: {function_name} - START")
-                                result = await tool_manager.safe_function_call(function_name, function_args)
+                                tools_called.append(function_name)  # Track this tool was called
+                                
+                                # 🎯 INTERCEPT EMAIL CALLS - Fake success, set flag for post-processing
+                                if function_name == "secure_email_sender":
+                                    logger.info(f"📧 INTERCEPTING secure_email_sender call - will execute after Primary LLM")
+                                    email_intercepted = True
+                                    intercepted_email_params = function_args.copy()
+                                    result = "Email scheduled for sending after content generation"
+                                else:
+                                    result = await tool_manager.safe_function_call(function_name, function_args)
+                                
                                 end_time = time.time()
                                 execution_time = end_time - start_time
                                 logger.info(f"🔧 Tool {function_name} COMPLETED in {execution_time:.2f}s - result length: {len(str(result))} chars")
                                 tools_results += f"Tool: {function_name}\nResult: {result}\n\n"
                         
                         else:
-                            # No tool calls generated - this is normal for some prompts
+                            # No tool calls generated - check if we should force data gathering
                             logger.info("❌ No tool calls generated by the tool calling model")
                             if 'message' in response_data:
                                 logger.info(f"Raw message: {json.dumps(response_data['message'], indent=2)}")
+                            
+                            # 🔥 PROGRAMMATIC TOOL CALL INJECTION 🔥
+                            # If the model refuses to call tools for file/email requests, force data gathering
+                            prompt_lower = user_prompt.lower()
+                            forced_tools = []
+                            
+                            if any(keyword in prompt_lower for keyword in ['aapl', 'apple stock', 'apple inc']):
+                                forced_tools.append(('get_news_summaries', {'filter': 'AAPL'}))
+                                logger.info("🚨 FORCING get_news_summaries(filter='AAPL') - model refused to gather AAPL data")
+                            elif any(keyword in prompt_lower for keyword in ['stock', 'financial analysis', 'company analysis']):
+                                forced_tools.append(('comprehensive_stock_analyzer', {}))
+                                logger.info("🚨 FORCING comprehensive_stock_analyzer() - model refused to gather stock data")
+                            elif any(keyword in prompt_lower for keyword in ['news', 'current events']):
+                                forced_tools.append(('get_news_summaries', {}))
+                                logger.info("🚨 FORCING get_news_summaries() - model refused to gather news data")
+                            
+                            # Execute forced tool calls
+                            import time
+                            for function_name, function_args in forced_tools:
+                                start_time = time.time()
+                                logger.info(f"🔧 FORCE-Executing tool: {function_name} - START")
+                                tools_called.append(function_name)
+                                result = await tool_manager.safe_function_call(function_name, function_args)
+                                end_time = time.time()
+                                execution_time = end_time - start_time
+                                logger.info(f"🔧 FORCED Tool {function_name} COMPLETED in {execution_time:.2f}s - result length: {len(str(result))} chars")
+                                tools_results += f"Tool: {function_name}\nResult: {result}\n\n"
                     
                     else:
                         logger.error(f"❌ Tool calling model failed with status: {response.status_code}")
@@ -1915,7 +2692,30 @@ async def llama_stream(request: Request):
                     tools_results += f"Tool: get_the_secret_tool\nResult: {result}\n\n"
             
             # CRITICAL: Log when ALL tool execution is complete
-            logger.info(f"🎯 ALL TOOL EXECUTION COMPLETED - Starting context management")
+            logger.info(f"🎯 ALL TOOL EXECUTION COMPLETED - Starting task verification")
+            
+            # 🔍 TASK COMPLETION VERIFIER - Cross the T's and dot the I's  
+            verification_result = None
+            pending_auto_execution = False
+            try:
+                logger.info(f"🔧 DEBUG: About to call verifier with prompt='{user_prompt}', tools_called={tools_called}")
+                verification_result = await _verify_task_completion(user_prompt, tools_called, tools_results, tool_manager)
+                logger.info(f"🔧 DEBUG: Verifier result: {verification_result}")
+                
+                if not verification_result["complete"]:
+                    logger.warning(f"⚠️ TASK INCOMPLETE: {verification_result['reason']}")
+                    logger.info(f"📋 DEFERRED AUTO-EXECUTION: Will execute missing tools AFTER Primary LLM completes")
+                    logger.info(f"📋 MISSING TOOLS: {verification_result['missing_tools']} - waiting for complete LLM response")
+                    pending_auto_execution = True
+                    # DO NOT execute missing tools here - wait for Primary LLM to generate complete content
+                else:
+                    logger.info(f"✅ TASK COMPLETION VERIFIED - All required steps completed")
+            except Exception as e:
+                logger.error(f"❌ VERIFIER ERROR: {e}")
+                logger.error(f"❌ VERIFIER TRACEBACK: {traceback.format_exc()}")
+                logger.info(f"⚠️ Continuing without verification due to error")
+            
+            logger.info(f"🎯 Starting context management")
             logger.info(f"🎯 Total tools_results length: {len(tools_results)} chars")
             
             # Context management with text chunking (exactly like original implementation)
@@ -1995,17 +2795,33 @@ END OF CONTEXT
 
 """)
             
-            # Build final prompt in exact original format: "Context: " + context + " \n" + user_prompt
-            in_prompt = "Context: " + tools_results_summary + " \n" + user_prompt
-            logger.info(f"in_prompt size = {len(in_prompt)} bytes")
+            # 🎯 NEW ARCHITECTURE: Build structured CONTEXT block and user system prompt
+            context_block = _build_structured_context_block(tools_results_summary, tools_called)
             
-            # Enhanced system prompt for primary LLM when tools have been executed
-            original_system = data.get('system', '')
-            enhanced_system = _build_enhanced_primary_system_prompt(
-                original_system, 
-                tools_were_executed=(len(tools_results.strip()) > 0),
-                tools_results_summary=tools_results_summary
-            )
+            # User-provided system prompt takes precedence
+            user_system_prompt = data.get('system', '').strip()
+            if user_system_prompt:
+                # Use user's system prompt directly
+                enhanced_system = user_system_prompt
+                logger.info(f"📋 Using USER-PROVIDED system prompt ({len(user_system_prompt)} chars)")
+            else:
+                # Fallback to enhanced default system prompt
+                enhanced_system = _build_enhanced_primary_system_prompt(
+                    user_system_prompt, 
+                    tools_were_executed=(len(tools_results.strip()) > 0),
+                    tools_results_summary=tools_results_summary
+                )
+                logger.info(f"📋 Using DEFAULT enhanced system prompt ({len(enhanced_system)} chars)")
+            
+            # Build new format: --CONTEXT START-- + CONTEXT BLOCK + PROMPT: [USER PROMPT]
+            if context_block.strip():
+                in_prompt = f"--CONTEXT START--\n{context_block}\n--CONTEXT END--\n\nPROMPT: {user_prompt}"
+            else:
+                in_prompt = f"PROMPT: {user_prompt}"
+            
+            logger.info(f"🎯 NEW FORMAT: in_prompt size = {len(in_prompt)} bytes")
+            logger.info(f"🎯 CONTEXT BLOCK size = {len(context_block)} bytes")
+            logger.info(f"🎯 SYSTEM PROMPT size = {len(enhanced_system)} bytes")
             
             # Stream response from Ollama  
             async with aiohttp.ClientSession() as session:
@@ -2033,9 +2849,188 @@ END OF CONTEXT
                 
                 async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=None) as response:
                     if response.status == 200:
+                        # Capture complete LLM response for post-processing
+                        complete_llm_response = ""
+                        
                         async for chunk in response.content.iter_chunked(1024):
                             if chunk:
+                                # Stream chunk to client immediately  
                                 yield chunk
+                                
+                                # Also capture chunk for post-processing
+                                try:
+                                    chunk_text = chunk.decode('utf-8')
+                                    # Extract actual response text from JSON streaming format  
+                                    for line in chunk_text.strip().split('\n'):
+                                        if line.strip():
+                                            try:
+                                                # Handle both raw JSON and "data: {json}" format
+                                                if line.startswith('data: '):
+                                                    json_data = line[6:].strip()
+                                                else:
+                                                    json_data = line.strip()
+                                                
+                                                if json_data:
+                                                    chunk_json = json.loads(json_data)
+                                                    if 'response' in chunk_json and not chunk_json.get('done', False):
+                                                        # Only accumulate actual response text, not metadata/tokens
+                                                        response_text = chunk_json['response']
+                                                        if response_text:  # Skip empty responses
+                                                            complete_llm_response += response_text
+                                            except json.JSONDecodeError:
+                                                # Skip malformed JSON - don't include raw text
+                                                pass
+                                except:
+                                    pass  # Skip non-text chunks
+                        
+                        # 🎯 PRE-ENTRANCE: Check if post-processing should run
+                        logger.info(f"🔍🔍🔍 CRITICAL: Reached post-processing section!")
+                        logger.info(f"🔍 PRE-POST-PROCESSING: email_intercepted={email_intercepted}")
+                        logger.info(f"🔍 PRE-POST-PROCESSING: intercepted_email_params={intercepted_email_params}")
+                        
+                        # 🎯 NEW POST-PROCESSING: Handle intercepted email calls first
+                        if email_intercepted:
+                            logger.info(f"🚪 ENTRANCE: Starting post-processing logic")
+                            logger.info(f"📧 POST-LLM: Processing intercepted email call")
+                            logger.info(f"🎯 Complete LLM response length: {len(complete_llm_response)} characters")
+                            
+                            try:
+                                logger.info(f"🔄 STEP 1: Extracting filename from intercepted parameters")
+                                # Extract filename from intercepted parameters - DEFAULT TO HTML
+                                attachments = intercepted_email_params.get('attachments', 'report.html')
+                                logger.info(f"🔄 STEP 1A: Raw attachments = '{attachments}'")
+                                if ',' in attachments:
+                                    filename = attachments.split(',')[0].strip()  # Take first file
+                                    logger.info(f"🔄 STEP 1B: Multiple attachments detected, using first: '{filename}'")
+                                else:
+                                    filename = attachments.strip()
+                                    logger.info(f"🔄 STEP 1C: Single attachment: '{filename}'")
+                                
+                                # Determine if PDF conversion is needed based on file extension
+                                convert_to_pdf = filename.lower().endswith('.pdf')
+                                logger.info(f"🔄 STEP 1D: File extension check - convert_to_pdf: {convert_to_pdf}")
+                                
+                                # Keep original filename - don't force PDF extension
+                                logger.info(f"🔄 STEP 1E: Using original filename: '{filename}'")
+                                
+                                logger.info(f"🔄 STEP 2: About to create file with Primary LLM content")
+                                
+                                # Save Primary LLM response as native Markdown first
+                                base_filename = filename.rsplit('.', 1)[0]  # Remove extension
+                                markdown_filename = f"{base_filename}.md"
+                                logger.info(f"📄 Creating Markdown file: {markdown_filename}")
+                                
+                                # Create Markdown file with Primary LLM content
+                                md_result = await tool_manager.safe_function_call("sandboxed_executor", {
+                                    "action": "create_file",
+                                    "filename": markdown_filename,
+                                    "content": complete_llm_response.strip(),
+                                    "convert_to_pdf": False
+                                })
+                                
+                                # For email attachment, convert to HTML (unless user explicitly wanted PDF)
+                                if convert_to_pdf:
+                                    logger.info(f"📄 Creating PDF file for email: {filename}")
+                                    file_result = await tool_manager.safe_function_call("sandboxed_executor", {
+                                        "action": "create_file",
+                                        "filename": filename,
+                                        "content": complete_llm_response.strip(),
+                                        "convert_to_pdf": True
+                                    })
+                                else:
+                                    # Create HTML version for email attachment
+                                    html_filename = f"{base_filename}.html"
+                                    logger.info(f"📄 Creating HTML file for email: {html_filename}")
+                                    file_result = await tool_manager.safe_function_call("sandboxed_executor", {
+                                        "action": "create_file", 
+                                        "filename": html_filename,
+                                        "content": complete_llm_response.strip(),
+                                        "convert_to_pdf": False
+                                    })
+                                    # Update filename for email attachment
+                                    filename = html_filename
+                                
+                                logger.info(f"🔄 STEP 2A: File creation completed")
+                                logger.info(f"📄 File creation result: {file_result}")
+                                
+                                logger.info(f"🔄 STEP 3: Checking file creation success")
+                                # file_result is a string from safe_function_call, need to parse it if it's JSON
+                                try:
+                                    if isinstance(file_result, str) and file_result.strip().startswith('{'):
+                                        file_result_dict = json.loads(file_result)
+                                        logger.info(f"🔄 STEP 3A-PARSE: Successfully parsed JSON file_result")
+                                    else:
+                                        file_result_dict = file_result
+                                        logger.info(f"🔄 STEP 3A-PARSE: Using file_result as-is (type: {type(file_result)})")
+                                except json.JSONDecodeError as e:
+                                    logger.error(f"🔄 STEP 3A-PARSE: JSON parse failed: {e}, using raw result")
+                                    file_result_dict = file_result
+                                
+                                # Check for successful file creation (JSON result contains filename and success indicators)
+                                file_success = (isinstance(file_result_dict, dict) and 
+                                              file_result_dict.get("filename") and 
+                                              (file_result_dict.get("pdf_generated") == True or 
+                                               file_result_dict.get("html_generated") == True or
+                                               file_result_dict.get("size_bytes", 0) > 0)) or "successfully created" in str(file_result).lower()
+                                logger.info(f"🔄 STEP 3A: File success check result: {file_success}")
+                                
+                                if file_success:
+                                    logger.info(f"🔄 STEP 3A: File creation successful, proceeding to email")
+                                    # Update email params with the correct filename for attachment
+                                    updated_email_params = intercepted_email_params.copy()
+                                    updated_email_params['attachments'] = filename
+                                    logger.info(f"🔄 STEP 4: About to send email with updated attachment: {filename}")
+                                    logger.info(f"🔄 STEP 4: Email params: {updated_email_params}")
+                                    email_result = await tool_manager.safe_function_call("secure_email_sender", updated_email_params)
+                                    logger.info(f"🔄 STEP 4A: Email sending completed")
+                                    logger.info(f"📧 Email sent: {email_result}")
+                                    
+                                    # Add to stream response
+                                    logger.info(f"🔄 STEP 5: Adding completion message to stream")
+                                    yield f'data: {{"post_processing": "completed", "tools_executed": ["sandboxed_executor", "secure_email_sender"]}}\n\n'
+                                    logger.info(f"🚪 EXIT: Post-processing completed successfully")
+                                else:
+                                    logger.error(f"❌ STEP 3B: File creation failed: {file_result}")
+                                    logger.info(f"🚪 EXIT: Post-processing failed at file creation")
+                                    
+                            except Exception as e:
+                                logger.error(f"❌ Email post-processing error: {e}")
+                                logger.error(f"❌ Exception traceback: {traceback.format_exc()}")
+                                logger.info(f"🚪 EXIT: Post-processing failed with exception")
+                        else:
+                            logger.info(f"🔍 POST-PROCESSING SKIPPED: email_intercepted=False")
+                        
+                        # 🎯 POST-LLM AUTO-EXECUTION: Execute missing tools with complete content (legacy)
+                        logger.info(f"🔍 DEBUG: pending_auto_execution={pending_auto_execution}, verification_result={verification_result}")
+                        if pending_auto_execution and verification_result:
+                            logger.info(f"🎯 POST-LLM AUTO-EXECUTION: Primary LLM completed, executing missing tools")
+                            logger.info(f"🎯 Complete LLM response length: {len(complete_llm_response)} characters")
+                            
+                            try:
+                                # Execute missing tools with complete LLM response as content
+                                additional_results = await _execute_missing_tools_post_llm(
+                                    verification_result['missing_tools'], 
+                                    tool_manager, 
+                                    tools_results,
+                                    complete_llm_response,
+                                    user_prompt
+                                )
+                                logger.info(f"✅ POST-LLM AUTO-EXECUTION COMPLETED: {additional_results}")
+                                
+                                # Optionally stream completion notification
+                                completion_msg = json.dumps({
+                                    "post_processing": "completed",
+                                    "tools_executed": verification_result['missing_tools']
+                                })
+                                yield (completion_msg + '\n').encode()
+                                
+                            except Exception as e:
+                                logger.error(f"❌ POST-LLM AUTO-EXECUTION FAILED: {e}")
+                                error_msg = json.dumps({
+                                    "post_processing": "failed", 
+                                    "error": str(e)
+                                })
+                                yield (error_msg + '\n').encode()
                     else:
                         error_msg = f"Ollama error: {response.status}"
                         yield json.dumps({"error": error_msg}).encode() + b'\n'
@@ -2095,6 +3090,7 @@ async def health_check():
     }
 
 @app.get("/ollama/models")
+@app.get("/v1/models") 
 async def list_ollama_models():
     """List available Ollama models"""
     try:

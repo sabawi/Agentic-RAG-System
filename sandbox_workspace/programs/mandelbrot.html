@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mandelbrot Fractal</title>
+</head>
+<body>
+    <canvas id="fractalCanvas" width="800" height="800"></canvas>
+    <script>
+        const canvas = document.getElementById('fractalCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        const maxIterations = 100;
+
+        function mandelbrot(x, y) {
+            let zx = 0, zy = 0, cx = x, cy = y;
+            let iteration = 0;
+            while (zx * zx + zy * zy < 4 && iteration < maxIterations) {
+                let temp = zx * zx - zy * zy + cx;
+                zy = 2 * zx * zy + cy;
+                zx = temp;
+                iteration++;
+            }
+            return iteration;
+        }
+
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const color = mandelbrot((x - width / 2) / 200, (y - height / 2) / 200);
+                const hue = color * 360 / maxIterations;
+                ctx.fillStyle = 'hsl(' + hue + ', 100%, 50%)';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    </script>
+</body>
+</html>

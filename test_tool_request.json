@@ -1,0 +1,8 @@
+{
+  "model": "qwen3:8b",
+  "prompt": "Create a simple hello world Python script and save it to the programs directory as hello.py",
+  "toolsInUse": true,
+  "tools_calling_model": "qwen3:8b",
+  "system": "You are a helpful assistant.",
+  "temperature": 0.7
+}

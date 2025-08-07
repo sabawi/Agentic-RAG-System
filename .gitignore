@@ -85,7 +85,21 @@ coverage.xml
 # mypy
 .mypy_cache/
 .dmypy.json
-dmypy.jsoncredentials.json
+dmypy.json
+
+# Credentials and sensitive files
+credentials.json*
+token.json
 token.pickle
+*.key
+*.pem
+secrets/
 server_complete.pid
 *.log
+
+# 🚨 CRITICAL PROTECTION: Never ignore these multi-tool calling protection files
+!CRITICAL_MULTI_TOOL_CALLING_PROTECTION.md
+!verify_multi_tool_calling.sh
+
+# Protected: Keep disabled conflicting tool visible but disabled
+!user_tools/_disabled_stock_analyzer.py

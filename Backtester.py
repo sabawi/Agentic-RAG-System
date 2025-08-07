@@ -417,20 +417,82 @@ class SignalsBacktester:
 
     @suppress_warnings
     def run_html(self,stock='N/A'):
-        """Generate the backtesting calculations and return a pandas DataFrame with the results 
+        """Generate the backtesting calculations using shared HTML template
         """
-        # invest_mount = 100000
-        # start_date = '2022-09-01'
-
-        output = f'<h2 style="text-decoration: underline;">Backtesting this Strategy on {stock}</h2><b>'
-        output += (f"Start Investment Date : {self.start_date}<br>")
-        output += (f"Investment Amount : ${self.amount}")
-        output += "<ul>"
+        try:
+            # Import shared HTML generator
+            import sys
+            import os
+            sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+            from utils.html_generator import html_generator
+            
+            # Generate content using original logic
+            content = self._generate_backtest_content(stock)
+            
+            # Use shared template
+            return html_generator.generate_html_report(
+                content=content,
+                title=f"Backtesting Strategy - {stock}",
+                header_title=f"Backtesting Analysis for {stock}",
+                header_subtitle="AI Strategy vs Buy & Hold Comparison",
+                include_disclaimer=False
+            )
+            
+        except Exception as e:
+            print(f"Warning: Shared template failed, using fallback: {e}")
+            # Fallback to original method
+            return self._run_html_fallback(stock)
+    
+    def _generate_backtest_content(self, stock='N/A'):
+        """Generate backtesting content for template"""
+        content = f'<h2>Backtesting Strategy Results</h2>'
+        content += f'<div class="metric"><strong>Stock Symbol:</strong> {stock}</div>'
+        content += f'<div class="metric"><strong>Start Date:</strong> {self.start_date}</div>'
+        content += f'<div class="metric"><strong>Investment Amount:</strong> ${self.amount:,}</div>'
 
         # df_tran = backtest(df_in,df_pred1.Predicted,start_date='2022-01-01',end_date='2023-01-01')
         df_tran = self.backtest()
         
         # Quit if there are less than 2 transactions 
+        if(len(df_tran)<2):
+            content += '<p><em>Insufficient transaction data for backtesting analysis.</em></p>'
+            return content
+        
+        returns = df_tran.ROI_pcnt[-1]
+        html_output, buy_and_hold_ROI, ending_account_value = self.buy_and_hold_strategy_html()
+        content += html_output
+        
+        if returns > buy_and_hold_ROI:
+            strategy_class = 'metric' 
+            performance_color = 'green'
+        else:
+            strategy_class = 'metric'
+            performance_color = 'red'
+            
+        content += f'<h2>Strategy Comparison</h2>'
+        content += f'<div style="background-color: {performance_color}; color: white; padding: 15px; border-radius: 8px; margin: 10px 0;">'
+        content += f'<h3 style="color: white; margin: 0;">🤖 AI PREDICTION ENGINE Strategy</h3>'
+        content += f'<div class="metric"><strong>Return on Investment:</strong> {returns:.2f}%</div>'
+        content += f'<div class="metric"><strong>Ending Account Value:</strong> ${df_tran["Account_Value"].iloc[-1]:,.2f}</div>'
+        content += f'</div>'
+
+        content += f'<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;">'
+        content += f'<h3 style="color: #333;">📈 BUY & HOLD Strategy</h3>'
+        content += f'<div class="metric"><strong>Return on Investment:</strong> {buy_and_hold_ROI:.2f}%</div>'
+        content += f'<div class="metric"><strong>Ending Account Value:</strong> ${ending_account_value:,.2f}</div>'
+        content += f'</div>'
+        
+        return content
+    
+    def _run_html_fallback(self,stock='N/A'):
+        """Fallback to original HTML generation"""
+        output = f'<h2 style="text-decoration: underline;">Backtesting this Strategy on {stock}</h2><b>'
+        output += (f"Start Investment Date : {self.start_date}<br>")
+        output += (f"Investment Amount : ${self.amount}")
+        output += "<ul>"
+
+        df_tran = self.backtest()
+        
         if(len(df_tran)<2):
             return output
         
@@ -492,10 +554,39 @@ class SignalsBacktester:
 
 
     def results_html(self,stock):
+        """Generate results summary using shared HTML template"""
+        try:
+            # Import shared HTML generator
+            import sys
+            import os
+            sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+            from utils.html_generator import html_generator
+            
+            # Generate content using original logic
+            content = self._generate_results_content(stock)
+            
+            if content == "No Data":
+                return content
+            
+            # Use shared template
+            return html_generator.generate_html_report(
+                content=content,
+                title=f"Backtesting Results - {stock}",
+                header_title=f"Backtesting Results for {stock}",
+                header_subtitle="Transaction Analysis & Performance Summary",
+                include_disclaimer=False
+            )
+            
+        except Exception as e:
+            print(f"Warning: Shared template failed, using fallback: {e}")
+            # Fallback to original method
+            return self._results_html_fallback(stock)
+    
+    def _generate_results_content(self, stock):
+        """Generate results content for template"""
         tran_history = self.get_tran_history()
         
         # if there are less than 2 transactions we cannot backtest and we need to quit
-        # print(tran_history)
         if(tran_history.shape[0] == 0):
             return "No Data"
 
@@ -508,7 +599,45 @@ class SignalsBacktester:
         sells = len(tran_history[tran_history['Sell_Count']>0])
         days_bought_or_sold = tran_history[(tran_history['Buy_Count'] > 0) | (tran_history['Sell_Count'] > 0)]
 
-        # If no transactions, exit now else show transaction table
+        # If no transactions, exit now 
+        if buys == 0 :
+            return "No Data"
+        
+        content = f'<h2>📈 Transaction Summary</h2>'
+        content += f'<div class="metric"><strong>First Buy Date:</strong> {first_buy}</div>'
+        content += f'<div class="metric"><strong>Number of Buy Transactions:</strong> {buys}</div>'
+        content += f'<div class="metric"><strong>Number of Sell Transactions:</strong> {sells}</div>'
+        content += f'<div class="metric"><strong>Trading Days with Transactions:</strong> {len(days_bought_or_sold)} out of {len(tran_history)} total trading days</div>'
+
+        trans_from_first_buy = tran_history.loc[first_buy:]
+        lowest_account_value = trans_from_first_buy[(trans_from_first_buy['Account_Value'] == trans_from_first_buy['Account_Value'].min())]
+        max_drawdown = tran_history[(tran_history['ROI_pcnt'] == tran_history['ROI_pcnt'].min())]
+        highest_ROI = tran_history[(tran_history['ROI_pcnt'] == tran_history['ROI_pcnt'].max())]
+
+        content += f'<h2>📊 Performance Metrics</h2>'
+        content += f'<div class="metric"><strong>Peak Account Value:</strong> ${max_account_value.iloc[0].Account_Value:,.2f} on {max_account_value.index[0].strftime("%Y-%m-%d")}</div>'
+        content += f'<div class="metric"><strong>Lowest Account Value:</strong> ${lowest_account_value.iloc[0].Account_Value:,.2f} on {lowest_account_value.index[0].strftime("%Y-%m-%d")}</div>'
+        content += f'<div class="metric"><strong>Highest ROI:</strong> {highest_ROI.iloc[0].ROI_pcnt:.2f}% on {highest_ROI.index[0].strftime("%Y-%m-%d")}</div>'
+        content += f'<div class="metric"><strong>Maximum Drawdown:</strong> {max_drawdown.iloc[0].ROI_pcnt:.2f}% on {max_drawdown.index[0].strftime("%Y-%m-%d")}</div>'
+
+        return content
+    
+    def _results_html_fallback(self,stock):
+        """Fallback to original results HTML generation"""
+        tran_history = self.get_tran_history()
+        
+        if(tran_history.shape[0] == 0):
+            return "No Data"
+
+        max_account_value = tran_history[(tran_history['Account_Value'] == tran_history['Account_Value'].max())]
+        if tran_history['Buy_Count'].sum() > 0:
+            first_buy = tran_history[(tran_history['Buy_Count']>0)].index[0].strftime("%Y-%m-%d")
+        else:
+            first_buy = 'None'
+        buys = len(tran_history[tran_history['Buy_Count']>0])
+        sells = len(tran_history[tran_history['Sell_Count']>0])
+        days_bought_or_sold = tran_history[(tran_history['Buy_Count'] > 0) | (tran_history['Sell_Count'] > 0)]
+
         if buys == 0 :
             return "No Data"
         

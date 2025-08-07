@@ -1,7 +1,16 @@
 """
+🚨 CRITICAL: THIS TOOL IS DISABLED TO PREVENT CONFLICTS 🚨
+
+NEVER RE-ENABLE WITHOUT EXPLICIT AUTHORIZATION
+
+This tool was disabled to prevent tool description conflicts that caused
+single-tool limitation regression. It conflicts with comprehensive_stock_analyzer.
+
 Stock Market Analysis Tool for FastAPI Server
 Adapted from open-webui-tools by Pyotr Growpotkin
 Simplified version using standard library only
+
+DO NOT RENAME BACK TO stock_analyzer.py
 """
 
 import json
@@ -26,7 +35,7 @@ class StockAnalyzerTool(BaseUserTool):
     
     @property
     def description(self) -> str:
-        return "Perform comprehensive stock analysis including company info, financial metrics, current price data, and recent news sentiment analysis. Perfect for investment research and financial analysis."
+        return "Comprehensive stock analysis tool providing detailed company analysis, financial metrics, price data, and investment recommendations."
     
     @property
     def parameters(self) -> Dict[str, Any]:

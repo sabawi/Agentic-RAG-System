@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from email.message import EmailMessage
 from typing import Dict, Any, List, Optional, Union
-from datetime import datetime
+from datetime import datetime, timedelta
 
 try:
     from .base_user_tool import BaseUserTool
@@ -37,9 +37,17 @@ class SecureEmailSenderTool(BaseUserTool):
         super().__init__()
         self.config_file = Path("email_config.json")
         self.max_attachment_size = 25 * 1024 * 1024  # 25MB limit
-        self.allowed_attachment_types = {
-            '.pdf', '.doc', '.docx', '.txt', '.csv', '.xlsx', '.png', 
-            '.jpg', '.jpeg', '.gif', '.zip', '.json', '.xml', '.html'
+        # Security: Use blacklist approach - only restrict genuinely dangerous file types
+        # On macOS/Linux, files aren't executable by default and require explicit chmod +x
+        self.forbidden_attachment_types = {
+            '.exe',    # Windows executables
+            '.bat',    # Windows batch files  
+            '.cmd',    # Windows command files
+            '.com',    # Windows command files
+            '.scr',    # Windows screen savers (often malware)
+            '.pif',    # Windows program information files
+            '.msi',    # Windows installer packages
+            '.dll',    # Dynamic link libraries (can be malicious)
         }
         
         # Load configuration
@@ -80,7 +88,7 @@ class SecureEmailSenderTool(BaseUserTool):
                 },
                 "attachments": {
                     "type": "string",
-                    "description": "Optional comma-separated file paths to attach (max 25MB per file)"
+                    "description": "Optional comma-separated file paths to attach (max 25MB per file, excludes dangerous executable types)"
                 },
                 "priority": {
                     "type": "string",
@@ -89,8 +97,16 @@ class SecureEmailSenderTool(BaseUserTool):
                 },
                 "provider": {
                     "type": "string", 
-                    "description": "Email provider: 'gmail', 'outlook', 'custom', or 'sendmail'",
-                    "enum": ["gmail", "outlook", "custom", "sendmail"]
+                    "description": "Email provider: 'sendmail' (default, uses mailx/mutt/msmtp), 'gmail', 'outlook', or 'custom'",
+                    "enum": ["sendmail", "gmail", "outlook", "custom"]
+                },
+                "wait_for_attachments": {
+                    "type": "boolean",
+                    "description": "Whether to wait for attachment files to be created (default: true)"
+                },
+                "attachment_timeout": {
+                    "type": "integer", 
+                    "description": "Maximum seconds to wait for attachments (default: 45)"
                 }
             },
             "required": ["to_email", "subject", "body"]
@@ -155,7 +171,7 @@ class SecureEmailSenderTool(BaseUserTool):
         return valid_emails
     
     def _resolve_attachment_path(self, file_path: str) -> Optional[Path]:
-        """Resolve attachment file path, checking sandbox workspace for relative paths"""
+        """Resolve attachment file path, checking sandbox workspace for relative paths with fuzzy matching"""
         path = Path(file_path)
         
         # If absolute path exists, return it
@@ -166,13 +182,211 @@ class SecureEmailSenderTool(BaseUserTool):
         if not path.is_absolute() and path.exists():
             return path
         
-        # Check sandbox workspace for relative paths
+        # Check sandbox workspace for relative paths with retry mechanism
         if not path.is_absolute():
             sandbox_path = Path("/home/sabawi/Development/flaskserver/sandbox_workspace") / file_path
-            if sandbox_path.exists():
-                return sandbox_path
+            
+            # 🔧 ENHANCED: Advanced file creation waiting mechanism
+            import time
+            
+            # Smart waiting based on file type and context
+            if file_path.lower().endswith('.pdf'):
+                max_wait_time = 30  # 30 seconds for PDF generation
+                check_interval = 0.5  # 500ms between checks
+            else:
+                max_wait_time = 10  # 10 seconds for other files  
+                check_interval = 0.2  # 200ms between checks
+                
+            max_retries = int(max_wait_time / check_interval)
+            printed_waiting_message = False
+            
+            for retry in range(max_retries):
+                exists = sandbox_path.exists()
+                
+                if exists:
+                    # Enhanced file completeness check
+                    try:
+                        stat_info = sandbox_path.stat()
+                        if stat_info.st_size > 0:
+                            # Additional check: ensure file is not still being written
+                            # Wait a bit and check if file size changed
+                            initial_size = stat_info.st_size
+                            time.sleep(0.1)  # Brief pause
+                            
+                            try:
+                                new_size = sandbox_path.stat().st_size
+                                if new_size == initial_size and new_size > 100:  # File stable and substantial
+                                    if printed_waiting_message:
+                                        print(f"✅ File ready: {file_path} ({new_size} bytes)")
+                                    return sandbox_path
+                                elif not printed_waiting_message:
+                                    print(f"⏳ Waiting for {file_path} to be fully written... (current size: {initial_size} bytes)")
+                                    printed_waiting_message = True
+                            except:
+                                # File might be locked, keep waiting
+                                pass
+                        else:
+                            if not printed_waiting_message:
+                                print(f"⏳ Waiting for {file_path} to be created and written...")
+                                printed_waiting_message = True
+                    except Exception as e:
+                        if not printed_waiting_message:
+                            print(f"⏳ Waiting for {file_path} to be accessible... ({str(e)[:50]})")
+                            printed_waiting_message = True
+                
+                if retry < max_retries - 1:  # Don't sleep on last iteration
+                    time.sleep(check_interval)
+                    
+            # If we get here, we've exhausted retries
+            if printed_waiting_message:
+                print(f"⚠️ Timeout waiting for {file_path} after {max_wait_time} seconds")
+        
+        # 🆕 NEW: Fuzzy matching for attachment files
+        if not path.is_absolute():
+            fuzzy_match = self._find_fuzzy_attachment_match(file_path)
+            if fuzzy_match:
+                print(f"🔍 FUZZY MATCH: '{file_path}' -> '{fuzzy_match.name}'")
+                return fuzzy_match
         
         return None
+    
+    def _find_fuzzy_attachment_match(self, requested_file: str) -> Optional[Path]:
+        """Find fuzzy matches for attachment files in sandbox workspace"""
+        try:
+            sandbox_path = Path("/home/sabawi/Development/flaskserver/sandbox_workspace")
+            if not sandbox_path.exists():
+                return None
+            
+            requested_lower = requested_file.lower()
+            requested_stem = Path(requested_file).stem.lower()
+            requested_suffix = Path(requested_file).suffix.lower()
+            
+            # Look for fuzzy matches
+            candidates = []
+            
+            for file_path in sandbox_path.glob("*"):
+                if not file_path.is_file():
+                    continue
+                    
+                file_lower = file_path.name.lower()
+                file_stem = file_path.stem.lower()
+                file_suffix = file_path.suffix.lower()
+                
+                # Exact match (case insensitive)
+                if file_lower == requested_lower:
+                    return file_path
+                
+                # Stem match with same extension
+                if file_stem == requested_stem and file_suffix == requested_suffix:
+                    candidates.append((file_path, 100))  # High priority
+                
+                # Handle common patterns
+                # "Cover Letter.pdf" -> "cover_letter.pdf"
+                normalized_requested = requested_stem.replace(' ', '_').replace('-', '_')
+                normalized_file = file_stem.replace(' ', '_').replace('-', '_')
+                
+                if normalized_file == normalized_requested and file_suffix == requested_suffix:
+                    candidates.append((file_path, 90))
+                
+                # "Resume.pdf" -> "resume_al_sabawi.pdf" (contains keyword)
+                if requested_suffix == file_suffix:
+                    if requested_stem in file_stem or file_stem.startswith(requested_stem):
+                        candidates.append((file_path, 80))
+                    elif any(word in file_stem for word in requested_stem.split('_')):
+                        candidates.append((file_path, 70))
+            
+            # Return best match
+            if candidates:
+                candidates.sort(key=lambda x: x[1], reverse=True)
+                return candidates[0][0]
+                
+        except Exception as e:
+            print(f"Warning: Fuzzy matching failed: {e}")
+        
+        return None
+    
+    def _wait_for_all_attachments(self, attachment_paths: List[str], timeout_seconds: int = 60) -> Dict[str, Any]:
+        """Wait for all attachment files to be created and return status"""
+        if not attachment_paths:
+            return {"all_ready": True, "ready_files": [], "missing_files": [], "timeout": False}
+        
+        import time
+        start_time = time.time()
+        ready_files = []
+        missing_files = []
+        
+        print(f"🔄 Pre-flight check: Waiting for {len(attachment_paths)} attachment(s)...")
+        
+        while time.time() - start_time < timeout_seconds:
+            current_missing = []
+            current_ready = []
+            
+            for file_path in attachment_paths:
+                resolved_path = self._resolve_attachment_path(file_path)
+                if resolved_path and self._validate_attachment(file_path):
+                    if file_path not in ready_files:
+                        print(f"✅ Ready: {file_path}")
+                    current_ready.append(file_path)
+                else:
+                    current_missing.append(file_path)
+            
+            ready_files = current_ready
+            missing_files = current_missing
+            
+            if not missing_files:
+                print(f"🎉 All {len(attachment_paths)} attachment(s) ready!")
+                return {"all_ready": True, "ready_files": ready_files, "missing_files": [], "timeout": False}
+            
+            # Wait before next check
+            time.sleep(1.0)
+        
+        # Timeout reached
+        print(f"⚠️ Timeout after {timeout_seconds}s: {len(missing_files)} attachment(s) still missing")
+        for missing in missing_files:
+            print(f"   ❌ Missing: {missing}")
+        
+        return {
+            "all_ready": False, 
+            "ready_files": ready_files, 
+            "missing_files": missing_files, 
+            "timeout": True
+        }
+    
+    def _detect_recent_reports(self, max_age_minutes: int = 10) -> List[str]:
+        """Detect recently created report files in sandbox workspace"""
+        try:
+            sandbox_path = Path("/home/sabawi/Development/flaskserver/sandbox_workspace")
+            if not sandbox_path.exists():
+                return []
+            
+            cutoff_time = datetime.now() - timedelta(minutes=max_age_minutes)
+            recent_reports = []
+            
+            # Look for common report file patterns
+            report_patterns = ['*report*.pdf', '*report*.html', '*analysis*.pdf', '*analysis*.html', 
+                             '*_report.pdf', '*_report.html', '*stock*.pdf', '*stock*.html']
+            
+            for pattern in report_patterns:
+                for file_path in sandbox_path.glob(pattern):
+                    if file_path.is_file():
+                        # Check if file was modified recently
+                        mod_time = datetime.fromtimestamp(file_path.stat().st_mtime)
+                        if mod_time > cutoff_time:
+                            recent_reports.append(file_path.name)
+            
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_reports = []
+            for report in recent_reports:
+                if report not in seen:
+                    seen.add(report)
+                    unique_reports.append(report)
+            
+            return unique_reports[:3]  # Limit to 3 most recent
+            
+        except Exception as e:
+            print(f"Warning: Could not detect recent reports: {e}")
+            return []
     
     def _validate_attachment(self, file_path: str) -> bool:
         """Validate attachment file"""
@@ -188,9 +402,9 @@ class SecureEmailSenderTool(BaseUserTool):
             print(f"Warning: Attachment too large (>25MB): {file_path}")
             return False
         
-        # Check file type
-        if path.suffix.lower() not in self.allowed_attachment_types:
-            print(f"Warning: Attachment type not allowed: {file_path}")
+        # Check file type - use blacklist approach for security
+        if path.suffix.lower() in self.forbidden_attachment_types:
+            print(f"Warning: Attachment type forbidden for security: {file_path} (type: {path.suffix.lower()})")
             return False
         
         return True
@@ -272,23 +486,383 @@ class SecureEmailSenderTool(BaseUserTool):
             return False
     
     def _send_via_sendmail(self, msg: EmailMessage) -> bool:
-        """Send email via system sendmail"""
+        """Send email via system sendmail or alternatives"""
         try:
+            # 🔧 NEW: Try alternative mail transfer agents for better MIME support
+            has_attachments = any(part.get_filename() for part in msg.walk())
+            
+            if has_attachments:
+                print("📎 Attachments detected - trying alternative mail agents...")
+                self._save_email_to_file(msg)
+                
+                # 🚀 ENHANCED: Prioritize mutt for multiple attachments, then try others
+                attachments_count = len([part for part in msg.walk() if part.get_filename()])
+                
+                if attachments_count > 1:
+                    # For multiple attachments, prefer mutt (best MIME support) then msmtp
+                    alternatives = [
+                        ("mutt", self._send_via_mutt),
+                        ("msmtp", self._send_via_msmtp),
+                        ("mailx", self._send_via_mailx)
+                    ]
+                    print(f"🔧 Multiple attachments ({attachments_count}) detected - prioritizing mutt")
+                else:
+                    # For single attachments, standard order
+                    alternatives = [
+                        ("msmtp", self._send_via_msmtp),
+                        ("mailx", self._send_via_mailx), 
+                        ("mutt", self._send_via_mutt)
+                    ]
+                
+                for tool_name, send_func in alternatives:
+                    if self._find_mail_tool(tool_name):
+                        print(f"🔧 Trying {tool_name} for better MIME attachment support...")
+                        if send_func(msg):
+                            print(f"✅ Email sent successfully via {tool_name}")
+                            return True
+                        else:
+                            print(f"❌ {tool_name} failed, trying next option...")
+                
+                # 🚀 ULTIMATE FALLBACK: If multiple attachments failed, try ZIP approach
+                if attachments_count > 1:
+                    print("🔧 All mail agents failed with multiple attachments - trying ZIP fallback...")
+                    if self._send_with_zip_fallback(msg):
+                        print("✅ Email sent successfully with ZIP fallback")
+                        return True
+            
+            # Fallback to sendmail/sSMTP
             sendmail_path = "/usr/sbin/sendmail"
             if not os.path.exists(sendmail_path):
                 sendmail_path = "/usr/bin/sendmail"
                 
             if not os.path.exists(sendmail_path):
-                print("Sendmail not found on system")
+                print("❌ No mail transfer agents found on system")
                 return False
             
+            # Check if this is sSMTP and warn about issues
+            import subprocess
+            try:
+                version_result = subprocess.run([sendmail_path, "-V"], capture_output=True, text=True, timeout=5)
+                if "sSMTP" in version_result.stderr:
+                    print("⚠️ Falling back to sSMTP - known issues with attachments.")
+                    print("🔧 Alternative mail agents not available or failed.")
+                    if has_attachments:
+                        print("📧 Debug files saved to /tmp/ for verification.")
+            except:
+                pass
+            
+            # Send via sendmail/sSMTP
             with os.popen(f"{sendmail_path} -t -oi", "w") as p:
-                p.write(msg.as_string())
+                email_content = msg.as_string()
+                p.write(email_content)
+                print(f"📧 Sent {len(email_content)} bytes to {sendmail_path}")
             
             return True
             
         except Exception as e:
-            print(f"Sendmail failed: {e}")
+            print(f"Mail sending failed: {e}")
+            return False
+    
+    def _find_mail_tool(self, tool_name: str) -> str:
+        """Find mail tool in system PATH"""
+        import shutil
+        return shutil.which(tool_name)
+    
+    def _send_via_msmtp(self, msg: EmailMessage) -> bool:
+        """Send email via msmtp"""
+        try:
+            msmtp_path = self._find_mail_tool("msmtp")
+            if not msmtp_path:
+                return False
+            
+            import subprocess
+            
+            # Extract recipients
+            recipients = []
+            if msg["To"]:
+                recipients.extend([addr.strip() for addr in msg["To"].split(",")])
+            if msg["Cc"]:
+                recipients.extend([addr.strip() for addr in msg["Cc"].split(",")])
+            if msg["Bcc"]:
+                recipients.extend([addr.strip() for addr in msg["Bcc"].split(",")])
+            
+            # Build msmtp command
+            cmd = [msmtp_path, "-t"] + recipients
+            
+            # Send email
+            result = subprocess.run(
+                cmd,
+                input=msg.as_string(),
+                text=True,
+                capture_output=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                return True
+            else:
+                print(f"msmtp error: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            print(f"msmtp failed: {e}")
+            return False
+    
+    def _send_via_mailx(self, msg: EmailMessage) -> bool:
+        """Send email via mailx"""
+        try:
+            mailx_path = self._find_mail_tool("mailx") or self._find_mail_tool("mail")
+            if not mailx_path:
+                return False
+            
+            import subprocess
+            import tempfile
+            
+            # Extract recipients and subject
+            recipients = msg["To"]
+            subject = msg["Subject"] or "Email with attachment"
+            
+            # Build mailx command
+            cmd = [mailx_path, "-s", subject]
+            
+            # 🔧 FIX: Add CC support for mailx
+            if msg["Cc"]:
+                cc_recipients = msg["Cc"]
+                cmd.extend(["-c", cc_recipients])
+                print(f"📧 Adding CC recipients: {cc_recipients}")
+                
+            if msg["Bcc"]:
+                bcc_recipients = msg["Bcc"]
+                cmd.extend(["-b", bcc_recipients])
+                print(f"📧 Adding BCC recipients: {bcc_recipients}")
+            
+            # Handle attachments properly - save to actual files that mailx can access
+            attachments = [part for part in msg.walk() if part.get_filename()]
+            temp_files = []
+            
+            try:
+                if attachments:
+                    for part in attachments:
+                        if part.get_filename():
+                            # Save attachment to temp file with proper name
+                            attachment_data = part.get_payload(decode=True)
+                            temp_file = f"/tmp/mailx_attachment_{part.get_filename()}"
+                            
+                            with open(temp_file, 'wb') as af:
+                                af.write(attachment_data)
+                            
+                            temp_files.append(temp_file)
+                            cmd.extend(["-A", temp_file])
+                            print(f"📎 Added attachment: {temp_file} ({len(attachment_data)} bytes)")
+                
+                # Get email body (plain text)
+                body = ""
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        body = part.get_payload()
+                        break
+                
+                if not body:
+                    # Extract text from HTML if no plain text
+                    for part in msg.walk():
+                        if part.get_content_type() == "text/html":
+                            import re
+                            html_content = part.get_payload()
+                            # Basic HTML to text conversion
+                            body = re.sub(r'<[^>]+>', '', html_content)
+                            break
+                
+                if not body:
+                    body = "Please see attached file."
+                
+                # 🔧 CRITICAL FIX: mailx needs recipient in both command line AND proper body format
+                # Add recipient to command AFTER all attachments
+                cmd.append(recipients)
+                
+                # Create proper email body format for mailx
+                email_body = body
+                
+                print(f"📧 Sending via mailx: {' '.join(cmd)}")
+                print(f"📝 Email body length: {len(email_body)} chars")
+                
+                result = subprocess.run(
+                    cmd,
+                    input=email_body,
+                    text=True,
+                    capture_output=True,
+                    timeout=30
+                )
+                
+                print(f"📧 mailx return code: {result.returncode}")
+                if result.stdout:
+                    print(f"📧 mailx stdout: {result.stdout}")
+                if result.stderr:
+                    print(f"📧 mailx stderr: {result.stderr}")
+                
+                return result.returncode == 0
+                
+            finally:
+                # Clean up temp files
+                for temp_file in temp_files:
+                    try:
+                        os.unlink(temp_file)
+                        print(f"🗑️ Cleaned up: {temp_file}")
+                    except:
+                        pass
+                        
+        except Exception as e:
+            print(f"mailx failed: {e}")
+            return False
+    
+    def _send_via_mutt(self, msg: EmailMessage) -> bool:
+        """Send email via mutt"""
+        try:
+            mutt_path = self._find_mail_tool("mutt")
+            if not mutt_path:
+                return False
+            
+            import subprocess
+            import tempfile
+            
+            # Extract recipients and subject
+            recipients = msg["To"]
+            subject = msg["Subject"] or "Email with attachment"
+            
+            # Build mutt command
+            cmd = [mutt_path, "-s", subject]
+            
+            # Add attachments
+            attachments = [part for part in msg.walk() if part.get_filename()]
+            temp_files = []
+            
+            try:
+                if attachments:
+                    for part in attachments:
+                        if part.get_filename():
+                            # Save attachment to temp file with proper name
+                            attachment_data = part.get_payload(decode=True)
+                            temp_file = f"/tmp/mutt_attachment_{part.get_filename()}"
+                            
+                            with open(temp_file, 'wb') as af:
+                                af.write(attachment_data)
+                            
+                            temp_files.append(temp_file)
+                            cmd.extend(["-a", temp_file])
+                            print(f"📎 Added mutt attachment: {temp_file} ({len(attachment_data)} bytes)")
+                
+                cmd.append(recipients)
+                
+                # Get email body
+                body = ""
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        body = part.get_payload()
+                        break
+                
+                if not body:
+                    # Extract text from HTML if no plain text
+                    for part in msg.walk():
+                        if part.get_content_type() == "text/html":
+                            import re
+                            html_content = part.get_payload()
+                            # Basic HTML to text conversion
+                            body = re.sub(r'<[^>]+>', '', html_content)
+                            break
+                
+                if not body:
+                    body = "Please see attached file."
+                
+                print(f"📧 Sending via mutt: {' '.join(cmd)}")
+                
+                result = subprocess.run(
+                    cmd,
+                    input=body,
+                    text=True,
+                    capture_output=True,
+                    timeout=30
+                )
+                
+                print(f"📧 mutt return code: {result.returncode}")
+                if result.stderr:
+                    print(f"📧 mutt stderr: {result.stderr}")
+                
+                return result.returncode == 0
+                
+            finally:
+                # Clean up temp files
+                for temp_file in temp_files:
+                    try:
+                        os.unlink(temp_file)
+                        print(f"🗑️ Cleaned up: {temp_file}")
+                    except:
+                        pass
+                        
+        except Exception as e:
+            print(f"mutt failed: {e}")
+            return False
+    
+    def _send_via_localhost_smtp(self, msg: EmailMessage) -> bool:
+        """Send email via localhost SMTP as fallback for sSMTP issues"""
+        try:
+            print("🔧 Attempting localhost SMTP fallback...")
+            import smtplib
+            
+            # Try localhost SMTP first
+            try:
+                with smtplib.SMTP('localhost', 25) as server:
+                    server.send_message(msg)
+                print("✅ Email sent via localhost SMTP")
+                return True
+            except:
+                pass
+            
+            # Try alternative ports
+            for port in [587, 25, 2525]:
+                try:
+                    with smtplib.SMTP('localhost', port) as server:
+                        server.send_message(msg)
+                    print(f"✅ Email sent via localhost SMTP port {port}")
+                    return True
+                except:
+                    continue
+            
+            print("❌ All localhost SMTP attempts failed")
+            return False
+            
+        except Exception as e:
+            print(f"Localhost SMTP failed: {e}")
+            return False
+    
+    def _save_email_to_file(self, msg: EmailMessage, filename: str = None) -> bool:
+        """Save email to file for debugging or manual delivery"""
+        try:
+            if not filename:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"/tmp/email_debug_{timestamp}.eml"
+            
+            with open(filename, 'w') as f:
+                f.write(msg.as_string())
+            
+            print(f"📧 Email saved to: {filename}")
+            print(f"📧 File size: {os.path.getsize(filename)} bytes")
+            
+            # Also save attachment separately for verification
+            for part in msg.walk():
+                if part.get_filename():
+                    attachment_filename = part.get_filename()
+                    payload = part.get_payload(decode=True)
+                    
+                    debug_attachment_path = f"/tmp/attachment_debug_{attachment_filename}"
+                    with open(debug_attachment_path, 'wb') as af:
+                        af.write(payload)
+                    
+                    print(f"📎 Attachment saved to: {debug_attachment_path}")
+                    print(f"📎 Attachment size: {len(payload)} bytes")
+            
+            return True
+            
+        except Exception as e:
+            print(f"Failed to save email to file: {e}")
             return False
 
     async def execute(self, **kwargs) -> Dict[str, Any]:
@@ -312,15 +886,54 @@ class SecureEmailSenderTool(BaseUserTool):
             cc_emails = self._parse_email_list(parsed_args.get("cc_emails", ""))
             bcc_emails = self._parse_email_list(parsed_args.get("bcc_emails", ""))
             priority = parsed_args.get("priority", "normal").lower()
-            provider = parsed_args.get("provider", "gmail").lower()
+            provider = parsed_args.get("provider", "sendmail").lower()
             
-            # Parse attachments
+            # Parse attachments with security sanitization
             attachment_paths = []
             if parsed_args.get("attachments"):
-                attachment_paths = [
+                raw_paths = [
                     path.strip() for path in parsed_args["attachments"].split(',')
                     if path.strip()
                 ]
+                # 🔧 SECURITY FIX: Sanitize attachment paths to prevent pipe character issues
+                for path in raw_paths:
+                    # Remove any potential shell injection characters
+                    sanitized_path = path.replace('|', '').replace(';', '').replace('&', '').replace('$', '')
+                    if sanitized_path and sanitized_path != path:
+                        print(f"🔧 SECURITY: Sanitized attachment path: {path} -> {sanitized_path}")
+                    if sanitized_path:
+                        attachment_paths.append(sanitized_path)
+            elif parsed_args.get("attachment_path"):
+                # Handle single attachment_path parameter
+                raw_path = parsed_args["attachment_path"].strip()
+                sanitized_path = raw_path.replace('|', '').replace(';', '').replace('&', '').replace('$', '')
+                if sanitized_path:
+                    attachment_paths = [sanitized_path]
+            else:
+                # Auto-detect recent report files if no attachments specified
+                recent_reports = self._detect_recent_reports()
+                if recent_reports:
+                    print(f"🔍 AUTO-DETECT: Found {len(recent_reports)} recent report(s): {', '.join(recent_reports)}")
+                    attachment_paths = recent_reports
+            
+            # 🆕 NEW: Wait for all attachments to be ready before proceeding
+            wait_for_attachments = parsed_args.get("wait_for_attachments", True)
+            attachment_timeout = parsed_args.get("attachment_timeout", 45)
+            
+            if attachment_paths and wait_for_attachments:
+                wait_result = self._wait_for_all_attachments(attachment_paths, timeout_seconds=attachment_timeout)
+                
+                if not wait_result["all_ready"]:
+                    if wait_result["timeout"]:
+                        error_msg = f"Timeout waiting for attachments after {attachment_timeout}s: {', '.join(wait_result['missing_files'])}"
+                        return {"success": False, "error": error_msg, "result": None}
+                    else:
+                        error_msg = f"Attachments not found: {', '.join(wait_result['missing_files'])}"
+                        return {"success": False, "error": error_msg, "result": None}
+                
+                print(f"🚀 All attachments verified - proceeding with email sending")
+            elif attachment_paths and not wait_for_attachments:
+                print(f"⚡ Skipping attachment wait (wait_for_attachments=False) - proceeding immediately")
             
             # Get provider configuration
             if provider == "sendmail":
@@ -376,6 +989,97 @@ class SecureEmailSenderTool(BaseUserTool):
             
         except Exception as e:
             return {"success": False, "error": f"Email sending failed: {str(e)}", "result": None}
+    
+    def _send_with_zip_fallback(self, msg: EmailMessage) -> bool:
+        """🚀 ULTIMATE FALLBACK: Create ZIP file with all attachments and send single ZIP"""
+        try:
+            import zipfile
+            import tempfile
+            import os
+            
+            # Create temporary ZIP file
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            zip_filename = f"attachments_{timestamp}.zip"
+            zip_path = f"/tmp/{zip_filename}"
+            
+            print(f"🗂️ Creating ZIP file: {zip_filename}")
+            
+            # Create ZIP with all attachments
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                attachments = [part for part in msg.walk() if part.get_filename()]
+                
+                for part in attachments:
+                    filename = part.get_filename()
+                    attachment_data = part.get_payload(decode=True)
+                    
+                    # Add file to ZIP
+                    zipf.writestr(filename, attachment_data)
+                    print(f"📎 Added to ZIP: {filename} ({len(attachment_data)} bytes)")
+            
+            zip_size = os.path.getsize(zip_path)
+            print(f"🗂️ ZIP created: {zip_size} bytes containing {len(attachments)} files")
+            
+            # Create new message with single ZIP attachment
+            from email.message import EmailMessage
+            zip_msg = EmailMessage()
+            zip_msg['From'] = msg['From']
+            zip_msg['To'] = msg['To']
+            zip_msg['Subject'] = msg['Subject']
+            if msg['Cc']:
+                zip_msg['Cc'] = msg['Cc']
+            if msg['Bcc']:
+                zip_msg['Bcc'] = msg['Bcc']
+            
+            # Update body to mention ZIP
+            original_body = msg.get_body(preferencelist=('plain', 'html'))
+            if original_body:
+                body_text = original_body.get_content()
+                zip_msg.set_content(f"""{body_text}
+
+Note: All files have been combined into a single ZIP archive for reliable delivery.
+ZIP contains: {', '.join([part.get_filename() for part in attachments])}""")
+            else:
+                zip_msg.set_content(f"Please find attached ZIP file containing {len(attachments)} files.")
+            
+            # Add ZIP as single attachment
+            with open(zip_path, 'rb') as zf:
+                zip_data = zf.read()
+                zip_msg.add_attachment(zip_data, 
+                                     maintype='application', 
+                                     subtype='zip',
+                                     filename=zip_filename)
+            
+            print(f"📧 Sending ZIP fallback via best available mail agent...")
+            
+            # Try to send via the best available single-attachment method
+            alternatives = [
+                ("mutt", self._send_via_mutt),
+                ("mailx", self._send_via_mailx),
+                ("msmtp", self._send_via_msmtp)
+            ]
+            
+            for tool_name, send_func in alternatives:
+                if self._find_mail_tool(tool_name):
+                    print(f"🔧 Trying ZIP via {tool_name}...")
+                    if send_func(zip_msg):
+                        print(f"✅ ZIP sent successfully via {tool_name}")
+                        return True
+                    else:
+                        print(f"❌ ZIP via {tool_name} failed")
+            
+            return False
+            
+        except Exception as e:
+            print(f"❌ ZIP fallback failed: {e}")
+            return False
+        finally:
+            # Clean up ZIP file
+            try:
+                if 'zip_path' in locals() and os.path.exists(zip_path):
+                    os.unlink(zip_path)
+                    print(f"🗑️ Cleaned up ZIP: {zip_path}")
+            except:
+                pass
 
 
 # Register the tool

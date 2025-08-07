@@ -1,0 +1,74 @@
+# SEQUENCE/TIMING BUG FIX FOR AGENTIC TOOL PROCESSING
+# ===================================================
+# 
+# PROBLEM: Auto-execution happens BEFORE Primary LLM generates content
+# SOLUTION: Move auto-execution to AFTER Primary LLM completes, detect file format from tool calls
+#
+# Key Changes:
+# 1. Remove auto-execution from tool verification phase
+# 2. Add post-LLM auto-execution with complete generated content
+# 3. Extract file format from tool calling model parameters
+# 4. Only execute file/email operations if explicitly requested
+
+# STEP 1: Modify the tool verification to NOT auto-execute immediately
+# STEP 2: Capture the verification result for later use  
+# STEP 3: Add post-streaming auto-execution
+# STEP 4: Enhance tool calling model to specify file formats
+# STEP 5: Only auto-execute if email is requested
+
+# Location 1: fastapi_server_complete.py - Tool Verification Section
+# BEFORE (lines ~2270-2280):
+            if not verification_result["complete"]:
+                logger.warning(f"⚠️ TASK INCOMPLETE: {verification_result['reason']}")
+                logger.info(f"🔄 AUTO-EXECUTING missing tools: {verification_result['missing_tools']}")
+                
+                # Execute missing tools automatically
+                additional_results = await _execute_missing_tools(verification_result['missing_tools'], tool_manager, tools_results)
+                tools_results += additional_results
+                logger.info(f"✅ TASK COMPLETION VERIFIED after auto-execution")
+
+# AFTER:
+            if not verification_result["complete"]:
+                logger.warning(f"⚠️ TASK INCOMPLETE: {verification_result['reason']}")
+                logger.info(f"📋 DEFERRED AUTO-EXECUTION: Will execute after Primary LLM completes")
+                # Store verification result for post-LLM execution
+                # DO NOT auto-execute here - wait for Primary LLM to generate content
+
+# Location 2: fastapi_server_complete.py - Stream Generator Function
+# Need to modify the generate_stream() function to include post-processing
+
+# Location 3: Tool Calling Model System Prompt Enhancement
+# Add file format specification to tool calls
+
+# Location 4: New Post-LLM Auto-Execution Function
+# Execute file/email operations with complete LLM-generated content
+
+DETAILED_IMPLEMENTATION = """
+
+1. CAPTURE VERIFICATION RESULT (Don't Execute Immediately):
+   - Store verification_result in a variable accessible to streaming function
+   - Log that auto-execution is deferred
+   - Continue to Primary LLM call
+
+2. MODIFY STREAMING RESPONSE:
+   - Add post-streaming callback to execute missing tools
+   - Capture complete LLM response content
+   - Execute file creation with complete content
+   - Execute email sending with complete file
+
+3. ENHANCE TOOL CALLING MODEL:
+   - Add file format parameter to tool calls  
+   - Example: sandboxed_executor(filename="report.pdf", format="pdf")
+   - Only execute if secure_email_sender is called
+
+4. FILE FORMAT DETECTION:
+   - Extract format from tool calling model parameters
+   - Support: .pdf, .md, .txt, .html
+   - Default to .md if not specified
+
+5. CONDITIONAL EXECUTION:
+   - Only save file if email tool is called
+   - No email request = no file creation
+   - Email request = file creation + email sending
+
+"""

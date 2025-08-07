@@ -1,0 +1,21 @@
+{
+  "filename": "short_stories/robot_painter_story.txt",
+  "statistics": {
+    "characters": 2709,
+    "words": 408,
+    "paragraphs": 14,
+    "avg_words_per_paragraph": 29.1
+  },
+  "top_words": {
+    "her": 15,
+    "the": 14,
+    "and": 12,
+    "zara": 12,
+    "a": 9,
+    "to": 9,
+    "with": 8,
+    "s": 8,
+    "in": 7,
+    "that": 7
+  }
+}
