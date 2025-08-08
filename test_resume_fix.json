@@ -1,0 +1,5 @@
+{
+  "prompt": "Here is my resume: 'John Smith (555) 123-4567 john@email.com Software Developer with 5 years experience in Python and web development.' Create a cover letter for this resume and email both the cover letter and resume to hiring@company.com",
+  "model": "qwen3:8b",
+  "stream": false
+}

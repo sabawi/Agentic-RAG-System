@@ -1,0 +1,6 @@
+{
+  "prompt": "Compare Roman Empire and Persian Empire - their military strengths and weaknesses",
+  "model": "qwen3:8b",
+  "stream": false,
+  "toolsInUse": true
+}

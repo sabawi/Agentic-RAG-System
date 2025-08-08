@@ -1,0 +1,6 @@
+{
+  "prompt": "Tell me about Barack Obama",
+  "model": "qwen3:8b",
+  "stream": false,
+  "toolsInUse": true
+}

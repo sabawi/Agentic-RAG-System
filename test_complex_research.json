@@ -1,0 +1,6 @@
+{
+  "prompt": "Research the Roman Empire and Persian Empire, there conquests, control, size, power structure, and style of governance and write a brief essay on it.",
+  "model": "qwen3:8b",
+  "stream": false,
+  "toolsInUse": true
+}

@@ -1,0 +1,6 @@
+{
+  "prompt": "Research Barack Obama since he left the White House. What has he been doing?",
+  "model": "qwen3:8b",
+  "stream": false,
+  "toolsInUse": true
+}

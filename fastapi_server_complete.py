@@ -62,6 +62,19 @@ except ImportError as e:
     print(f"WARNING: Some tools not available: {e}")
     TOOLS_AVAILABLE = False
 
+# Import our optimization safety system
+try:
+    from optimization_safety import (
+        ToolOutputPreserver,
+        OptimizationValidator, 
+        safe_optimize_llm_input
+    )
+    from optimization_controller import optimization_controller
+    OPTIMIZATION_AVAILABLE = True
+except ImportError as e:
+    OPTIMIZATION_AVAILABLE = False
+    OPTIMIZATION_IMPORT_ERROR = str(e)
+
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
@@ -146,6 +159,12 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Log optimization system status after logger is available
+if OPTIMIZATION_AVAILABLE:
+    logger.info("🛡️ Optimization safety system loaded successfully")
+else:
+    logger.warning(f"⚠️ Optimization system not available: {OPTIMIZATION_IMPORT_ERROR}")
 
 # ==============================================================================
 # SYSTEM PROMPT MANAGEMENT
@@ -471,7 +490,7 @@ class AsyncToolManager:
             # Handle both JSON string and plain string arguments
             try:
                 data = json.loads(args) if isinstance(args, str) and args.startswith('{') else args
-                query = data.get('query', args) if isinstance(data, dict) else str(args)
+                query = data.get('question', args) if isinstance(data, dict) else str(args)
             except (json.JSONDecodeError, AttributeError):
                 query = str(args)
             
@@ -1499,6 +1518,172 @@ Remember: The work is DONE. Your job is to present the results and provide insig
         full_system += f"\n\nADDITIONAL USER INSTRUCTIONS:\n{original_system}"
     full_system += enhanced_instructions
     return full_system
+
+
+async def process_with_safe_optimization(
+    tool_results: List[Dict],
+    user_prompt: str,
+    max_context_window: int,
+    tools_called: List[str],
+    thread_pool,
+    user_id: Optional[str] = None
+) -> tuple[str, Dict[str, Any]]:
+    """
+    Process tool results with safe optimization integration.
+    
+    This function integrates the optimization safety system into the existing
+    FastAPI server processing pipeline while maintaining complete fallback compatibility.
+    
+    Returns:
+        tuple: (tools_results_summary, optimization_metadata)
+    """
+    
+    # Convert tool results to the format expected by our optimization system
+    formatted_tool_results = []
+    for i, result_dict in enumerate(tool_results):
+        tool_name = tools_called[i] if i < len(tools_called) else f"tool_{i}"
+        formatted_result = {
+            "tool": tool_name,
+            "result": result_dict
+        }
+        formatted_tool_results.append(formatted_result)
+    
+    # Check if optimization is available and enabled
+    if not OPTIMIZATION_AVAILABLE:
+        logger.info("🚫 Optimization system not available - using original processing")
+        return await _original_processing_fallback(tool_results, user_prompt, max_context_window, thread_pool)
+    
+    # Check feature flags
+    if not optimization_controller.should_optimize(user_id=user_id, tool_types=tools_called):
+        logger.info("🚫 Optimization disabled by feature flags - using original processing")
+        return await _original_processing_fallback(tool_results, user_prompt, max_context_window, thread_pool)
+    
+    # Attempt safe optimization
+    start_time = time.time()
+    
+    try:
+        logger.info("🔧 OPTIMIZATION: Starting safe optimization attempt")
+        
+        # Initialize safety components
+        preserver = ToolOutputPreserver()
+        validator = OptimizationValidator()
+        
+        # Attempt optimization
+        optimization_result = await safe_optimize_llm_input(
+            tool_results=formatted_tool_results,
+            user_prompt=user_prompt,
+            preserver=preserver,
+            validator=validator
+        )
+        
+        response_time = time.time() - start_time
+        
+        # Record metrics
+        success = optimization_result["input_type"] == "optimized"
+        validation_score = optimization_result.get("validation_score", 0)
+        error_type = None
+        
+        if not success:
+            if "validation" in optimization_result.get("fallback_reason", []):
+                error_type = "validation"
+            elif "error" in optimization_result:
+                error_type = "exception"
+            elif "integrity" in optimization_result.get("error", ""):
+                error_type = "integrity"
+        
+        optimization_controller.record_attempt(
+            success=success,
+            validation_score=validation_score,
+            response_time=response_time,
+            error_type=error_type
+        )
+        
+        # Use optimized content or fallback
+        if success:
+            logger.info(f"✅ OPTIMIZATION SUCCESS: Score {validation_score:.1f}, Response time {response_time:.2f}s")
+            return optimization_result["content"], {
+                "optimization_used": True,
+                "optimization_score": validation_score,
+                "response_time": response_time,
+                "fallback_available": True
+            }
+        else:
+            logger.warning(f"⚠️ OPTIMIZATION FALLBACK: {optimization_result.get('fallback_reason', 'Unknown reason')}")
+            return optimization_result["content"], {
+                "optimization_used": False,
+                "fallback_reason": optimization_result.get("fallback_reason", "Unknown"),
+                "validation_score": validation_score,
+                "response_time": response_time
+            }
+            
+    except Exception as e:
+        response_time = time.time() - start_time
+        logger.error(f"🚨 OPTIMIZATION SYSTEM ERROR: {e}")
+        
+        # Record failure
+        optimization_controller.record_attempt(
+            success=False,
+            validation_score=0,
+            response_time=response_time,
+            error_type="exception"
+        )
+        
+        # Emergency fallback to original processing
+        logger.info("🔄 EMERGENCY FALLBACK: Using original processing")
+        return await _original_processing_fallback(tool_results, user_prompt, max_context_window, thread_pool)
+
+
+async def _original_processing_fallback(
+    tool_results: List[Dict],
+    user_prompt: str, 
+    max_context_window: int,
+    thread_pool
+) -> tuple[str, Dict[str, Any]]:
+    """
+    Original processing logic for fallback compatibility.
+    This replicates the exact original logic from the FastAPI server.
+    """
+    
+    # Recreate the original full_tools_text
+    full_tools_text = ""
+    for result_dict in tool_results:
+        if isinstance(result_dict, dict):
+            for key, value in result_dict.items():
+                full_tools_text += f"{key}: {value}\n"
+        else:
+            full_tools_text += str(result_dict) + "\n"
+    
+    # Apply original context window logic
+    if len(full_tools_text) > (max_context_window) * 1.05:
+        try:
+            logger.info(f"Calling TextChunker() to reduce context size from {len(full_tools_text)} to around {max_context_window} bytes")
+            if TOOLS_AVAILABLE:
+                def sync_text_chunking():
+                    from text_chunker import TextChunker
+                    return TextChunker.summary_by_semantics(
+                        full_tools_text, 
+                        query=user_prompt,
+                        max_length=max_context_window
+                    )
+                
+                tools_results_summary = await asyncio.get_event_loop().run_in_executor(
+                    thread_pool, sync_text_chunking
+                )
+                logger.info(f"TextChunker() was called and returned tools_results_summary size of {len(tools_results_summary)} bytes. From {len(full_tools_text)}")
+            else:
+                tools_results_summary = full_tools_text
+        except Exception as e:
+            logger.error(f"Error: exception in TextChunker.summary_by_semantics() call. Function returned message: {e}")
+            tools_results_summary = full_tools_text  # TextChunker() failed!! Use the full text
+    else:
+        tools_results_summary = full_tools_text
+    
+    return tools_results_summary, {
+        "optimization_used": False,
+        "original_processing": True,
+        "context_size": len(tools_results_summary)
+    }
+
 
 # ==============================================================================
 # OLLAMA LLM ENDPOINTS
@@ -2718,7 +2903,7 @@ async def llama_stream(request: Request):
             logger.info(f"🎯 Starting context management")
             logger.info(f"🎯 Total tools_results length: {len(tools_results)} chars")
             
-            # Context management with text chunking (exactly like original implementation)
+            # Context management with safe optimization integration
             context_size = len(prompt_context) if prompt_context else 0
             tool_results_size = len(tools_results)
             system_prompt_size = len(data.get('system', ''))
@@ -2726,30 +2911,85 @@ async def llama_stream(request: Request):
             max_context_tokens = max_context_window / 4  # estimating 4 bytes per token
             full_tools_text = (prompt_context or "") + ".\n" + tools_results
             
-            # If total context size with tool results exceeds max_context_window then try to shorten it
-            if len(full_tools_text) > (max_context_window) * 1.05:
-                try:
-                    logger.info(f"Calling TextChunker() to reduce context size from {len(full_tools_text)} to around {max_context_window} bytes")
-                    if TOOLS_AVAILABLE:
-                        def sync_text_chunking():
-                            from text_chunker import TextChunker
-                            return TextChunker.summary_by_semantics(
-                                full_tools_text, 
-                                query=data.get('system', '') + ' \n' + user_prompt,
-                                max_length=max_context_window
+            # 🛡️ SAFE OPTIMIZATION INTEGRATION 🛡️
+            # Parse tools_results into structured format for optimization system
+            parsed_tool_results = []
+            if tools_results.strip():
+                # Split the tools_results string into individual tool entries
+                tool_entries = []
+                current_entry = {}
+                lines = tools_results.split('\n')
+                
+                for line in lines:
+                    if line.startswith('Tool: '):
+                        if current_entry:  # Save previous entry
+                            tool_entries.append(current_entry)
+                        current_entry = {'tool': line[6:], 'result': ''}
+                    elif line.startswith('Result: '):
+                        if current_entry:
+                            current_entry['result'] = line[8:]
+                    elif current_entry and line.strip():
+                        # Continue building result
+                        current_entry['result'] += '\n' + line
+                
+                if current_entry:  # Don't forget the last entry
+                    tool_entries.append(current_entry)
+                
+                # Convert to the format expected by our optimization system
+                for entry in tool_entries:
+                    parsed_tool_results.append({
+                        'tool': entry.get('tool', 'unknown_tool'),
+                        'result': entry.get('result', '')
+                    })
+            
+            # Use safe optimization system or fallback to original processing
+            try:
+                # Get user_id from request if available (you may need to adjust this based on your auth system)
+                user_id = getattr(request, 'user_id', None) if 'request' in locals() else None
+                
+                tools_results_summary, optimization_metadata = await process_with_safe_optimization(
+                    tool_results=parsed_tool_results,
+                    user_prompt=user_prompt,
+                    max_context_window=max_context_window,
+                    tools_called=tools_called,
+                    thread_pool=thread_pool,
+                    user_id=user_id
+                )
+                
+                # Log optimization results
+                if optimization_metadata.get('optimization_used'):
+                    logger.info(f"🚀 OPTIMIZATION APPLIED: Score {optimization_metadata['optimization_score']:.1f}, Time {optimization_metadata['response_time']:.2f}s")
+                else:
+                    logger.info(f"🔄 FALLBACK PROCESSING: {optimization_metadata.get('fallback_reason', 'Feature disabled')}")
+                    
+            except Exception as e:
+                logger.error(f"🚨 OPTIMIZATION INTEGRATION ERROR: {e}")
+                logger.info("🔄 EMERGENCY FALLBACK: Using original processing")
+                
+                # Emergency fallback to original logic
+                if len(full_tools_text) > (max_context_window) * 1.05:
+                    try:
+                        logger.info(f"Calling TextChunker() to reduce context size from {len(full_tools_text)} to around {max_context_window} bytes")
+                        if TOOLS_AVAILABLE:
+                            def sync_text_chunking():
+                                from text_chunker import TextChunker
+                                return TextChunker.summary_by_semantics(
+                                    full_tools_text, 
+                                    query=data.get('system', '') + ' \n' + user_prompt,
+                                    max_length=max_context_window
+                                )
+                            
+                            tools_results_summary = await asyncio.get_event_loop().run_in_executor(
+                                thread_pool, sync_text_chunking
                             )
-                        
-                        tools_results_summary = await asyncio.get_event_loop().run_in_executor(
-                            thread_pool, sync_text_chunking
-                        )
-                        logger.info(f"TextChunker() was called and returned tools_results_summary size of {len(tools_results_summary)} bytes. From {len(full_tools_text)}")
-                    else:
-                        tools_results_summary = full_tools_text
-                except Exception as e:
-                    logger.error(f"Error: exception in TextChunker.summary_by_semantics() call. Function returned message: {e}")
-                    tools_results_summary = full_tools_text  # TextChunker() failed!! Use the full text
-            else:
-                tools_results_summary = full_tools_text
+                            logger.info(f"TextChunker() was called and returned tools_results_summary size of {len(tools_results_summary)} bytes. From {len(full_tools_text)}")
+                        else:
+                            tools_results_summary = full_tools_text
+                    except Exception as e2:
+                        logger.error(f"Error: exception in TextChunker.summary_by_semantics() call. Function returned message: {e2}")
+                        tools_results_summary = full_tools_text  # TextChunker() failed!! Use the full text
+                else:
+                    tools_results_summary = full_tools_text
             
             # Log context statistics (exactly like original)
             if tools_in_use:
@@ -3204,6 +3444,111 @@ async def get_metrics():
             "count": len(tool_manager.available_functions)
         }
     }
+
+# ==============================================================================
+# OPTIMIZATION CONTROL ENDPOINTS
+# ==============================================================================
+
+@app.get("/optimization/status")
+async def get_optimization_status():
+    """Get comprehensive optimization system status"""
+    if not OPTIMIZATION_AVAILABLE:
+        return JSONResponse(
+            content={
+                "available": False,
+                "error": "Optimization system not loaded"
+            },
+            status_code=503
+        )
+    
+    return JSONResponse(content={
+        "available": True,
+        "status": optimization_controller.get_status_summary()
+    })
+
+@app.post("/optimization/enable")
+async def enable_optimization(rollout_percentage: float = 100.0):
+    """Enable optimization with optional gradual rollout"""
+    if not OPTIMIZATION_AVAILABLE:
+        return JSONResponse(
+            content={"error": "Optimization system not available"},
+            status_code=503
+        )
+    
+    try:
+        optimization_controller.enable_feature(rollout_percentage)
+        return JSONResponse(content={
+            "message": f"Optimization enabled with {rollout_percentage}% rollout",
+            "status": optimization_controller.get_status_summary()
+        })
+    except Exception as e:
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+
+@app.post("/optimization/disable")
+async def disable_optimization():
+    """Disable optimization completely"""
+    if not OPTIMIZATION_AVAILABLE:
+        return JSONResponse(
+            content={"error": "Optimization system not available"},
+            status_code=503
+        )
+    
+    try:
+        optimization_controller.disable_feature()
+        return JSONResponse(content={
+            "message": "Optimization disabled",
+            "status": optimization_controller.get_status_summary()
+        })
+    except Exception as e:
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+
+@app.post("/optimization/rollout")
+async def set_rollout_percentage(percentage: float):
+    """Set rollout percentage for gradual deployment"""
+    if not OPTIMIZATION_AVAILABLE:
+        return JSONResponse(
+            content={"error": "Optimization system not available"},
+            status_code=503
+        )
+    
+    try:
+        optimization_controller.set_rollout_percentage(percentage)
+        return JSONResponse(content={
+            "message": f"Rollout percentage set to {percentage}%",
+            "status": optimization_controller.get_status_summary()
+        })
+    except Exception as e:
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+
+@app.post("/optimization/emergency-rollback")
+async def emergency_rollback(reason: str = "Manual emergency rollback"):
+    """Trigger emergency rollback"""
+    if not OPTIMIZATION_AVAILABLE:
+        return JSONResponse(
+            content={"error": "Optimization system not available"},
+            status_code=503
+        )
+    
+    try:
+        rollback_event = optimization_controller.emergency_rollback(reason)
+        return JSONResponse(content={
+            "message": "Emergency rollback executed",
+            "rollback_event": rollback_event
+        })
+    except Exception as e:
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
 
 # ==============================================================================
 # MAIN APPLICATION RUNNER
