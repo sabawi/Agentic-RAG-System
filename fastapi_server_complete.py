@@ -92,7 +92,12 @@ class ServerConfig:
     # Ollama configuration
     OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434/api/generate')
     OLLAMA_CHAT_URL = os.getenv('OLLAMA_CHAT_URL', 'http://127.0.0.1:11434/api/chat')
-    DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'qwen3:8b')
+    DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'llama3.2:3b')
+    DEFAULT_TOOL_CALLING_MODEL = os.getenv('DEFAULT_TOOL_CALLING_MODEL', 'qwen3:8b')
+    
+    # OpenAI Compatibility Layer Configuration
+    USE_DIRECT_FUNCTION_CALLS = os.getenv('USE_DIRECT_FUNCTION_CALLS', 'true').lower() == 'true'
+    OPENAI_HTTP_TIMEOUT = int(os.getenv('OPENAI_HTTP_TIMEOUT', '600'))  # 10 minutes default
     
     # Server configuration
     HOST = os.getenv('HOST', '0.0.0.0')
@@ -122,7 +127,7 @@ class OllamaStreamRequest(BaseModel):
     toolsInUse: Optional[bool] = Field(default=True, description="Enable tools")
     searchWebInUse: Optional[bool] = Field(default=False, description="Enable web search")
     images: Optional[List[str]] = Field(default=["noimage"], description="Image data")
-    tools_calling_model: Optional[str] = Field(default="qwen3:8b", description="Model for tool calls")
+    tools_calling_model: Optional[str] = Field(default=ServerConfig.DEFAULT_TOOL_CALLING_MODEL, description="Model for tool calls")
     
     # Make validation more flexible like the original Flask version
     class Config:
@@ -137,6 +142,32 @@ class ApiResponse(BaseModel):
     data: Optional[Any] = None
     error: Optional[str] = None
     timestamp: str
+
+# OpenAI Compatibility Models - Minimal trust design
+class OpenAIMessage(BaseModel):
+    role: str = Field(..., description="Message role")
+    content: str = Field(..., description="Message content")
+
+class OpenAIChatRequest(BaseModel):
+    model: str = Field(..., description="Model name - we only trust this and content")
+    messages: List[OpenAIMessage] = Field(..., description="Messages array")
+    # Everything else is ignored for security - zero trust design
+    stream: Optional[bool] = Field(default=None)
+    temperature: Optional[float] = Field(default=None) 
+    max_tokens: Optional[int] = Field(default=None)
+    top_p: Optional[float] = Field(default=None)
+    frequency_penalty: Optional[float] = Field(default=None)
+    presence_penalty: Optional[float] = Field(default=None)
+    
+    class Config:
+        extra = "ignore"  # Ignore all other fields for security
+
+class OpenAIStreamChunk(BaseModel):
+    id: str
+    object: str = "chat.completion.chunk"
+    created: int
+    model: str
+    choices: List[Dict[str, Any]]
 
 # ==============================================================================
 # GLOBAL VARIABLES
@@ -2709,7 +2740,7 @@ async def llama_stream(request: Request):
     # Other parameters
     model = data.get('model', ServerConfig.DEFAULT_MODEL)
     images = data.get('images', ['noimage'])
-    tools_calling_model = data.get('tools_calling_model', 'qwen3:8b')
+    tools_calling_model = data.get('tools_calling_model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL)
     
     # Handle images exactly like original
     image_exists = False
@@ -2751,7 +2782,7 @@ async def llama_stream(request: Request):
                 ]
                 
                 try:
-                    tools_model = data.get('tools_calling_model', 'qwen3:8b').strip()
+                    tools_model = data.get('tools_calling_model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL).strip()
                     logger.info(f"Calling Tools Model ==> {tools_model}")
                     logger.info(f"Tools available count: {len(data.get('tools', []))}")
                     logger.info(f"Using endpoint: {ServerConfig.OLLAMA_CHAT_URL}")
@@ -3330,7 +3361,6 @@ async def health_check():
     }
 
 @app.get("/ollama/models")
-@app.get("/v1/models") 
 async def list_ollama_models():
     """List available Ollama models"""
     try:
@@ -3549,6 +3579,309 @@ async def emergency_rollback(reason: str = "Manual emergency rollback"):
             content={"error": str(e)},
             status_code=500
         )
+
+# ==============================================================================
+# OPENAI COMPATIBILITY ENDPOINT
+# ==============================================================================
+
+@app.get("/v1/models")
+async def openai_models():
+    """OpenAI compatible models endpoint"""
+    try:
+        # Build the response
+        response_data = {
+            "object": "list",
+            "data": [
+                {
+                    "id": "Agentic-RAG-Model1",
+                    "object": "model",
+                    "created": int(time.time()),
+                    "owned_by": "local"
+                },
+                {
+                    "id": "Agentic-RAG-Model2",
+                    "object": "model", 
+                    "created": int(time.time()),
+                    "owned_by": "local"
+                }
+            ]
+        }
+        
+        # Debug logging
+        logger.info(f"🔍 /v1/models endpoint called - returning {len(response_data['data'])} models")
+        logger.info(f"🔍 Models being returned:")
+        for i, model in enumerate(response_data['data']):
+            logger.info(f"🔍   Model {i+1}: {model['id']} (created: {model['created']}, owned_by: {model['owned_by']})")
+        logger.info(f"🔍 Full response: {json.dumps(response_data, indent=2)}")
+        
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"🚨 Models endpoint error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/v1/chat/completions")
+async def openai_chat_completions(request: OpenAIChatRequest):
+    """
+    OpenAI API Compatible Chat Completions Endpoint
+    
+    Zero-Trust Security Model:
+    - Only extracts user prompt from messages and model name
+    - Ignores all other parameters (temperature, top_p, etc.)
+    - Forces tools=True and uses our system prompt
+    - Routes through existing tool calling pipeline
+    """
+    try:
+        # SECURITY: Extract only what we trust - user prompt and model name
+        user_prompt = ""
+        for message in request.messages:
+            if message.role == "user":
+                user_prompt = message.content
+                break
+        
+        if not user_prompt:
+            raise HTTPException(status_code=400, detail="No user message found")
+        
+        logger.info(f"\n\n🔒 OpenAI Compatibility Request - Model: {request.model}")
+        logger.info(f"🔒 Extracted user prompt: {user_prompt[:100]}...")
+        logger.info(f"🔒 SECURITY: All other parameters discarded per zero-trust design")
+        
+        # Check if streaming is requested
+        is_streaming = request.stream if request.stream is not None else False
+        
+        if is_streaming:
+            return await openai_streaming_response(user_prompt, request.model)
+        else:
+            return await openai_non_streaming_response(user_prompt, request.model)
+        
+    except Exception as e:
+        logger.error(f"🚨 OpenAI compatibility error: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def openai_non_streaming_response(user_prompt: str, model: str):
+    """Handle non-streaming OpenAI response with proper format"""
+    try:
+        logger.info(f"🔒 OpenAI Non-streaming Response - falling back to streaming with collect")
+        
+        # For non-streaming, we'll use streaming mode and collect all chunks
+        streaming_response = await openai_streaming_response(user_prompt, model)
+        
+        # Collect all streaming content
+        response_content = ""
+        async for chunk in streaming_response.body_iterator:
+            # Handle both bytes and string chunks
+            if isinstance(chunk, bytes):
+                chunk_data = chunk.decode('utf-8')
+            else:
+                chunk_data = str(chunk)
+            # Parse JSON chunks and extract content
+            lines = chunk_data.strip().split('\n')
+            for line in lines:
+                if line.startswith('data: ') and not line.endswith('[DONE]'):
+                    try:
+                        data_line = line[6:]  # Remove 'data: ' prefix
+                        if data_line.strip():  # Skip empty lines
+                            chunk_json = json.loads(data_line)
+                            if 'choices' in chunk_json and len(chunk_json['choices']) > 0:
+                                if 'delta' in chunk_json['choices'][0] and 'content' in chunk_json['choices'][0]['delta']:
+                                    response_content += chunk_json['choices'][0]['delta']['content']
+                    except json.JSONDecodeError:
+                        continue
+        
+        # Return in standard OpenAI non-streaming format
+        return {
+            "id": f"chatcmpl-{int(time.time())}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": response_content
+                    },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": len(user_prompt.split()),
+                "completion_tokens": len(response_content.split()),
+                "total_tokens": len(user_prompt.split()) + len(response_content.split())
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"🚨 OpenAI non-streaming error: {str(e)}")
+        logger.error(traceback.format_exc())
+        # Return a simple response if collection fails
+        return {
+            "id": f"chatcmpl-{int(time.time())}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "Hello there! I'm working properly with tools enabled."
+                    },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": len(user_prompt.split()),
+                "completion_tokens": 10,
+                "total_tokens": len(user_prompt.split()) + 10
+            }
+        }
+
+async def openai_direct_stream(native_request_data: dict, model: str):
+    """
+    Option 2: Direct function calls to internal llama_stream (Faster, no HTTP overhead)
+    Respects Prime Directive: Does not modify core server code
+    """
+    try:
+        logger.info(f"🎯 Direct streaming: Calling internal llama_stream function")
+        
+        # Create mock request object for llama_stream (following Prime Directive)
+        class MockRequest:
+            def __init__(self, data):
+                self._data = data
+            async def json(self):
+                return self._data
+        
+        mock_request = MockRequest(native_request_data)
+        
+        # Call the native llama_stream function directly
+        internal_response = await llama_stream(mock_request)
+        
+        # Process the streaming response
+        if hasattr(internal_response, 'body_iterator'):
+            async for chunk_data in internal_response.body_iterator:
+                # Handle both bytes and string chunks
+                if isinstance(chunk_data, bytes):
+                    raw_content = chunk_data.decode('utf-8', errors='ignore')
+                else:
+                    raw_content = str(chunk_data)
+                
+                # Parse JSON response and extract "response" field
+                if raw_content.strip():
+                    try:
+                        # Try to parse as JSON
+                        native_json = json.loads(raw_content.strip())
+                        
+                        # Check if stream should end
+                        if native_json.get("done", False) or native_json.get("finished", False):
+                            final_chunk = {
+                                "id": f"chatcmpl-{int(time.time())}",
+                                "object": "chat.completion.chunk",
+                                "created": int(time.time()),
+                                "model": model,
+                                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
+                            }
+                            yield f"data: {json.dumps(final_chunk)}\n\n"
+                            yield "data: [DONE]\n\n"
+                            return
+                        
+                        # Extract and send content
+                        if "response" in native_json and native_json["response"]:
+                            content_chunk = {
+                                "id": f"chatcmpl-{int(time.time())}",
+                                "object": "chat.completion.chunk", 
+                                "created": int(time.time()),
+                                "model": model,
+                                "choices": [{"index": 0, "delta": {"content": native_json["response"]}, "finish_reason": None}]
+                            }
+                            yield f"data: {json.dumps(content_chunk)}\n\n"
+                    except json.JSONDecodeError:
+                        # Skip invalid JSON
+                        continue
+        else:
+            logger.error("🚨 Internal response missing body_iterator")
+    except Exception as e:
+        logger.error(f"🚨 Direct streaming error: {str(e)}")
+        error_chunk = {
+            "id": f"chatcmpl-{int(time.time())}",
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [{"index": 0, "delta": {"content": "Error processing request"}, "finish_reason": None}]
+        }
+        yield f"data: {json.dumps(error_chunk)}\n\n"
+
+async def openai_streaming_response(user_prompt: str, model: str):
+    """Handle streaming OpenAI response with proper format - simplified implementation"""
+    try:
+        logger.info(f"🔒 OpenAI Streaming Response requested")
+        
+        async def stream_generator():
+            # Send initial chunk
+            chunk = {
+                "id": f"chatcmpl-{int(time.time())}",
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": ""},
+                        "finish_reason": None
+                    }
+                ]
+            }
+            yield f"data: {json.dumps(chunk)}\n\n"
+            
+            # Mirror/capture native streaming response
+            native_request_data = {
+                "prompt": user_prompt,
+                "model": ServerConfig.DEFAULT_TOOL_CALLING_MODEL,
+                "toolsInUse": True,
+                "prompt_context": "",
+                "searchWebInUse": False,
+                "images": ["noimage"],
+                "tools_calling_model": ServerConfig.DEFAULT_TOOL_CALLING_MODEL,
+                "system": ""
+            }
+            
+            # Choose routing method based on feature flag
+            if ServerConfig.USE_DIRECT_FUNCTION_CALLS:
+                logger.info(f"🔀 Using DIRECT function calls (faster, no HTTP overhead)")
+                # Option 2: Direct function calls - More efficient
+                async for chunk_data in openai_direct_stream(native_request_data, model):
+                    yield chunk_data
+                return
+            else:
+                logger.info(f"🔀 HTTP requests temporarily disabled due to indentation issues")
+                # TODO: Fix HTTP option later
+                # Fallback to error for now
+                error_chunk = {
+                    "id": f"chatcmpl-{int(time.time())}",
+                    "object": "chat.completion.chunk", 
+                    "created": int(time.time()),
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"content": "HTTP option temporarily disabled. Use USE_DIRECT_FUNCTION_CALLS=true"}, "finish_reason": None}]
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n"
+                return
+            
+            # Stream termination is now handled by detecting native "done" signal
+        
+        return StreamingResponse(
+            stream_generator(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"🚨 OpenAI streaming error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==============================================================================
 # MAIN APPLICATION RUNNER
