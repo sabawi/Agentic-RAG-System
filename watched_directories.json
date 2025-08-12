@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "config": {
+    "scan_on_startup": true,
+    "batch_size": 25,
+    "scan_interval_minutes": 60,
+    "auto_watch_enabled": true
+  },
+  "directories": [
+    {
+      "path": "/home/sabawi/Documents",
+      "recursive": true,
+      "enabled": true,
+      "description": "Personal documents",
+      "added_at": "2025-08-12T10:30:00"
+    },
+    {
+      "path": "/var/www/html/silicon_dreams/stories",
+      "recursive": true,
+      "enabled": true,
+      "description": "Story collection",
+      "added_at": "2025-08-12T10:30:00"
+    }
+  ],
+  "last_scan": "2025-08-12T14:33:07.978805",
+  "stats": {
+    "total_directories": 2,
+    "active_directories": 2,
+    "last_config_update": "2025-08-12T14:33:07.978817"
+  }
+}

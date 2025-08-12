@@ -1474,6 +1474,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Ollama service not available: {e}")
     
+    # Initialize document interrogator with startup and background scanning
+    try:
+        from document_interrogator import get_document_interrogator
+        interrogator = get_document_interrogator()
+        if interrogator:
+            # Trigger startup scanning in background
+            import asyncio
+            asyncio.create_task(interrogator._safe_startup_config_scan())
+            
+            # Start periodic background scanning
+            await interrogator.start_background_scanning()
+    except Exception as e:
+        logger.warning(f"Document scanning initialization failed: {e}")
+    
     yield
     
     # Shutdown
@@ -1488,6 +1502,15 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Phase 2B components shutdown complete")
         except Exception as e:
             logger.error(f"❌ Phase 2B shutdown error: {e}")
+    
+    # Shutdown document interrogator background scanning
+    try:
+        from document_interrogator import get_document_interrogator
+        interrogator = get_document_interrogator()
+        if interrogator:
+            await interrogator.stop_background_scanning()
+    except Exception as e:
+        logger.warning(f"Document scanning shutdown error: {e}")
     
     await close_db_pool()
     await cleanup_http_pool()
@@ -4230,6 +4253,335 @@ if PHASE2B_AVAILABLE:
         except Exception as e:
             logger.error(f"❌ Rollback error: {e}")
             return {"success": False, "error": str(e)}
+
+# ==============================================================================
+# DOCUMENT INTERROGATION ENDPOINTS
+# ==============================================================================
+
+# Document Interrogation System - FAISS-based RAG integration
+try:
+    from document_interrogator import get_document_interrogator
+    
+    @app.post("/documents/index-directory")
+    async def index_directory_endpoint(request: Request):
+        """Index all documents in a directory for interrogation"""
+        try:
+            data = await request.json()
+            directory_path = data.get('directory_path')
+            recursive = data.get('recursive', True)
+            
+            if not directory_path:
+                return {"success": False, "error": "directory_path is required"}
+            
+            interrogator = get_document_interrogator()
+            if not interrogator.is_ready():
+                return {
+                    "success": False, 
+                    "error": "Document interrogation system not ready. Install: pip install faiss-cpu numpy PyPDF2 python-docx openpyxl beautifulsoup4"
+                }
+            
+            logger.info(f"📚 Starting smart directory indexing: {directory_path}")
+            results = await interrogator.smart_index_directory(directory_path, recursive)
+            
+            if results['success']:
+                return {
+                    "success": True,
+                    "message": results['message'],
+                    "processed": results['processed'],
+                    "failed": results['failed'], 
+                    "skipped": results['skipped'],
+                    "total_files_found": results['total_files_found'],
+                    "files": results.get('files', []),
+                    "stats": interrogator.get_stats()
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": results['error'],
+                    "message": results['message']
+                }
+            
+        except Exception as e:
+            logger.error(f"❌ Directory indexing error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/documents/search")
+    async def search_documents_endpoint(request: Request):
+        """Search indexed documents for relevant content"""
+        try:
+            data = await request.json()
+            query = data.get('query', '')
+            k = data.get('k', 5)  # Number of chunks to return
+            
+            if not query.strip():
+                return {"success": False, "error": "query is required"}
+            
+            interrogator = get_document_interrogator()
+            if not interrogator.is_ready():
+                return {
+                    "success": False,
+                    "error": "Document interrogation system not ready"
+                }
+            
+            logger.info(f"🔍 Document search: {query}")
+            search_results = await interrogator.search_documents(query, k)
+            
+            return {
+                "success": True,
+                "query": query,
+                "chunks_found": search_results.get('chunks_found', 0),
+                "chunks": search_results.get('chunks', []),
+                "context": search_results.get('context', ''),
+                "sources": search_results.get('sources', [])
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Document search error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/documents/interrogate")
+    async def interrogate_documents_endpoint(request: Request):
+        """Interrogate documents with natural language questions (integrates with 2-stage LLM)"""
+        try:
+            data = await request.json()
+            question = data.get('question', '')
+            k = data.get('k', 5)
+            model = data.get('model', 'qwen3:8b')
+            
+            if not question.strip():
+                return {"success": False, "error": "question is required"}
+            
+            interrogator = get_document_interrogator()
+            if not interrogator.is_ready():
+                return {
+                    "success": False,
+                    "error": "Document interrogation system not ready"
+                }
+            
+            logger.info(f"❓ Document interrogation: {question}")
+            
+            # Stage 0: RAG Retrieval - Get document context
+            search_results = await interrogator.search_documents(question, k)
+            
+            if not search_results.get('context'):
+                return {
+                    "success": True,
+                    "answer": "No relevant documents found for your question.",
+                    "sources": [],
+                    "query": question
+                }
+            
+            # Prepare enhanced prompt with document context for 2-stage LLM
+            document_context = search_results['context']
+            enhanced_prompt = f"""Based on the following document excerpts, please answer the question: "{question}"
+
+Document Context:
+{document_context}
+
+Please provide a comprehensive answer based on the information provided. If the information is insufficient, please indicate what additional information would be helpful."""
+            
+            # Stage 1 & 2: Use existing 2-stage LLM architecture
+            # Create mock request for existing pipeline
+            class MockRequest:
+                def __init__(self, prompt, model):
+                    self.method = "POST"
+                    self.headers = {"content-type": "application/json"}
+                    self._json = {
+                        "prompt": prompt,
+                        "model": model,
+                        "stream": False
+                    }
+                
+                async def json(self):
+                    return self._json
+            
+            # Route through existing llama_stream function for consistency
+            mock_request = MockRequest(enhanced_prompt, model)
+            llm_response = await llama_stream(mock_request)
+            
+            # Extract answer from streaming response
+            if hasattr(llm_response, 'body_iterator'):
+                answer_parts = []
+                async for chunk_data in llm_response.body_iterator:
+                    if isinstance(chunk_data, bytes):
+                        chunk_data = chunk_data.decode('utf-8')
+                    answer_parts.append(chunk_data)
+                answer = ''.join(answer_parts)
+            else:
+                answer = str(llm_response)
+            
+            return {
+                "success": True,
+                "answer": answer,
+                "sources": search_results.get('sources', []),
+                "query": question,
+                "chunks_found": search_results.get('chunks_found', 0),
+                "model_used": model
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Document interrogation error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/documents/watch-directory")
+    async def watch_directory_endpoint(request: Request):
+        """Start watching a directory for new/modified documents"""
+        try:
+            data = await request.json()
+            directory_path = data.get('directory_path')
+            
+            if not directory_path:
+                return {"success": False, "error": "directory_path is required"}
+            
+            interrogator = get_document_interrogator()
+            success = interrogator.start_watching(directory_path)
+            
+            return {
+                "success": success,
+                "message": f"{'Started' if success else 'Failed to start'} watching directory: {directory_path}",
+                "watched_directories": list(interrogator.watched_directories)
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Directory watching error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/documents/stop-watching")
+    async def stop_watching_endpoint():
+        """Stop watching all directories"""
+        try:
+            interrogator = get_document_interrogator()
+            interrogator.stop_watching()
+            
+            return {
+                "success": True,
+                "message": "Stopped watching all directories"
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Stop watching error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.get("/documents/stats")
+    async def document_stats_endpoint():
+        """Get document interrogation system statistics"""
+        try:
+            interrogator = get_document_interrogator()
+            stats = interrogator.get_stats()
+            
+            return {
+                "success": True,
+                "stats": stats,
+                "system_ready": interrogator.is_ready()
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Document stats error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.get("/documents/config")
+    async def get_config_endpoint():
+        """Get current watch configuration status"""
+        try:
+            interrogator = get_document_interrogator()
+            config_status = interrogator.get_config_status()
+            
+            return {
+                "success": True,
+                "config": config_status
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Get config error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/documents/config/add-directory")
+    async def add_watch_directory_endpoint(request: Request):
+        """Add a directory to the watch configuration"""
+        try:
+            data = await request.json()
+            directory_path = data.get('path')
+            recursive = data.get('recursive', True)
+            enabled = data.get('enabled', True)
+            description = data.get('description', '')
+            
+            if not directory_path:
+                return {"success": False, "error": "path is required"}
+            
+            interrogator = get_document_interrogator()
+            success = interrogator.add_watch_directory(directory_path, recursive, enabled, description)
+            
+            return {
+                "success": success,
+                "message": f"{'Added' if success else 'Failed to add'} directory to config: {directory_path}",
+                "config": interrogator.get_config_status()
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Add watch directory error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/documents/config/remove-directory")
+    async def remove_watch_directory_endpoint(request: Request):
+        """Remove a directory from the watch configuration"""
+        try:
+            data = await request.json()
+            directory_path = data.get('path')
+            
+            if not directory_path:
+                return {"success": False, "error": "path is required"}
+            
+            interrogator = get_document_interrogator()
+            success = interrogator.remove_watch_directory(directory_path)
+            
+            return {
+                "success": success,
+                "message": f"{'Removed' if success else 'Failed to remove'} directory from config: {directory_path}",
+                "config": interrogator.get_config_status()
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Remove watch directory error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/documents/config/scan-changes")
+    async def force_scan_changes_endpoint():
+        """Force scan all configured directories for changes"""
+        try:
+            interrogator = get_document_interrogator()
+            await interrogator.force_scan_changes()
+            
+            return {
+                "success": True,
+                "message": "Completed force scan of all configured directories",
+                "config": interrogator.get_config_status()
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Force scan error: {e}")
+            return {"success": False, "error": str(e)}
+
+except ImportError as e:
+    logger.warning(f"⚠️ Document interrogation not available: {e}")
+    
+    # Provide fallback endpoints that return helpful error messages
+    @app.post("/documents/index-directory")
+    async def index_directory_unavailable():
+        return {
+            "success": False,
+            "error": "Document interrogation not available. Install dependencies: pip install faiss-cpu numpy PyPDF2 python-docx openpyxl beautifulsoup4 pytesseract pillow watchdog"
+        }
+    
+    @app.post("/documents/search")
+    @app.post("/documents/interrogate")
+    @app.post("/documents/watch-directory")
+    @app.post("/documents/stop-watching")
+    @app.get("/documents/stats")
+    async def document_endpoints_unavailable():
+        return {
+            "success": False,
+            "error": "Document interrogation not available. Install dependencies first."
+        }
 
 # ==============================================================================
 # MAIN APPLICATION RUNNER

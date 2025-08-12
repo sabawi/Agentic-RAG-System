@@ -27,6 +27,7 @@ class SandboxedExecutorTool(BaseUserTool):
     
     Features:
     - Isolated workspace directory with full RWX permissions
+    - Per-request workspace isolation for concurrent users (Phase 1B)
     - Secure command execution with output capture
     - File management within sandbox boundaries
     - Resource limits and security controls
@@ -65,6 +66,9 @@ class SandboxedExecutorTool(BaseUserTool):
             'crontab', 'at', 'batch',
             'ssh', 'scp', 'rsync', 'nc', 'netcat'
         }
+        
+        # Phase 1B: Workspace isolation support
+        self.supports_workspace_isolation = True
         
         # Initialize sandbox
         self._setup_sandbox()
@@ -121,19 +125,34 @@ class SandboxedExecutorTool(BaseUserTool):
         }
     
     async def execute(self, **kwargs) -> Dict[str, Any]:
-        """Execute sandboxed system operations."""
+        """Execute sandboxed system operations with workspace isolation."""
         try:
             print("🚀🚀🚀 SANDBOXED EXECUTOR: Starting execute() method")
             print(f"🚀🚀🚀 SANDBOXED EXECUTOR: kwargs = {kwargs}")
+            
+            # 📂 PHASE 1B: Handle workspace isolation context (BACKWARD COMPATIBLE)
+            workspace_context = kwargs.pop('_workspace_context', None)
+            if workspace_context and workspace_context.get('isolation_enabled'):
+                # Use isolated workspace
+                working_dir = Path(workspace_context['workspace_path'])
+                user_id = workspace_context.get('user_id', 'unknown')
+                request_id = workspace_context.get('request_id', 'unknown')
+                print(f"📂 WORKSPACE_ISOLATION: Using isolated workspace {working_dir} for user {user_id}")
+            else:
+                # Fallback to shared sandbox (backward compatible)
+                working_dir = self.sandbox_path
+                user_id = 'shared'
+                request_id = 'legacy'
+                print(f"📂 WORKSPACE_LEGACY: Using shared workspace {working_dir}")
             
             # 🔧 FIX: Check for existing substantial files before smart detection
             action = kwargs.get("action", "").strip()
             filename = kwargs.get("filename", "").strip()
             
-            print(f"🚀🚀🚀 SANDBOXED EXECUTOR: action='{action}', filename='{filename}'")
+            print(f"🚀🚀🚀 SANDBOXED EXECUTOR: action='{action}', filename='{filename}' | workspace='{working_dir}'")
             
             if action == "create_file" and filename:
-                file_path = self.sandbox_path / filename
+                file_path = working_dir / filename
                 content_provided = kwargs.get("content", "")
                 has_content = bool(content_provided and content_provided.strip())
                 print(f"🚀🚀🚀 SANDBOXED EXECUTOR: create_file detected, has_content={has_content}")
@@ -221,7 +240,7 @@ class SandboxedExecutorTool(BaseUserTool):
             
             # 🔧 FIX: First check if file already exists with substantial content
             if action == "create_file" and filename:
-                file_path = self.sandbox_path / filename
+                file_path = working_dir / filename
                 if file_path.exists():
                     existing_size = file_path.stat().st_size
                     if existing_size > 1000:  # File already has substantial content

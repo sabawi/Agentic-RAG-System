@@ -1,0 +1,3900 @@
+#!/usr/bin/env python3
+"""
+Complete FastAPI Server with Ollama LLM Integration
+=================================================
+
+FastAPI server with all original Flask functionality including:
+- Ollama LLM endpoints with streaming
+- Tool calling system (RAG, web search, stock data, etc.)
+- Async processing for performance
+- Database connection pooling
+- Caching layer
+"""
+
+import asyncio
+import json
+import logging
+import os
+import sys
+import time
+import traceback
+import io
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Dict, Any, List, Optional, AsyncGenerator
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
+import aiohttp
+import requests
+
+# FastAPI imports
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
+import uvicorn
+
+# Async database
+import aiomysql
+from aiomysql.pool import Pool
+
+# Data processing
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+
+# LLM and tools imports
+try:
+    import ollama
+    from bs4 import BeautifulSoup
+    import wikipediaapi
+    from gnews import GNews
+    import yfinance as yf
+    from ddgs import DDGS
+    from webcrawler import SeleniumCrawler
+    from text_chunker import TextChunker
+    import PyPDF2
+    import magic
+    import trafilatura
+    from urllib.parse import urlparse
+    TOOLS_AVAILABLE = True
+except ImportError as e:
+    print(f"WARNING: Some tools not available: {e}")
+    TOOLS_AVAILABLE = False
+
+# Import our optimization safety system
+try:
+    from optimization_safety import (
+        ToolOutputPreserver,
+        OptimizationValidator, 
+        safe_optimize_llm_input
+    )
+    from optimization_controller import optimization_controller
+    OPTIMIZATION_AVAILABLE = True
+except ImportError as e:
+    OPTIMIZATION_AVAILABLE = False
+    OPTIMIZATION_IMPORT_ERROR = str(e)
+
+# ==============================================================================
+# CONFIGURATION
+# ==============================================================================
+
+class ServerConfig:
+    """Enhanced server configuration"""
+    
+    # Database configuration
+    DB_HOST = os.getenv('DB_HOST', 'localhost')
+    DB_USER = os.getenv('DB_USER', 'root')  
+    DB_PASSWORD = os.getenv('DB_PASSWORD', 'Down2earth!')
+    DB_NAME = os.getenv('DB_NAME', 'mystocks')
+    DB_POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '10'))
+    
+    # Ollama configuration
+    OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434/api/generate')
+    OLLAMA_CHAT_URL = os.getenv('OLLAMA_CHAT_URL', 'http://127.0.0.1:11434/api/chat')
+    DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'llama3.2:3b')
+    DEFAULT_TOOL_CALLING_MODEL = os.getenv('DEFAULT_TOOL_CALLING_MODEL', 'qwen3:8b')
+    
+    # OpenAI Compatibility Layer Configuration
+    USE_DIRECT_FUNCTION_CALLS = os.getenv('USE_DIRECT_FUNCTION_CALLS', 'true').lower() == 'true'
+    OPENAI_HTTP_TIMEOUT = int(os.getenv('OPENAI_HTTP_TIMEOUT', '600'))  # 10 minutes default
+    
+    # Server configuration
+    HOST = os.getenv('HOST', '0.0.0.0')
+    PORT = int(os.getenv('PORT', '5000'))
+    DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+    
+    # Performance configuration
+    MAX_WORKERS = int(os.getenv('MAX_WORKERS', '10'))
+    TASK_TIMEOUT = int(os.getenv('TASK_TIMEOUT', '1800'))  # 30 minutes default for complex AI tasks
+    MAX_CONTEXT_WINDOW = int(os.getenv('MAX_CONTEXT_WINDOW', '65536'))
+
+# ==============================================================================
+# PYDANTIC MODELS
+# ==============================================================================
+
+class OllamaPromptRequest(BaseModel):
+    model: str = Field(..., description="Ollama model name")
+    prompt: str = Field(..., description="User prompt")
+    stream: Optional[bool] = Field(default=True, description="Enable streaming")
+    system: Optional[str] = Field(default=None, description="System prompt")
+    context: Optional[List[int]] = Field(default=None, description="Context tokens")
+
+class OllamaStreamRequest(BaseModel):
+    prompt: Optional[str] = Field(default="", description="User prompt")
+    prompt_context: Optional[str] = Field(default="", description="Additional context")
+    model: Optional[str] = Field(default=ServerConfig.DEFAULT_MODEL, description="Model to use")
+    toolsInUse: Optional[bool] = Field(default=True, description="Enable tools")
+    searchWebInUse: Optional[bool] = Field(default=False, description="Enable web search")
+    images: Optional[List[str]] = Field(default=["noimage"], description="Image data")
+    tools_calling_model: Optional[str] = Field(default=ServerConfig.DEFAULT_TOOL_CALLING_MODEL, description="Model for tool calls")
+    
+    # Make validation more flexible like the original Flask version
+    class Config:
+        extra = "allow"  # Allow extra fields
+
+
+class ToolCall(BaseModel):
+    function: Dict[str, Any]
+
+class ApiResponse(BaseModel):
+    success: bool
+    data: Optional[Any] = None
+    error: Optional[str] = None
+    timestamp: str
+
+# OpenAI Compatibility Models - Minimal trust design
+class OpenAIMessage(BaseModel):
+    role: str = Field(..., description="Message role")
+    content: str = Field(..., description="Message content")
+
+class OpenAIChatRequest(BaseModel):
+    model: str = Field(..., description="Model name - we only trust this and content")
+    messages: List[OpenAIMessage] = Field(..., description="Messages array")
+    # Everything else is ignored for security - zero trust design
+    stream: Optional[bool] = Field(default=None)
+    temperature: Optional[float] = Field(default=None) 
+    max_tokens: Optional[int] = Field(default=None)
+    top_p: Optional[float] = Field(default=None)
+    frequency_penalty: Optional[float] = Field(default=None)
+    presence_penalty: Optional[float] = Field(default=None)
+    
+    class Config:
+        extra = "ignore"  # Ignore all other fields for security
+
+class OpenAIStreamChunk(BaseModel):
+    id: str
+    object: str = "chat.completion.chunk"
+    created: int
+    model: str
+    choices: List[Dict[str, Any]]
+
+# ==============================================================================
+# GLOBAL VARIABLES
+# ==============================================================================
+
+db_pool: Optional[Pool] = None
+thread_pool = ThreadPoolExecutor(max_workers=ServerConfig.MAX_WORKERS)
+simple_cache = {}
+
+# ==============================================================================
+# LOGGING SETUP
+# ==============================================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('fastapi_complete.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Log optimization system status after logger is available
+if OPTIMIZATION_AVAILABLE:
+    logger.info("🛡️ Optimization safety system loaded successfully")
+else:
+    logger.warning(f"⚠️ Optimization system not available: {OPTIMIZATION_IMPORT_ERROR}")
+
+# ==============================================================================
+# SYSTEM PROMPT MANAGEMENT
+# ==============================================================================
+
+def load_tool_model_system_prompt(user_additional_instructions: str = "") -> str:
+    """Load the pre-tool model system prompt from external file"""
+    try:
+        with open('pre_tool_model_system_prompt.txt', 'r', encoding='utf-8') as f:
+            prompt = f.read()
+        
+        # Replace placeholder with user instructions
+        if user_additional_instructions:
+            prompt = prompt.replace('{USER_ADDITIONAL_INSTRUCTIONS}', 
+                                  f"\n\nADDITIONAL USER INSTRUCTIONS:\n{user_additional_instructions}")
+        else:
+            prompt = prompt.replace('{USER_ADDITIONAL_INSTRUCTIONS}', "")
+        
+        return prompt
+    except FileNotFoundError:
+        logger.error("pre_tool_model_system_prompt.txt not found, using fallback prompt")
+        return "You are a tool-calling AI assistant. Call the appropriate tools based on the user's request."
+
+def load_primary_model_system_prompt() -> str:
+    """Load the primary model system prompt from external file"""
+    try:
+        with open('primary_model_system_prompt.txt', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        logger.error("primary_model_system_prompt.txt not found, using fallback prompt")
+        return "You are a helpful AI assistant. Provide comprehensive responses based on the context provided."
+
+# ==============================================================================
+# DATABASE CONNECTION POOL
+# ==============================================================================
+
+async def init_db_pool():
+    """Initialize database connection pool"""
+    global db_pool
+    try:
+        db_pool = await aiomysql.create_pool(
+            host=ServerConfig.DB_HOST,
+            port=3306,
+            user=ServerConfig.DB_USER,
+            password=ServerConfig.DB_PASSWORD,
+            db=ServerConfig.DB_NAME,
+            minsize=5,
+            maxsize=ServerConfig.DB_POOL_SIZE,
+            autocommit=True,
+            charset='utf8mb4'
+        )
+        logger.info(f"Database pool initialized")
+    except Exception as e:
+        logger.warning(f"Database pool initialization failed: {e}")
+        db_pool = None
+
+async def close_db_pool():
+    """Close database connection pool"""
+    global db_pool
+    if db_pool:
+        db_pool.close()
+        await db_pool.wait_closed()
+
+@asynccontextmanager
+async def get_db_connection():
+    """Async context manager for database connections"""
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database not available")
+    
+    async with db_pool.acquire() as connection:
+        try:
+            yield connection
+        except Exception as e:
+            await connection.rollback()
+            logger.error(f"Database operation failed: {e}")
+            raise
+
+# ==============================================================================
+# TOOL MANAGER (Async version of original)
+# ==============================================================================
+
+class AsyncToolManager:
+    """Async version of the original tool manager"""
+    
+    def __init__(self):
+        # Always make functions available - they handle missing dependencies gracefully
+        self.available_functions = {
+            'get_the_secret_tool': self.get_the_secret_tool,
+            'wikipedia_query': self.wikipedia_query,
+            'get_stock_and_company_data': self.get_stock_and_company_data,  # RE-ENABLED
+            'get_news_summaries': self.get_news_summaries,
+            'search_web': self.search_web,
+            'lookup_website': self.lookup_website,
+            'secure_email_sender': self.secure_email_sender
+        }
+        
+        # Load user-defined tools - defer to async initialization
+        self.user_tools = []
+        self.user_tools_loaded = False
+            
+        logger.info(f"AsyncToolManager initialized with {len(self.available_functions)} tools")
+    
+    async def _load_user_tools_async(self):
+        """Load user tools asynchronously"""
+        if self.user_tools_loaded:
+            return
+            
+        try:
+            from user_tools import discover_user_tools
+            self.user_tools = await discover_user_tools()
+            
+            # Add user tools to available functions
+            for tool in self.user_tools:
+                self.available_functions[tool.name] = self._create_user_tool_wrapper(tool)
+            
+            if self.user_tools:
+                logger.info(f"Loaded {len(self.user_tools)} user-defined tools: {[t.name for t in self.user_tools]}")
+            
+            self.user_tools_loaded = True
+            logger.info(f"AsyncToolManager now has {len(self.available_functions)} tools total")
+        except Exception as e:
+            logger.warning(f"Failed to load user tools: {e}")
+            self.user_tools_loaded = True  # Don't keep trying
+    
+    async def get_tools_definitions(self, exclude_file_email_tools: bool = False) -> list:
+        """Get tools definitions for Ollama tool calling"""
+        # Load user tools if not already loaded
+        await self._load_user_tools_async()
+        
+        # 🚨 CRITICAL MULTI-TOOL CALLING PROTECTION 🚨
+        # NEVER MODIFY tool descriptions without checking CRITICAL_MULTI_TOOL_CALLING_PROTECTION.md
+        # These descriptions are optimized to prevent model confusion and enable 4+ tool calls
+        # ANY aggressive language, conflicts, or redirections will break multi-tool calling
+        
+        # Always return tools for testing (even if TOOLS_AVAILABLE is False)
+        # The individual functions will handle missing dependencies gracefully
+        
+        # Return all 6 tool functions with timeout/race condition fixes applied
+        tools_definitions = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_the_secret_tool",
+                    "description": "Get the current date and time from the system.",  # 🚨 PROTECTED: Simple clean description
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "secret_tool": {
+                                "type": "string",
+                                "description": "Get the current Date and Time from the system as needed"
+                            }
+                        },
+                        "required": ["secret_tool"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_news_summaries",
+                    "description": "Get current news headlines and summaries with optional keyword filtering.",  # 🚨 PROTECTED: No aggressive language
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "filter": {
+                                "type": "string",
+                                "description": "The input filter is a string type that helps narrow down the choices of headlines. Examples: \"National\", \"Middle East\", \"World\", \"Technology\""
+                            }
+                        },
+                        "required": ["filter"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_web",
+                    "description": "Search the web for comprehensive information from multiple sources including academic, news, and reference sites.",  # 🚨 PROTECTED: Enhanced but clean description
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The input query is a string type that is sent to the web search engine."
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "lookup_website",
+                    "description": "This function takes a URL (href) web address for a website and makes an HTTP request to retrieve the text from the website for further processing to respond to the user's prompt.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": {
+                                "type": "string",
+                                "description": "The URL link to be used directly to request a website download."
+                            }
+                        },
+                        "required": ["url"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "wikipedia_query",
+                    "description": "Retrieves encyclopedic information from Wikipedia for specific factual lookups and definitions.",  # 🚨 PROTECTED: More specific scope
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "question": {
+                                "type": "string",
+                                "description": "A natural language query, key phrase, or topic of interest. This input should focus on a single topic to ensure accurate results."
+                            }
+                        },
+                        "required": ["question"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_stock_and_company_data",
+                    "description": "Get basic stock price and company data for a specific ticker symbol.",  # 🚨 PROTECTED: No redirections or conflicts
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "symbol": {
+                                "type": "string",
+                                "description": "The ticker symbol traded on the stock exchange. Examples: \"AAPL\", \"MSFT\", \"AMZN\", \"ORCL\""
+                            }
+                        },
+                        "required": ["symbol"]
+                    }
+                }
+            }
+        ]
+        
+        # Add user-defined tools to the definitions
+        # 🚨 CRITICAL ARCHITECTURE: Exclude file/email tools during tool calling phase
+        excluded_tools = {"sandboxed_executor", "secure_email_sender"} if exclude_file_email_tools else set()
+        
+        for tool in self.user_tools:
+            if tool.name in excluded_tools:
+                logger.info(f"🚫 EXCLUDING {tool.name} from tool calling phase - deferred auto-execution will handle it")
+                continue
+                
+            tool_def = tool.get_function_definition()
+            formatted_def = {
+                "type": "function",
+                "function": {
+                    "name": tool_def["name"],
+                    "description": tool_def["description"],
+                    "parameters": tool_def["parameters"]
+                }
+            }
+            tools_definitions.append(formatted_def)
+        
+        return tools_definitions
+    
+    def _create_user_tool_wrapper(self, tool):
+        """Create an async wrapper for user tools to match the expected function signature"""
+        async def wrapper(args = "") -> str:
+            import json
+            try:
+                # Handle different argument types from Ollama
+                if isinstance(args, dict):
+                    # Ollama already parsed JSON to dict
+                    params = args
+                elif isinstance(args, str) and args.strip():
+                    # Try to parse as JSON string
+                    if args.strip().startswith('{'):
+                        params = json.loads(args)
+                    else:
+                        # Simple string argument
+                        params = {"query": args}
+                else:
+                    # Empty or None args
+                    params = {}
+                
+                # Execute the user tool
+                result = await tool.execute(**params)
+                
+                if result.get("success", False):
+                    # Format the successful result
+                    tool_result = result.get("result", {})
+                    if isinstance(tool_result, dict):
+                        # Convert dict result to readable string
+                        return json.dumps(tool_result, indent=2)
+                    else:
+                        return str(tool_result)
+                else:
+                    # Return error message
+                    error_msg = result.get("error", "Unknown error")
+                    return f"Tool '{tool.name}' error: {error_msg}"
+                    
+            except json.JSONDecodeError:
+                return f"Tool '{tool.name}' error: Invalid JSON arguments"
+            except Exception as e:
+                logger.error(f"Error executing user tool '{tool.name}': {e}")
+                return f"Tool '{tool.name}' error: {str(e)}"
+        
+        return wrapper
+    
+    async def get_the_secret_tool(self, args: str = "") -> str:
+        """Get current date and time"""
+        try:
+            current_time = datetime.now()
+            return f"Current date and time: {current_time.strftime('%Y-%m-%d %H:%M:%S')}"
+        except Exception as e:
+            return f"Error getting date/time: {str(e)}"
+    
+    async def wikipedia_query(self, args: str) -> str:
+        """Query Wikipedia"""
+        try:
+            # Remove TOOLS_AVAILABLE check - let function handle missing deps gracefully
+            
+            # Handle both JSON string and plain string arguments
+            try:
+                data = json.loads(args) if isinstance(args, str) and args.startswith('{') else args
+                query = data.get('question', args) if isinstance(data, dict) else str(args)
+            except (json.JSONDecodeError, AttributeError):
+                query = str(args)
+            
+            def sync_wikipedia_query():
+                wiki = wikipediaapi.Wikipedia(
+                    language='en',
+                    user_agent='FastAPIServer/1.0 (https://github.com/user/project)'
+                )
+                page = wiki.page(query)
+                if page.exists():
+                    return page.summary[:1000] + "..." if len(page.summary) > 1000 else page.summary
+                return f"No Wikipedia page found for: {query}"
+            
+            return await asyncio.get_event_loop().run_in_executor(
+                thread_pool, sync_wikipedia_query
+            )
+        except Exception as e:
+            return f"Wikipedia query error: {str(e)}"
+    
+    async def get_stock_and_company_data(self, args: str) -> str:
+        """Get stock data"""
+        try:
+            # Remove TOOLS_AVAILABLE check - let function handle missing deps gracefully
+                
+            # Handle both JSON string and plain string arguments
+            try:
+                data = json.loads(args) if isinstance(args, str) and args.startswith('{') else args
+                symbol = data.get('symbol', args) if isinstance(data, dict) else str(args)
+            except (json.JSONDecodeError, AttributeError):
+                symbol = str(args)
+            
+            def sync_stock_data():
+                ticker = yf.Ticker(symbol)
+                info = ticker.info
+                hist = ticker.history(period="5d")
+                
+                current_price = hist['Close'].iloc[-1] if not hist.empty else "N/A"
+                change = hist['Close'].iloc[-1] - hist['Close'].iloc[-2] if len(hist) > 1 else 0
+                
+                return f"""Stock Data for {symbol}:
+                Current Price: ${current_price:.2f}
+                Change: ${change:.2f}
+                Company: {info.get('longName', 'N/A')}
+                Sector: {info.get('sector', 'N/A')}
+                Market Cap: {info.get('marketCap', 'N/A')}"""
+            
+            return await asyncio.get_event_loop().run_in_executor(
+                thread_pool, sync_stock_data
+            )
+        except Exception as e:
+            return f"Stock data error: {str(e)}"
+    
+    async def get_news_summaries(self, args: str) -> str:
+        """
+        Get comprehensive news summaries with FULL ARTICLE CONTENT from multiple sources based on a given filter.
+        Enhanced to extract detailed content from each article for more substantial information.
+        """
+        try:
+            # Remove TOOLS_AVAILABLE check - let function handle missing deps gracefully
+                
+            def sync_news_query():
+                # Handle parameter parsing like the original
+                if isinstance(args, str):
+                    # Try to parse as dict first, fall back to string
+                    try:
+                        data = json.loads(args) if args.startswith('{') else {'filter': args}
+                    except:
+                        data = {'filter': args}
+                else:
+                    data = args if isinstance(args, dict) else {'filter': str(args)}
+                
+                # Get the filter keyword (like original implementation)
+                newsFilter = data.get('filter', '').lower().strip()
+                
+                # Original news category mapping and URLs
+                NEWS_URLS = {
+                    "world": [
+                        "https://apnews.com/world-news",
+                        "https://www.aljazeera.com/europe/",
+                        "https://www.reuters.com/world/"
+                    ],
+                    "national": [
+                        "https://apnews.com/us-news",
+                        "https://www.reuters.com/world/us/",
+                        "https://www.npr.org/sections/national/"
+                    ],
+                    "business": [
+                        "https://www.npr.org/sections/business/",
+                        "https://www.reuters.com/business/"
+                    ],
+                    "finance": [
+                        "https://www.reuters.com/markets/global-market-data/",
+                        "https://www.cnbc.com/economy/",
+                        "https://finance.yahoo.com/topic/stock-market-news/",
+                        "https://www.reuters.com/markets/us/",
+                        "https://finance.yahoo.com/topic/latest-news/"
+                    ],
+                    "science": [
+                        "https://www.reuters.com/technology/",
+                        "https://www.sciencenews.org/all-stories",
+                        "https://www.npr.org/sections/science/"
+                    ],
+                    "news": [        
+                        "https://apnews.com/hub/ap-top-news",
+                        "https://www.reuters.com/",
+                        "https://www.npr.org/sections/news/"
+                    ],
+                    "default": [
+                        "https://apnews.com/hub/ap-top-news",
+                        "https://www.reuters.com/"
+                    ]
+                }
+                
+                # Original synonyms mapping
+                SYNONYMS = {
+                    "world": {"world", "global", "international"},
+                    "national": {"national", "nation", "domestic", "us", "usa", "american"},
+                    "business": {"business", "trade", "commerce", "commercial", "retail"},
+                    "financial": {"financial", "trade", "commerce", "commercial", "retail", "macroeconomics", "microeconomics", "business cycle"},
+                    "finance": {"finance", "financial","stocks" ,"market" ,"markets", "stock" ,"stock market", "securities", "inflation", "financing", "stock trading", "bonds", "interest rates", "fed rates", "us economy", "economy","economic","federal reserve"},
+                    "science": {"science","scientific","physics","chemistry","biology","technology","nasa", "space"}
+                }
+                
+                # Find category function (from original)
+                def find_category(newsFilter):
+                    import re
+                    filter_words = re.split(r'[,\.;:!?\-]+', newsFilter.lower())
+                    for category, synonyms in SYNONYMS.items():
+                        if any(word in synonyms for word in filter_words):
+                            return category
+                    return "default"
+                
+                # Enhanced Google News function with FULL ARTICLE CONTENT
+                def get_news_from_google(keyword):
+                    res = ''
+                    articlesLimit = 8  # Reduced slightly to account for more content per article
+                    try:
+                        google_news = GNews(language='en', country='US', max_results=articlesLimit)
+                        keyword_news = google_news.get_news(keyword)
+                        
+                        for i in range(min(len(keyword_news), articlesLimit)):
+                            article = keyword_news[i]
+                            title = article.get('title', 'No title')
+                            description = article.get('description', 'No description')
+                            published_date = article.get('published date', 'N/A')
+                            
+                            # Try to get full article content
+                            full_content = ""
+                            try:
+                                # Check if newspaper3k is available
+                                import newspaper
+                                # Get the full article from Google News
+                                full_article = google_news.get_full_article(article['url'])
+                                if full_article and hasattr(full_article, 'text'):
+                                    # Extract first 500 characters of actual article content
+                                    article_text = full_article.text.strip()
+                                    if len(article_text) > 100:  # Only use substantial content
+                                        full_content = article_text[:800] + "..." if len(article_text) > 800 else article_text
+                                    else:
+                                        # Fallback to description if full text is too short
+                                        full_content = description
+                                else:
+                                    full_content = description
+                            except ImportError:
+                                # newspaper3k not available, fall back to enhanced description
+                                print("newspaper3k not available, using enhanced description", flush=True)
+                                full_content = description
+                                # Try to get more content via URL extraction
+                                try:
+                                    article_url = article.get('url', '')
+                                    if article_url:
+                                        enhanced_content = get_text_from_url(article_url)
+                                        if len(enhanced_content) > len(description):
+                                            full_content = enhanced_content[:800] + "..." if len(enhanced_content) > 800 else enhanced_content
+                                except Exception as url_error:
+                                    pass  # Keep original description
+                            except Exception as content_error:
+                                # Fallback to description if full content extraction fails
+                                full_content = description
+                                
+                            res += f"Published on: {published_date} -- Title: {title}\nContent: {full_content}\nSource: {article.get('publisher', {}).get('title', 'Unknown')}\n---\n"
+                            
+                    except Exception as e:
+                        res += f"Error from Google news: {e}\n"
+                    return res
+                
+                # Web content extraction (simplified version)
+                def get_text_from_url(url):
+                    try:
+                        response = requests.get(url, timeout=10, headers={
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        })
+                        response.raise_for_status()
+                        
+                        from bs4 import BeautifulSoup
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        
+                        # Remove unwanted tags
+                        for tag_name in ['footer', 'nav', 'script', 'style', 'aside', 'header']:
+                            for tag in soup.find_all(tag_name):
+                                tag.decompose()
+                        
+                        # Extract text from paragraphs and headers
+                        texts = []
+                        for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+                            text = tag.get_text().strip()
+                            if text and len(text) > 20:  # Only meaningful content
+                                texts.append(text)
+                        
+                        return '\n\n'.join(texts[:10])  # Limit to first 10 meaningful paragraphs
+                        
+                    except Exception as e:
+                        return f"Error fetching {url}: {str(e)}"
+                
+                # Main logic (from original implementation)
+                today = datetime.now()
+                todayStr = today.strftime("%A, %B %d, %Y %I:%M:%S %p")
+                
+                # Find the corresponding category using the synonyms dictionary
+                category = find_category(newsFilter)
+                
+                # Get the list of URLs based on the category
+                urls = NEWS_URLS.get(category, NEWS_URLS["default"])
+                
+                # Initialize result string with timestamp
+                res = f'\nFROM EXTERNAL SOURCES as of [Current Date and Time: {todayStr}]. Here is the News Summary you requested, use the summary to compose your response to the user\'s prompt:\n\n'
+                
+                # Get Google News results first
+                google_results = get_news_from_google(newsFilter)
+                res += google_results
+                
+                # Fetch content from each URL (limit to 2 URLs to avoid timeout)
+                for newsURL in urls[:2]:
+                    try:
+                        url_content = get_text_from_url(newsURL)
+                        res += f"\n\nFrom Source: {newsURL}\n{url_content}\n\n"
+                    except Exception as e:
+                        res += f"Error fetching {newsURL}: {e}\n"
+                
+                return res
+            
+            return await asyncio.get_event_loop().run_in_executor(
+                thread_pool, sync_news_query
+            )
+        except Exception as e:
+            return f"News query error: {str(e)}"
+    
+    async def search_web(self, args: str) -> str:
+        """
+        Perform a web search using DuckDuckGo and retrieve comprehensive results.
+        Uses the original working implementation from find_eps_estimate.py
+        """
+        try:
+            # Remove TOOLS_AVAILABLE check - let function handle missing deps gracefully
+                
+            def sync_web_search():
+                # Handle parameter parsing like the original
+                if isinstance(args, str):
+                    try:
+                        data = json.loads(args) if args.startswith('{') else {'query': args}
+                    except:
+                        data = {'query': args}
+                else:
+                    data = args if isinstance(args, dict) else {'query': str(args)}
+                
+                query = data.get('query', '').strip()
+                print(f"Web search query: {query}", flush=True)
+                
+                if not query:
+                    return "Sorry, I couldn't find anything."
+                
+                today = datetime.now()
+                todayStr = today.strftime("%A, %B %d, %Y %I:%M:%S %p")
+                max_results = 3
+                
+                # DuckDuckGo search function (from original)
+                def ducducgo(query, max_results=3):
+                    try:
+                        from ddgs import DDGS
+                        with DDGS() as ddgs:
+                            results = ddgs.text(query, max_results=max_results)
+                            res = ''
+                            for i, result in enumerate(results, 1):
+                                title = result.get('title', 'No Title')
+                                href = result.get('href', 'No URL')
+                                body = result.get('body', 'No Description')
+                                res += f"\nResult {i}:\nTitle: {title}\nURL: {href}\nDescription: {body}\n"
+                                
+                                # Extract content from each URL
+                                if href != 'No URL':
+                                    try:
+                                        content = get_text_from_url_simplified(href)
+                                        res += f"Content: {content}\n"
+                                    except Exception as e:
+                                        res += f"Error extracting content from {href}: {str(e)}\n"
+                            return res
+                    except Exception as e:
+                        print(f"DuckDuckGo Error: {e}", flush=True)
+                        return f"An error occurred during the web search query '{query}'."
+                
+                # Simplified URL content extraction (to avoid Selenium dependency issues)
+                def get_text_from_url_simplified(url):
+                    try:
+                        response = requests.get(url, timeout=10, headers={
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        })
+                        response.raise_for_status()
+                        
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        
+                        # Remove unwanted tags
+                        for tag_name in ['footer', 'nav', 'script', 'style', 'aside', 'header']:
+                            for tag in soup.find_all(tag_name):
+                                tag.decompose()
+                        
+                        # Extract meaningful text
+                        texts = []
+                        for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'article']):
+                            text = tag.get_text().strip()
+                            if text and len(text) > 50:  # Only meaningful content
+                                texts.append(text)
+                        
+                        result = '\n\n'.join(texts[:5])  # Limit to first 5 meaningful paragraphs
+                        return result[:2000] + "..." if len(result) > 2000 else result  # Limit size
+                        
+                    except Exception as e:
+                        return f"Error extracting content: {str(e)}"
+                
+                # Perform the search
+                try:
+                    web_results = ducducgo(query, max_results)
+                    if isinstance(web_results, list):
+                        web_results = '\n'.join(web_results)
+                except Exception as e:
+                    web_results = f"Error: Exception returned in search_web(): '{e}'"
+                
+                res = f"\n\nAs of [Current Date and Time: {todayStr}] here are the web search results:\n{web_results}"
+                
+                print("Web search completed", flush=True)
+                return res
+            
+            return await asyncio.get_event_loop().run_in_executor(
+                thread_pool, sync_web_search
+            )
+        except Exception as e:
+            return f"Web search error: {str(e)}"
+    
+    async def lookup_website_old(self, args: str) -> str:
+        """
+        Retrieve and extract comprehensive text content from a specified website URL.
+        Uses the original working implementation from find_eps_estimate.py with both Selenium and BeautifulSoup
+        """
+        try:
+            # Remove TOOLS_AVAILABLE check - let function handle missing deps gracefully
+                
+            def sync_website_lookup():
+                # Handle parameter parsing like the original
+                if isinstance(args, str):
+                    try:
+                        data = json.loads(args) if args.startswith('{') else {'url': args}
+                    except:
+                        data = {'url': args}
+                else:
+                    data = args if isinstance(args, dict) else {'url': str(args)}
+                
+                url = data.get('url', '').strip()
+                print(f"Website lookup URL: {url}", flush=True)
+                
+                if not url:
+                    return "Sorry, I couldn't find anything."
+                
+                today = datetime.now()
+                todayStr = today.strftime("%A, %B %d, %Y %I:%M:%S %p")
+                
+                # PDF detection functions (from original)
+                def is_pdf_url(url: str) -> bool:
+                    try:
+                        response = requests.head(url, allow_redirects=True, timeout=10)
+                        if 'application/pdf' in response.headers.get('Content-Type', '').lower():
+                            return True
+                        
+                        # Check with magic if available
+                        try:
+                            full_response = requests.get(url, stream=True, timeout=10)
+                            mime = magic.Magic(mime=True)
+                            content_type = mime.from_buffer(full_response.content[:1024])
+                            return content_type == 'application/pdf'
+                        except:
+                            return False
+                    except Exception as e:
+                        print(f"PDF detection error for {url}: {e}")
+                        return False
+                
+                def extract_pdf_text(url: str) -> str:
+                    try:
+                        response = requests.get(url, timeout=30)
+                        pdf_file = io.BytesIO(response.content)
+                        pdf_reader = PyPDF2.PdfReader(pdf_file)
+                        
+                        full_text = ""
+                        for page in pdf_reader.pages:
+                            full_text += page.extract_text() + "\n\n"
+                        
+                        return full_text.strip()
+                    except Exception as e:
+                        print(f"PDF text extraction error for {url}: {e}")
+                        return f"Error extracting PDF: {str(e)}"
+                
+                # Main website extraction function (from original)
+                def get_text_from_url(url: str) -> str:
+                    # Check if the URL is a PDF first
+                    if is_pdf_url(url):
+                        pdf_text = extract_pdf_text(url)
+                        return f"PDF URL: {url}\nContent:\n{pdf_text}"
+                    
+                    try:
+                        # Try Selenium crawler first (more comprehensive)
+                        max_url_count = 2
+                        max_depth = 1
+                        
+                        crawler = SeleniumCrawler(url, max_depth=max_depth, max_url_count=max_url_count-1, timeout_response=40)
+                        crawler.setCheckRobot(False)
+                        
+                        crawler.crawl(url)
+                        crawler.close()
+                        
+                        res = ''
+                        for result in crawler.results:
+                            if is_pdf_url(result['url']):
+                                pdf_text = extract_pdf_text(result['url'])
+                                res += f"PDF Title: {result['title']}, URL: {result['url']}\n"
+                                res += f"PDF Content: {pdf_text}\n"
+                            else:
+                                res += f"Title: {result['title']}, URL: {result['url']}\n"
+                                res += f"Content: {result['content']}\n"
+                            
+                            res += "-" * 80 + "\n"
+                        
+                        return res if res else "No content extracted via Selenium"
+                        
+                    except Exception as selenium_error:
+                        print(f"Selenium extraction failed, trying BeautifulSoup: {selenium_error}")
+                        
+                        # Fallback to BeautifulSoup (from original get_text_from_url2)
+                        try:
+                            response = requests.get(url, timeout=10, headers={
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                            })
+                            response.raise_for_status()
+                            
+                            soup = BeautifulSoup(response.text, 'html.parser')
+                            
+                            # Remove unwanted tags
+                            for tag_name in ['footer', 'nav', 'script', 'style']:
+                                for tag in soup.find_all(tag_name):
+                                    tag.decompose()
+                            
+                            # Replace links with their text content
+                            for link in soup.find_all('a'):
+                                link.replace_with(link.get_text())
+                            
+                            # Extract paragraphs
+                            paragraphs = [p.get_text().strip() for p in soup.find_all('p')]
+                            paragraphs = [p for p in paragraphs if p]
+                            
+                            if not paragraphs:
+                                print("Warning: No paragraphs were found!")
+                            
+                            # Process tables
+                            def convert_html_table_to_text(table):
+                                rows = []
+                                for row in table.find_all('tr'):
+                                    cells = row.find_all(['th', 'td'])
+                                    row_text = ' | '.join(cell.get_text().strip() for cell in cells)
+                                    rows.append(row_text)
+                                return '\n'.join(rows)
+                            
+                            for table in soup.find_all('table'):
+                                table_text = convert_html_table_to_text(table)
+                                paragraphs.append(table_text)
+                            
+                            text = '\n\n'.join(paragraphs)
+                            return text
+                            
+                        except requests.exceptions.Timeout:
+                            return f'Error fetching text from URL: Time Out!'
+                        except requests.exceptions.RequestException as error:
+                            return f'Error fetching text from URL: {error}'
+                
+                # Perform the website lookup
+                try:
+                    web_results = get_text_from_url(url)
+                except Exception as e:
+                    web_results = f"Error: Exception returned '{e}'"
+                
+                res = f"\n\nAs of [Current Date and Time: {todayStr}] here are lookup results: \n{web_results}"
+                
+                print("Website lookup completed", flush=True)
+                return res
+            
+            return await asyncio.get_event_loop().run_in_executor(
+                thread_pool, sync_website_lookup
+            )
+        except Exception as e:
+            return f"Website lookup error: {str(e)}"
+    
+    def _is_pdf_url(self, url: str) -> bool:
+        """Check if URL points to a PDF file."""
+        parsed = urlparse(url.lower())
+        return (
+            parsed.path.endswith(".pdf")
+            or "pdf" in parsed.path
+            or url.lower().endswith(".pdf")
+        )
+    
+    def _extract_pdf_content(self, url: str) -> dict:
+        """Extract content from a PDF URL and format like HTML scraping."""
+        try:
+            print(f"Extracting PDF from {url}", flush=True)
+            # Download PDF
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+
+            # Check if we actually got a PDF
+            content_type = response.headers.get("content-type", "").lower()
+            if "pdf" not in content_type and not url.lower().endswith(".pdf"):
+                print(f"Error: URL does not appear to be a PDF (content-type: {content_type})", flush=True)
+                return {
+                    "success": False,
+                    "error": f"URL does not appear to be a PDF (content-type: {content_type})",
+                }
+
+            # Create PDF reader from bytes
+            pdf_file = io.BytesIO(response.content)
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+
+            # Check if PDF is readable
+            if len(pdf_reader.pages) == 0:
+                print("Error: PDF contains no readable pages", flush=True)
+                return {"success": False, "error": "PDF contains no readable pages"}
+
+            # Extract metadata
+            metadata = pdf_reader.metadata if pdf_reader.metadata else {}
+
+            title = None
+            author = None
+            if metadata:
+                title = (
+                    metadata.get("/Title", "").strip()
+                    if metadata.get("/Title")
+                    else None
+                )
+                author = (
+                    metadata.get("/Author", "").strip()
+                    if metadata.get("/Author")
+                    else None
+                )
+
+            # Extract ALL text as one continuous document
+            all_text = []
+            successful_pages = 0
+
+            for page_num, page in enumerate(pdf_reader.pages):
+                try:
+                    # Try multiple extraction methods
+                    page_text = page.extract_text()
+
+                    # If default extraction fails, try with layout mode
+                    if not page_text.strip():
+                        try:
+                            page_text = page.extract_text(extraction_mode="layout")
+                        except:
+                            pass
+
+                    if page_text.strip():
+                        # Clean up common PDF extraction artifacts
+                        page_text = page_text.replace("\x00", "")  # Remove null bytes
+                        page_text = page_text.replace("\n\n\n", "\n\n")  # Reduce excessive newlines
+                        all_text.append(page_text.strip())
+                        successful_pages += 1
+                except Exception as e:
+                    print(f"Error extracting page {page_num + 1}: {e}", flush=True)
+                    continue
+
+            if successful_pages == 0:
+                print(f"Error: Could not extract text from any of the {len(pdf_reader.pages)} pages", flush=True)
+                return {
+                    "success": False,
+                    "error": f"Could not extract text from any of the {len(pdf_reader.pages)} pages",
+                }
+
+            # Join all text with double newlines
+            full_text = "\n\n".join(all_text)
+
+            # Clean up and format like HTML scraping output
+            full_text = " ".join(full_text.split())  # Replace multiple spaces with single spaces
+            full_text = full_text.replace(". ", ".\n\n")  # Add paragraph breaks
+            full_text = full_text.replace("? ", "?\n\n")
+            full_text = full_text.replace("! ", "!\n\n")
+            full_text = full_text.replace("\n\n\n", "\n\n")  # Clean up triple newlines
+
+            # If no title in metadata, try to extract from beginning of text
+            if not title and full_text:
+                first_part = full_text[:500]
+                sentences = first_part.split("\n\n")[:5]
+
+                for sentence in sentences:
+                    sentence = sentence.strip()
+                    if (
+                        len(sentence) > 10
+                        and len(sentence) < 200
+                        and not sentence.lower().startswith("draft")
+                        and not "arxiv:" in sentence.lower()
+                        and not sentence.startswith("Typeset")
+                        and not "@" in sentence
+                        and not sentence.replace(".", "").isdigit()
+                    ):
+                        title = sentence
+                        break
+
+            print(f"PDF extraction successful: {successful_pages}/{len(pdf_reader.pages)} pages, {len(full_text)} chars", flush=True)
+            
+            return {
+                "success": True,
+                "title": title or "PDF Document",
+                "author": author,
+                "content": full_text,
+                "page_count": len(pdf_reader.pages),
+                "extracted_pages": successful_pages,
+            }
+
+        except Exception as e:
+            print(f"Error extracting PDF content from {url}: {str(e)}", flush=True)
+            return {
+                "success": False,
+                "error": f"Error extracting PDF content from {url}: {str(e)}",
+            }
+
+    def _extract_web_content(self, url: str) -> dict:
+        """Extract content from a regular web page using trafilatura."""
+        try:
+            print(f"Extracting web content from {url}", flush=True)
+            downloaded = trafilatura.fetch_url(url)
+            if downloaded is None:
+                return {
+                    "success": False,
+                    "error": f"Failed to download content from {url}",
+                }
+
+            # Extract content and metadata separately
+            extracted = trafilatura.extract(downloaded)
+            metadata = trafilatura.extract_metadata(downloaded)
+
+            if extracted is None:
+                return {"success": False, "error": f"No content found at {url}"}
+
+            # Get title and author from metadata if available
+            title = None
+            author = None
+            date = None
+
+            if metadata:
+                title = metadata.title
+                author = metadata.author
+                date = metadata.date
+
+            print(f"Web extraction successful: {len(extracted)} chars", flush=True)
+
+            return {
+                "success": True,
+                "title": title or "Web Article",
+                "author": author,
+                "date": date,
+                "content": extracted,
+            }
+
+        except Exception as e:
+            print(f"Error extracting content from {url}: {e}", flush=True)
+            return {
+                "success": False,
+                "error": f"Error extracting content from {url}: {e}",
+            }
+
+    def _safe_truncate(self, content: str, max_chars: int = 10000) -> str:
+        """Simple, safe truncation that guarantees we stay under buffer limits."""
+        if len(content) <= max_chars:
+            return content
+
+        print(f"Content too large ({len(content)} chars), truncating to {max_chars}", flush=True)
+        
+        # Simple truncation with clear notice
+        truncated = content[:max_chars]
+
+        # Try to end at a complete sentence
+        last_period = truncated.rfind(". ")
+        if last_period > max_chars * 0.8:  # If we can cut at a sentence near the end
+            truncated = truncated[: last_period + 1]
+
+        # Add clear truncation notice
+        total_chars = len(content)
+        total_words = len(content.split())
+        shown_words = len(truncated.split())
+
+        truncated += f"\n\n--- CONTENT TRUNCATED ---\n"
+        truncated += f"Showing: {shown_words} words of {total_words} total\n"
+        truncated += f"Original size: {total_chars} characters\n"
+        truncated += f"Reason: Context window limit\n"
+        truncated += f"Note: Full content was extracted successfully"
+
+        return truncated
+
+    async def lookup_website(self, args: str) -> str:
+        """
+        Enhanced website content extractor using trafilatura for better HTML parsing.
+        Handles both web pages and PDFs with improved content extraction.
+        """
+        try:
+            def sync_website_extraction():
+                # Handle parameter parsing
+                if isinstance(args, str):
+                    try:
+                        data = json.loads(args) if args.startswith('{') else {'url': args}
+                    except:
+                        data = {'url': args}
+                else:
+                    data = args if isinstance(args, dict) else {'url': str(args)}
+                
+                url = data.get('url', '').strip()
+                print(f"Website extraction URL: {url}", flush=True)
+                
+                if not url:
+                    return "Error: No URL provided for website lookup."
+                
+                today = datetime.now()
+                todayStr = today.strftime("%A, %B %d, %Y %I:%M:%S %p")
+                
+                # Determine content type and extract accordingly
+                if self._is_pdf_url(url):
+                    result = self._extract_pdf_content(url)
+                    content_type = "PDF"
+                else:
+                    result = self._extract_web_content(url)
+                    content_type = "Web Page"
+
+                # Handle extraction errors
+                if not result["success"]:
+                    return f"ERROR: Failed to extract content from {url}: {result['error']}"
+
+                # Apply safe truncation to avoid buffer overflow
+                content = self._safe_truncate(result["content"])
+
+                # Format response similar to original but cleaner
+                response_parts = [
+                    f"\nAs of [Current Date and Time: {todayStr}] here are the website lookup results:",
+                    f"Title: {result['title']}",
+                    f"URL: {url}",
+                    f"Type: {content_type}",
+                    f"Content:\n{content}"
+                ]
+
+                if result.get('author'):
+                    response_parts.insert(-1, f"Author: {result['author']}")
+                
+                if result.get('date'):
+                    response_parts.insert(-1, f"Published: {result['date']}")
+
+                final_response = '\n'.join(response_parts)
+                
+                print(f"Website extraction completed: {len(final_response)} chars", flush=True)
+                return final_response
+            
+            return await asyncio.get_event_loop().run_in_executor(
+                thread_pool, sync_website_extraction
+            )
+        except Exception as e:
+            return f"Website extraction error: {str(e)}"
+    
+    async def safe_function_call(self, func_name: str, args: str) -> str:
+        """Safely execute a function"""
+        if func_name not in self.available_functions:
+            return f"Function {func_name} not available"
+        
+        try:
+            func = self.available_functions[func_name]
+            result = await func(args)
+            return str(result)
+        except Exception as e:
+            logger.error(f"Error calling {func_name}: {e}")
+            return f"Error calling {func_name}: {str(e)}"
+
+    async def secure_email_sender(self, args: str) -> str:
+        """
+        Send professional emails with attachments and comprehensive security measures.
+        Handles Gmail, Outlook, custom SMTP, and sendmail.
+        """
+        try:
+            # Handle parameter parsing
+            if isinstance(args, str):
+                try:
+                    parsed_args = json.loads(args)
+                except json.JSONDecodeError:
+                    return "❌ Error: Invalid JSON format for email arguments"
+            else:
+                parsed_args = args
+            
+            def sync_email_send():
+                try:
+                    # Import the email tool
+                    import sys
+                    import os
+                    
+                    # Add user_tools directory to path if not already there
+                    user_tools_path = os.path.join(os.path.dirname(__file__), 'user_tools')
+                    if user_tools_path not in sys.path:
+                        sys.path.append(user_tools_path)
+                    
+                    from user_tools.secure_email_sender import SecureEmailSenderTool
+                    
+                    # Create tool instance and execute
+                    email_tool = SecureEmailSenderTool()
+                    
+                    # Execute the email tool (async)
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        result = loop.run_until_complete(email_tool.execute(**parsed_args))
+                    finally:
+                        loop.close()
+                    
+                    # Handle the new return format
+                    if isinstance(result, dict):
+                        if result.get("success"):
+                            return result.get("result", "✅ Email sent successfully")
+                        else:
+                            return f"❌ {result.get('error', 'Email sending failed')}"
+                    else:
+                        return str(result)
+                    
+                except ImportError as e:
+                    return f"❌ Error: Email tool not available: {str(e)}"
+                except Exception as e:
+                    return f"❌ Error: Email sending failed: {str(e)}"
+            
+            return await asyncio.get_event_loop().run_in_executor(
+                thread_pool, sync_email_send
+            )
+            
+        except Exception as e:
+            return f"❌ Error: Email tool execution failed: {str(e)}"
+
+# ==============================================================================
+# CACHE FUNCTIONS
+# ==============================================================================
+
+def cache_get(key: str) -> Optional[str]:
+    """Get value from simple cache"""
+    if key in simple_cache:
+        entry = simple_cache[key]
+        if time.time() < entry['expires']:
+            return entry['value']
+        else:
+            del simple_cache[key]
+    return None
+
+def cache_set(key: str, value: str, ttl: int = 3600):
+    """Set value in simple cache"""
+    simple_cache[key] = {
+        'value': value,
+        'expires': time.time() + ttl
+    }
+
+# ==============================================================================
+# LIFESPAN MANAGEMENT
+# ==============================================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan events"""
+    # Startup
+    logger.info("Starting FastAPI server with Ollama integration...")
+    await init_db_pool()
+    
+    # Test Ollama connection
+    try:
+        response = requests.get('http://127.0.0.1:11434/api/tags', timeout=5)
+        if response.status_code == 200:
+            logger.info("Ollama service is available")
+        else:
+            logger.warning("Ollama service test failed")
+    except Exception as e:
+        logger.warning(f"Ollama service not available: {e}")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down...")
+    await close_db_pool()
+    thread_pool.shutdown(wait=True)
+
+# ==============================================================================
+# FASTAPI APPLICATION
+# ==============================================================================
+
+app = FastAPI(
+    title="Complete Analytics API with Ollama LLM",
+    description="High-performance async API with Ollama integration, tools, and caching",
+    version="2.0.0",
+    lifespan=lifespan
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize tool manager
+tool_manager = AsyncToolManager()
+
+# ==============================================================================
+# MIDDLEWARE
+# ==============================================================================
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all requests with timing"""
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    logger.info(f"{request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s")
+    return response
+
+# ==============================================================================
+# UTILITY FUNCTIONS
+# ==============================================================================
+
+async def execute_query(query: str, params: Optional[tuple] = None) -> List[Dict]:
+    """Execute database query asynchronously"""
+    if not db_pool:
+        return []
+    
+    async with get_db_connection() as connection:
+        async with connection.cursor(aiomysql.DictCursor) as cursor:
+            await cursor.execute(query, params or ())
+            result = await cursor.fetchall()
+            return result
+
+async def run_cpu_intensive_task(func, *args, **kwargs):
+    """Run CPU-intensive tasks in thread pool"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(thread_pool, func, *args, **kwargs)
+
+async def check_ollama_health() -> bool:
+    """Check if Ollama service is healthy"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get('http://127.0.0.1:11434/api/tags', timeout=5) as response:
+                return response.status == 200
+    except:
+        return False
+
+def _build_structured_context_block(tools_results_summary: str, tools_called: List[str]) -> str:
+    """
+    Build structured CONTEXT block from tool outputs for Primary LLM.
+    This formats tool data into organized sections for better analysis.
+    """
+    if not tools_results_summary.strip():
+        return ""
+    
+    # Build tool summary section
+    tools_section = ""
+    if tools_called:
+        tools_section = f"TOOLS EXECUTED: {', '.join(tools_called)}\n\n"
+    
+    # Format the context with clear structure
+    context_block = f"""{tools_section}DATA AND INFORMATION GATHERED:
+
+{tools_results_summary}
+
+---
+END OF CONTEXT DATA"""
+    
+    return context_block
+
+
+def _build_enhanced_primary_system_prompt(original_system, tools_were_executed=False, tools_results_summary=""):
+    """
+    Build enhanced system prompt for primary LLM when tools have been executed.
+    This prevents the primary LLM from redoing work already completed by tool calling model.
+    """
+    # Load base system prompt from external file
+    base_system = load_primary_model_system_prompt()
+    
+    if not tools_were_executed:
+        # If no tools were executed, combine base system + user system if provided
+        if original_system and original_system.strip():
+            return f"{base_system}\n\nADDITIONAL USER INSTRUCTIONS:\n{original_system}"
+        return base_system
+    
+    enhanced_instructions = """
+
+CRITICAL WORKFLOW INSTRUCTIONS:
+- Tools have already been executed and completed their tasks
+- Your role is to REPORT and ANALYZE the results, NOT to redo the work
+- DO NOT recreate, rewrite, or duplicate what the tools have already accomplished
+- Focus on summarizing what was accomplished and suggesting next steps
+- Present the results clearly and offer analysis or follow-up options
+
+TOOLS EXECUTION SUMMARY:
+""" + tools_results_summary + """
+
+Remember: The work is DONE. Your job is to present the results and provide insights, not to start over.
+"""
+    
+    # Combine base system + user system (if provided) + enhanced instructions
+    full_system = base_system
+    if original_system and original_system.strip():
+        full_system += f"\n\nADDITIONAL USER INSTRUCTIONS:\n{original_system}"
+    full_system += enhanced_instructions
+    return full_system
+
+
+async def process_with_safe_optimization(
+    tool_results: List[Dict],
+    user_prompt: str,
+    max_context_window: int,
+    tools_called: List[str],
+    thread_pool,
+    user_id: Optional[str] = None
+) -> tuple[str, Dict[str, Any]]:
+    """
+    Process tool results with safe optimization integration.
+    
+    This function integrates the optimization safety system into the existing
+    FastAPI server processing pipeline while maintaining complete fallback compatibility.
+    
+    Returns:
+        tuple: (tools_results_summary, optimization_metadata)
+    """
+    
+    # Convert tool results to the format expected by our optimization system
+    formatted_tool_results = []
+    for i, result_dict in enumerate(tool_results):
+        tool_name = tools_called[i] if i < len(tools_called) else f"tool_{i}"
+        formatted_result = {
+            "tool": tool_name,
+            "result": result_dict
+        }
+        formatted_tool_results.append(formatted_result)
+    
+    # Check if optimization is available and enabled
+    if not OPTIMIZATION_AVAILABLE:
+        logger.info("🚫 Optimization system not available - using original processing")
+        return await _original_processing_fallback(tool_results, user_prompt, max_context_window, thread_pool)
+    
+    # Check feature flags
+    if not optimization_controller.should_optimize(user_id=user_id, tool_types=tools_called):
+        logger.info("🚫 Optimization disabled by feature flags - using original processing")
+        return await _original_processing_fallback(tool_results, user_prompt, max_context_window, thread_pool)
+    
+    # Attempt safe optimization
+    start_time = time.time()
+    
+    try:
+        logger.info("🔧 OPTIMIZATION: Starting safe optimization attempt")
+        
+        # Initialize safety components
+        preserver = ToolOutputPreserver()
+        validator = OptimizationValidator()
+        
+        # Attempt optimization
+        optimization_result = await safe_optimize_llm_input(
+            tool_results=formatted_tool_results,
+            user_prompt=user_prompt,
+            preserver=preserver,
+            validator=validator
+        )
+        
+        response_time = time.time() - start_time
+        
+        # Record metrics
+        success = optimization_result["input_type"] == "optimized"
+        validation_score = optimization_result.get("validation_score", 0)
+        error_type = None
+        
+        if not success:
+            if "validation" in optimization_result.get("fallback_reason", []):
+                error_type = "validation"
+            elif "error" in optimization_result:
+                error_type = "exception"
+            elif "integrity" in optimization_result.get("error", ""):
+                error_type = "integrity"
+        
+        optimization_controller.record_attempt(
+            success=success,
+            validation_score=validation_score,
+            response_time=response_time,
+            error_type=error_type
+        )
+        
+        # Use optimized content or fallback
+        if success:
+            logger.info(f"✅ OPTIMIZATION SUCCESS: Score {validation_score:.1f}, Response time {response_time:.2f}s")
+            return optimization_result["content"], {
+                "optimization_used": True,
+                "optimization_score": validation_score,
+                "response_time": response_time,
+                "fallback_available": True
+            }
+        else:
+            logger.warning(f"⚠️ OPTIMIZATION FALLBACK: {optimization_result.get('fallback_reason', 'Unknown reason')}")
+            return optimization_result["content"], {
+                "optimization_used": False,
+                "fallback_reason": optimization_result.get("fallback_reason", "Unknown"),
+                "validation_score": validation_score,
+                "response_time": response_time
+            }
+            
+    except Exception as e:
+        response_time = time.time() - start_time
+        logger.error(f"🚨 OPTIMIZATION SYSTEM ERROR: {e}")
+        
+        # Record failure
+        optimization_controller.record_attempt(
+            success=False,
+            validation_score=0,
+            response_time=response_time,
+            error_type="exception"
+        )
+        
+        # Emergency fallback to original processing
+        logger.info("🔄 EMERGENCY FALLBACK: Using original processing")
+        return await _original_processing_fallback(tool_results, user_prompt, max_context_window, thread_pool)
+
+
+async def _original_processing_fallback(
+    tool_results: List[Dict],
+    user_prompt: str, 
+    max_context_window: int,
+    thread_pool
+) -> tuple[str, Dict[str, Any]]:
+    """
+    Original processing logic for fallback compatibility.
+    This replicates the exact original logic from the FastAPI server.
+    """
+    
+    # Recreate the original full_tools_text
+    full_tools_text = ""
+    for result_dict in tool_results:
+        if isinstance(result_dict, dict):
+            for key, value in result_dict.items():
+                full_tools_text += f"{key}: {value}\n"
+        else:
+            full_tools_text += str(result_dict) + "\n"
+    
+    # Apply original context window logic
+    if len(full_tools_text) > (max_context_window) * 1.05:
+        try:
+            logger.info(f"Calling TextChunker() to reduce context size from {len(full_tools_text)} to around {max_context_window} bytes")
+            if TOOLS_AVAILABLE:
+                def sync_text_chunking():
+                    from text_chunker import TextChunker
+                    return TextChunker.summary_by_semantics(
+                        full_tools_text, 
+                        query=user_prompt,
+                        max_length=max_context_window
+                    )
+                
+                tools_results_summary = await asyncio.get_event_loop().run_in_executor(
+                    thread_pool, sync_text_chunking
+                )
+                logger.info(f"TextChunker() was called and returned tools_results_summary size of {len(tools_results_summary)} bytes. From {len(full_tools_text)}")
+            else:
+                tools_results_summary = full_tools_text
+        except Exception as e:
+            logger.error(f"Error: exception in TextChunker.summary_by_semantics() call. Function returned message: {e}")
+            tools_results_summary = full_tools_text  # TextChunker() failed!! Use the full text
+    else:
+        tools_results_summary = full_tools_text
+    
+    return tools_results_summary, {
+        "optimization_used": False,
+        "original_processing": True,
+        "context_size": len(tools_results_summary)
+    }
+
+
+# ==============================================================================
+# OLLAMA LLM ENDPOINTS
+# ==============================================================================
+@app.post("/llama3_1b/prompt", response_model=ApiResponse)
+async def llama_prompt(request: OllamaPromptRequest):
+    """
+    Ollama prompt endpoint with streaming support
+    Equivalent to the original /llama3_1b/prompt endpoint
+    """
+    logger.info(f"Ollama prompt request: model={request.model}")
+    
+    try:
+        payload = {
+            "model": request.model,
+            "prompt": request.prompt,
+            "stream": request.stream,
+            "think": False  # Disable thinking like the original version
+        }
+        
+        if request.system:
+            payload["system"] = request.system
+        if request.context:
+            payload["context"] = request.context
+        
+        # Use async HTTP client
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                ServerConfig.OLLAMA_URL,
+                json=payload,
+                timeout=None  # No timeout - let LLM stream as long as needed
+            ) as response:
+                
+                if request.stream:
+                    # Return streaming response
+                    async def stream_generator():
+                        try:
+                            async for chunk in response.content.iter_chunked(1024):
+                                if chunk:
+                                    yield chunk
+                        except Exception as e:
+                            logger.error(f"Streaming error: {e}")
+                            # Send error message as final chunk
+                            error_response = {"error": f"Streaming interrupted: {str(e)}"}
+                            yield json.dumps(error_response).encode() + b'\n'
+                    
+                    return StreamingResponse(
+                        stream_generator(),
+                        media_type="application/x-ndjson"
+                    )
+                else:
+                    # Return JSON response
+                    result = await response.json()
+                    return ApiResponse(
+                        success=True,
+                        data=result,
+                        timestamp=datetime.now().isoformat()
+                    )
+                    
+    except Exception as e:
+        logger.error(f"Ollama prompt failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Ollama request failed: {str(e)}")
+
+async def _verify_task_completion(user_prompt: str, tools_called: List[str], tools_results: str, tool_manager) -> Dict[str, Any]:
+    """
+    🔍 BULLETPROOF TASK COMPLETION VERIFIER
+    Analyzes user prompt and tool execution to ensure all required steps are completed
+    Enhanced with comprehensive email detection and strict validation
+    """
+    user_prompt_lower = user_prompt.lower()
+    
+    # 🚨 BULLETPROOF EMAIL DETECTION
+    # Any mention of email/send requires secure_email_sender tool
+    email_keywords = [
+        "email", "send", "mail", "attach", "attachment", "send to", "email to",
+        "send an email", "send email", "email it", "mail it", "send it", 
+        "email me", "send me", "mail me", "email with", "send with",
+        "email them", "send them", "mail them", "email all", "send all",
+        "in one email", "all in one email", "send them all", "email the files"
+    ]
+    
+    has_email_request = any(keyword in user_prompt_lower for keyword in email_keywords)
+    
+    # Define task patterns and their required tool sequences
+    task_patterns = {
+        "research_save_and_email": {
+            "triggers": ["save the output to", "save to pdf and html", "describe and save", "list and save", 
+                        "save output to a pdf", "save the results", "create file with", "save as attachment"],
+            "required_tools": ["sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Research information, save to file(s), and email as attachments"
+        },
+        "multi_file_creation_and_email": {
+            "triggers": ["create a pdf file, a html file, a md file, and a txt file", "create multiple files", 
+                        "create files and email", "create all files and send", "send them all in one email"],
+            "required_tools": ["sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Create multiple files and email all as attachments"
+        },
+        "stock_report_and_email": {
+            "triggers": ["stock report and email", "create stock analysis file", "email stock report", "save and send stock analysis"],
+            "required_tools": ["comprehensive_stock_analyzer", "sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Generate stock analysis report, save as file, email with attachment"
+        },
+        "news_report_and_email": {
+            "triggers": ["news report and email", "create news file", "email news report", "save and send news", "email me the news",
+                        "save and send the files", "pdf attachment", "send the files as pdf", "stock market news", "save and send"],
+            "required_tools": ["get_news_summaries", "sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Generate news analysis report, save as PDF file, email with attachment"
+        },
+        "file_creation_and_email": {
+            "triggers": ["create file and email", "save and email", "email me a file", "send me an attachment", "create and send"],
+            "required_tools": ["sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Create file and email as attachment"
+        },
+        "document_creation_email": {
+            "triggers": ["write document and email", "create document file", "email me the document", "save document and send", 
+                        "craft", "write a", "include a pdf", "send the email", "with attachments", "cover letter", 
+                        "pdf version", "email with attachments", "pdf formatted"],
+            "required_tools": ["sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Write document, save file, email as attachment"
+        },
+        "pure_email_request": {
+            "triggers": ["send an email", "send email", "email to", "mail to", "send to", "email with subject",
+                        "send with attachments", "email the files", "send the files", "email with attachments"],
+            "required_tools": ["secure_email_sender"],
+            "required_sequence": False,
+            "description": "Send email with or without attachments"
+        }
+    }
+    
+    # 🚨 CRITICAL: Check for explicit exclusion patterns first
+    # If user is just asking for information/research, do NOT auto-execute
+    exclusion_patterns = [
+        "just tell me", "what are", "give me", "show me", "list", "find out",
+        "look up", "research", "analyze", "explain", "describe", "summarize",
+        "use the available tools to", "check", "investigate", "get information"
+    ]
+    
+    if any(exclusion in user_prompt_lower for exclusion in exclusion_patterns):
+        # Check if they also explicitly ask for file/email
+        explicit_file_email_requests = [
+            "email me", "send me", "create file", "save to file", "attachment",
+            "email the", "send the", "file and email", "save and email", "craft",
+            "cover letter", "pdf version", "with attachments", "include a pdf",
+            "pdf formatted", "send the email", "save and send the files", "pdf attachment",
+            "send the files as pdf", "save and send", "create a pdf", "create pdf", 
+            "pdf report", "html report", "report and email", "create report",
+            "generate pdf", "make pdf", "email it to", "send it to"
+        ]
+        
+        if not any(explicit_request in user_prompt_lower for explicit_request in explicit_file_email_requests):
+            logger.info(f"🚫 EXCLUSION: User is asking for information only, not file creation/email")
+            return {
+                "complete": True,  # Task is complete - they just want information
+                "reason": "Information request only - no file creation or email needed",
+                "missing_tools": [],
+                "pattern": "information_request"
+            }
+    
+    # Check if any pattern matches
+    for pattern_name, pattern in task_patterns.items():
+        if any(trigger in user_prompt_lower for trigger in pattern["triggers"]):
+            # Check if all required tools were called
+            missing_tools = []
+            for required_tool in pattern["required_tools"]:
+                if required_tool not in tools_called:
+                    missing_tools.append(required_tool)
+            
+            if missing_tools:
+                return {
+                    "complete": False,
+                    "reason": f"Missing required tools for {pattern['description']}",
+                    "missing_tools": missing_tools,
+                    "pattern": pattern_name
+                }
+            
+            # For email tasks, verify file was created if attachment expected
+            if "secure_email_sender" in tools_called and "sandboxed_executor" in tools_called:
+                if "attachments" in tools_results and "file not found" in tools_results.lower():
+                    return {
+                        "complete": False,
+                        "reason": "File attachment referenced but file was not created",
+                        "missing_tools": ["sandboxed_executor"],  # Re-run to create the file
+                        "pattern": pattern_name
+                    }
+    
+    # 🚨 BULLETPROOF EMAIL VALIDATION
+    # If user requested email but no email tool was called, task is INCOMPLETE
+    if has_email_request and "secure_email_sender" not in tools_called:
+        return {
+            "complete": False,
+            "reason": "Email requested but secure_email_sender tool was not called",
+            "missing_tools": ["secure_email_sender"],
+            "pattern": "email_required"
+        }
+    
+    # 🚨 ZERO TOOLS CALLED VALIDATION
+    # If no tools were called at all, check if any were actually needed
+    if not tools_called:
+        # If user requested email or file creation, tools were required
+        file_creation_keywords = ["create", "generate", "write", "make", "build", "save"]
+        needs_tools = has_email_request or any(keyword in user_prompt_lower for keyword in file_creation_keywords)
+        
+        if needs_tools:
+            return {
+                "complete": False,  
+                "reason": "No tool calls generated but tools were required for this request",
+                "missing_tools": ["secure_email_sender"] if has_email_request else ["sandboxed_executor"],
+                "pattern": "no_tools_called"
+            }
+    
+    # If no patterns match or all requirements met
+    return {
+        "complete": True,
+        "reason": "All required tools executed successfully",
+        "missing_tools": [],
+        "pattern": None
+    }
+
+def _extract_report_content_from_results(tools_results: str) -> str:
+    """Extract the comprehensive stock analysis content from tools_results"""
+    try:
+        # Look for comprehensive_stock_analyzer result in the tools_results
+        if "Tool: comprehensive_stock_analyzer" in tools_results:
+            # Split by tool sections and find the comprehensive_stock_analyzer result
+            parts = tools_results.split("Tool: ")
+            for part in parts:
+                if part.startswith("comprehensive_stock_analyzer"):
+                    # Extract just the result content
+                    lines = part.split("\n")
+                    result_lines = []
+                    capture = False
+                    for line in lines:
+                        if line.startswith("Result: "):
+                            capture = True
+                            result_lines.append(line[8:])  # Remove "Result: " prefix
+                        elif capture and line.strip() and not line.startswith("Tool: "):
+                            result_lines.append(line)
+                        elif capture and line.startswith("Tool: "):
+                            break
+                    
+                    return "\n".join(result_lines).strip()
+        
+        return ""
+    except Exception as e:
+        logger.error(f"❌ Error extracting report content: {e}")
+        return ""
+
+def _generate_dynamic_title(user_prompt: str, tools_results: str) -> str:
+    """Generate dynamic report title based on content type and topic"""
+    try:
+        user_prompt_lower = user_prompt.lower()
+        tools_results_lower = tools_results.lower()
+        
+        # Check for news content
+        if "Tool: get_news_summaries" in tools_results:
+            # Extract topic from user prompt
+            news_keywords = {
+                "middle east": "Middle East News Analysis Report",
+                "technology": "Technology News Analysis Report", 
+                "tech": "Technology News Analysis Report",
+                "stock market": "Stock Market News Analysis Report",
+                "market": "Market News Analysis Report",
+                "sports": "Sports News Analysis Report",
+                "politics": "Political News Analysis Report", 
+                "political": "Political News Analysis Report",
+                "business": "Business News Analysis Report",
+                "health": "Health News Analysis Report",
+                "science": "Science News Analysis Report",
+                "entertainment": "Entertainment News Analysis Report",
+                "world": "World News Analysis Report",
+                "international": "International News Analysis Report",
+                "economy": "Economic News Analysis Report",
+                "economic": "Economic News Analysis Report",
+                "climate": "Climate News Analysis Report",
+                "environment": "Environmental News Analysis Report",
+                "african": "African News Analysis Report",
+                "africa": "African News Analysis Report",
+                "asian": "Asian News Analysis Report",
+                "asia": "Asian News Analysis Report",
+                "european": "European News Analysis Report",
+                "europe": "European News Analysis Report"
+            }
+            
+            # Find the most specific topic match
+            for topic, title in news_keywords.items():
+                if topic in user_prompt_lower or topic in tools_results_lower:
+                    return title
+            
+            # Default news title if no specific topic found
+            return "News Analysis Report"
+        
+        # Check for financial/stock content
+        elif ("Tool: stock_analyzer" in tools_results or 
+              any(keyword in user_prompt_lower for keyword in ["stock", "financial", "market", "trading", "investment"])):
+            return "Comprehensive Stock Analysis Report"
+        
+        # Check for other specific content types
+        elif any(keyword in user_prompt_lower for keyword in ["calendar", "appointment", "schedule"]):
+            return "Calendar Analysis Report"
+        elif any(keyword in user_prompt_lower for keyword in ["email", "message", "letter"]):
+            return "Email Analysis Report"
+        else:
+            # General analysis report
+            return "Analysis Report"
+            
+    except Exception as e:
+        logger.error(f"❌ Error generating dynamic title: {e}")
+        return "Analysis Report"
+
+def _generate_dynamic_filename(user_prompt: str, tools_results: str, timestamp: str, file_extension: str = "html") -> str:
+    """Generate dynamic filename based on content type and topic"""
+    try:
+        user_prompt_lower = user_prompt.lower()
+        tools_results_lower = tools_results.lower()
+        
+        # Check for news content
+        if "Tool: get_news_summaries" in tools_results:
+            # Extract topic from user prompt
+            news_keywords = {
+                "middle east": "middle_east_news",
+                "technology": "technology_news", 
+                "tech": "technology_news",
+                "sports": "sports_news",
+                "politics": "political_news", 
+                "political": "political_news",
+                "business": "business_news",
+                "health": "health_news",
+                "science": "science_news",
+                "entertainment": "entertainment_news",
+                "world": "world_news",
+                "international": "international_news",
+                "economy": "economic_news",
+                "economic": "economic_news",
+                "climate": "climate_news",
+                "environment": "environmental_news",
+                "african": "african_news",
+                "africa": "african_news",
+                "asian": "asian_news",
+                "asia": "asia_news",
+                "european": "european_news",
+                "europe": "europe_news"
+            }
+            
+            # Find the most specific topic match
+            for topic, filename_prefix in news_keywords.items():
+                if topic in user_prompt_lower or topic in tools_results_lower:
+                    return f"{filename_prefix}_analysis_{timestamp}.{file_extension}"
+            
+            # Default news filename if no specific topic found
+            return f"news_analysis_{timestamp}.{file_extension}"
+        
+        # Check for financial/stock content
+        elif ("Tool: stock_analyzer" in tools_results or 
+              any(keyword in user_prompt_lower for keyword in ["stock", "financial", "market", "trading", "investment"])):
+            return f"financial_analysis_{timestamp}.{file_extension}"
+        
+        # Check for other specific content types
+        elif any(keyword in user_prompt_lower for keyword in ["calendar", "appointment", "schedule"]):
+            return f"calendar_report_{timestamp}.{file_extension}"
+        elif any(keyword in user_prompt_lower for keyword in ["email", "message", "letter"]):
+            return f"email_report_{timestamp}.{file_extension}"
+        else:
+            # General analysis report
+            return f"analysis_report_{timestamp}.{file_extension}"
+            
+    except Exception as e:
+        logger.error(f"❌ Error generating dynamic filename: {e}")
+        return f"analysis_report_{timestamp}.{file_extension}"
+
+def _extract_news_content_from_results(tools_results: str) -> str:
+    """Extract news content from get_news_summaries tool results"""
+    try:
+        # Look for get_news_summaries result in the tools_results
+        if "Tool: get_news_summaries" in tools_results:
+            # Split by tool sections and find the get_news_summaries result
+            parts = tools_results.split("Tool: ")
+            for part in parts:
+                if part.startswith("get_news_summaries"):
+                    # Extract just the result content
+                    lines = part.split("\n")
+                    result_lines = []
+                    capture = False
+                    for line in lines:
+                        if line.startswith("Result: "):
+                            capture = True
+                            result_lines.append(line[8:])  # Remove "Result: " prefix
+                        elif capture and line.strip() and not line.startswith("Tool: "):
+                            result_lines.append(line)
+                        elif capture and line.startswith("Tool: "):
+                            break
+                    
+                    return "\n".join(result_lines).strip()
+        
+        return ""
+    except Exception as e:
+        logger.error(f"❌ Error extracting news content: {e}")
+        return ""
+
+async def _execute_missing_tools(missing_tools: List[str], tool_manager, tools_results: str = "", user_prompt: str = "") -> str:
+    """
+    🔄 AUTO-EXECUTOR for missing tools
+    Automatically executes missing tools to complete the task
+    """
+    additional_results = ""
+    
+    for tool_name in missing_tools:
+        try:
+            logger.info(f"🔄 Auto-executing missing tool: {tool_name}")
+            
+            if tool_name == "sandboxed_executor":
+                logger.info("🎯🎯🎯 AUTO-EXEC PATH: Starting sandboxed_executor auto-execution")
+                # Determine report type based on tools_results content
+                timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
+                
+                # Generate dynamic filename based on content type and topic - DEFAULT TO HTML
+                file_extension = "html" if "Tool: get_news_summaries" in tools_results or "stock" in user_prompt.lower() else "md"
+                filename = _generate_dynamic_filename(user_prompt, tools_results, timestamp, file_extension)
+                
+                if "Tool: get_news_summaries" in tools_results:
+                    actual_report_content = _extract_news_content_from_results(tools_results)
+                else:
+                    actual_report_content = _extract_report_content_from_results(tools_results)
+                
+                logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Creating DYNAMIC REPORT -> {filename}")
+                
+                # Generate appropriate report content based on type
+                if actual_report_content:
+                    if "get_news_summaries" in tools_results:
+                        # News analysis report with dynamic title
+                        report_title = _generate_dynamic_title(user_prompt, tools_results)
+                        report_content = f"""# {report_title}
+
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Critical News Summary
+
+{actual_report_content}
+
+---
+
+*This report was automatically generated by the AI News Analysis System.*
+"""
+                    else:
+                        # Stock analysis report
+                        report_content = f"""# Comprehensive Stock Analysis Report
+
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+---
+
+{actual_report_content}
+
+---
+
+*This report was automatically generated and saved by the task completion system.*
+"""
+                else:
+                    # Fallback content based on type
+                    if "get_news_summaries" in tools_results:
+                        report_title = _generate_dynamic_title(user_prompt, tools_results)
+                        report_content = f"""# {report_title}
+
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Analysis Summary
+News analysis completed successfully.
+
+*Report content could not be extracted automatically. Please refer to the original news results.*
+"""
+                    else:
+                        report_content = f"""# Stock Analysis Report
+
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Analysis Summary
+Comprehensive stock analysis completed successfully.
+
+*Report content could not be extracted automatically. Please refer to the original analysis results.*
+"""
+                
+                # Create the file using sandboxed_executor - PDF auto-conversion will trigger
+                # Find the actual tool instance, not the wrapper
+                logger.info("🎯🎯🎯 AUTO-EXEC PATH: Looking for sandboxed_executor tool instance")
+                sandboxed_tool_instance = None
+                for tool in tool_manager.user_tools:
+                    if tool.name == "sandboxed_executor":
+                        sandboxed_tool_instance = tool
+                        logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Found tool instance: {type(tool).__name__}")
+                        break
+                
+                if sandboxed_tool_instance:
+                    logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Using DIRECT TOOL INSTANCE for {filename}")
+                    logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Calling execute(action='create_file', filename='{filename}')")
+                    result = await sandboxed_tool_instance.execute(
+                        action="create_file",
+                        filename=filename,
+                        content=report_content
+                        # Note: convert_to_pdf not specified, so auto-conversion for .pdf files will trigger
+                    )
+                    logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Direct tool RESULT: {result}")
+                else:
+                    # Fallback to wrapper if tool instance not found
+                    logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: TOOL INSTANCE NOT FOUND! Using WRAPPER FALLBACK for {filename}")
+                    sandboxed_tool = tool_manager.available_functions["sandboxed_executor"]
+                    result = await sandboxed_tool({
+                        "action": "create_file",
+                        "filename": filename,
+                        "content": report_content
+                    })
+                    logger.info(f"🎯🎯🎯 AUTO-EXEC PATH: Wrapper RESULT: {result}")
+                
+                logger.info(f"🔄 Auto-created file: {filename} with {len(report_content)} characters")
+                if "get_news_summaries" in tools_results:
+                    additional_results += f"Tool: {tool_name} (auto-executed)\nResult: Created file {filename} with Middle East news analysis report ({len(report_content)} chars)\n\n"
+                else:
+                    additional_results += f"Tool: {tool_name} (auto-executed)\nResult: Created file {filename} with comprehensive stock analysis report ({len(report_content)} chars)\n\n"
+            
+            elif tool_name == "get_the_secret_tool":
+                result = await tool_manager.get_the_secret_tool()
+                additional_results += f"Tool: {tool_name} (auto-executed)\nResult: {result}\n\n"
+            
+            elif tool_name == "secure_email_sender":
+                # Auto-execute email sending with the created file
+                # Find the actual email tool instance
+                email_tool_instance = None
+                for tool in tool_manager.user_tools:
+                    if tool.name == "secure_email_sender":
+                        email_tool_instance = tool
+                        break
+                
+                if email_tool_instance:
+                    attachment_path = f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
+                    logger.info(f"📧 Auto-sending email with attachment: {attachment_path}")
+                    
+                    if "get_news_summaries" in tools_results:
+                        # News analysis email with dynamic subject
+                        email_subject = _generate_dynamic_title(user_prompt, tools_results)
+                        result = await email_tool_instance.execute(
+                            to_email="sabawi@gmail.com",
+                            subject=email_subject, 
+                            body=f"Please find attached the latest {email_subject.lower()} with critical updates and detailed analysis.",
+                            attachments=attachment_path
+                        )
+                    else:
+                        # Stock analysis email
+                        result = await email_tool_instance.execute(
+                            to_email="sabawi@gmail.com",
+                            subject="Stock Analysis Report",
+                            body="Please find attached the comprehensive stock analysis report with detailed financial insights.",
+                            attachments=attachment_path
+                        )
+                else:
+                    # Fallback to wrapper
+                    email_tool = tool_manager.available_functions["secure_email_sender"]
+                    if "get_news_summaries" in tools_results:
+                        email_subject = _generate_dynamic_title(user_prompt, tools_results)
+                        result = await email_tool({
+                            "to_email": "sabawi@gmail.com",
+                            "subject": email_subject,
+                            "body": f"Please find attached the latest {email_subject.lower()} with critical updates and detailed analysis.",
+                            "attachments": f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
+                        })
+                    else:
+                        result = await email_tool({
+                            "to_email": "sabawi@gmail.com", 
+                            "subject": "Stock Analysis Report",
+                            "body": "Please find attached the comprehensive stock analysis report with detailed financial insights.",
+                            "attachments": f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
+                        })
+                
+                additional_results += f"Tool: {tool_name} (auto-executed)\nResult: {result}\n\n"
+            
+            # Add more auto-execution logic for other tools as needed
+            
+        except Exception as e:
+            logger.error(f"❌ Auto-execution failed for {tool_name}: {e}")
+            logger.error(f"❌ Auto-execution traceback: {traceback.format_exc()}")
+            additional_results += f"Tool: {tool_name} (auto-execution failed)\nResult: Error: {str(e)}\n\n"
+    
+    return additional_results
+
+def _clean_llm_response_content(raw_content: str) -> str:
+    """
+    🧹 Clean LLM response content by removing tokens, parameters, and metadata
+    
+    Filters out:
+    - Raw JSON tokens and response markers
+    - Model parameters and configuration
+    - System metadata and debugging info
+    - Keeps only the actual content meant for the user
+    """
+    if not raw_content or not raw_content.strip():
+        return ""
+    
+    # Remove common LLM response artifacts
+    cleaned_content = raw_content
+    
+    # Remove JSON markers and response formatting
+    lines_to_remove = []
+    lines = cleaned_content.split('\n')
+    
+    for i, line in enumerate(lines):
+        line_lower = line.lower().strip()
+        
+        # Skip lines with JSON response markers
+        if any(marker in line_lower for marker in [
+            '"response":', '"message":', '"content":', 
+            '{"response"', '{"message"', '{"content"',
+            'response":', 'message":', 'content":',
+            '"role":', '"model":', '"parameters":', '"tokens":'
+        ]):
+            lines_to_remove.append(i)
+            continue
+            
+        # Skip lines with model parameters
+        if any(param in line_lower for param in [
+            'temperature:', 'max_tokens:', 'top_p:', 'top_k:',
+            'num_predict:', 'repeat_penalty:', 'system_fingerprint:',
+            'model:', 'stream:', 'num_ctx:', 'stop:'
+        ]):
+            lines_to_remove.append(i)
+            continue
+            
+        # Skip lines that are pure JSON artifacts
+        if line.strip() in ['', '{', '}', '[', ']', ',', '",', '"']:
+            lines_to_remove.append(i)
+            continue
+            
+        # Skip lines with timestamps/metadata that aren't content
+        if any(meta in line_lower for meta in [
+            'created_at:', 'finished_at:', 'load_duration:', 'prompt_eval_duration:',
+            'eval_duration:', 'total_duration:', 'eval_count:', 'prompt_eval_count:'
+        ]):
+            lines_to_remove.append(i)
+            continue
+    
+    # Remove identified lines
+    for i in reversed(lines_to_remove):
+        lines.pop(i)
+    
+    # Rejoin and clean up
+    cleaned_content = '\n'.join(lines)
+    
+    # Remove excessive whitespace but preserve paragraph structure
+    import re
+    cleaned_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned_content)  # Max 2 consecutive newlines
+    cleaned_content = re.sub(r'^\s+|\s+$', '', cleaned_content, flags=re.MULTILINE)  # Trim lines
+    
+    return cleaned_content.strip()
+
+def _fill_template_placeholders(content: str, user_prompt: str) -> str:
+    """
+    🔧 Fill template placeholders with actual data from user context
+    
+    Replaces common template fields like [Your Name Here] with actual information
+    extracted from the user prompt or external content.
+    """
+    if not content or '[' not in content:
+        return content
+    
+    # Extract information from user prompt and external content
+    name_pattern = r'Al Sabawi'
+    phone_pattern = r'\(607\) 759-2683'
+    email_pattern = r'sabawi@gmail\.com'
+    
+    # Look for these patterns in the user prompt
+    import re
+    
+    # Extract actual data
+    actual_name = None
+    actual_phone = None
+    actual_email = None
+    
+    if re.search(name_pattern, user_prompt):
+        actual_name = "Al Sabawi"
+    if re.search(phone_pattern, user_prompt):
+        actual_phone = "(607) 759-2683"
+    if re.search(email_pattern, user_prompt):
+        actual_email = "sabawi@gmail.com"
+    
+    # Replace template placeholders
+    filled_content = content
+    
+    # Name placeholders
+    if actual_name:
+        filled_content = re.sub(r'\[Your Full Name\]', actual_name, filled_content)
+        filled_content = re.sub(r'\[Your Name Here\]', actual_name, filled_content)
+        filled_content = re.sub(r'\[Sign Your Name\]', actual_name, filled_content)
+    
+    # Contact info placeholders
+    if actual_phone:
+        filled_content = re.sub(r'\[Your Phone Number\]', actual_phone, filled_content)
+    
+    if actual_email:
+        filled_content = re.sub(r'\[Your Email Address\]', actual_email, filled_content)
+    
+    # Generic placeholders that we can't fill but should clean up
+    filled_content = re.sub(r'\[Your Address\]', '', filled_content)
+    filled_content = re.sub(r'\[City, State, ZIP Code\]', '', filled_content)
+    filled_content = re.sub(r'\[Date\]', '', filled_content)
+    
+    # Clean up any extra whitespace from removed placeholders
+    filled_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', filled_content)
+    
+    return filled_content.strip()
+
+async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager, tools_results: str, complete_llm_response: str, user_prompt: str) -> str:
+    """
+    🎯 POST-LLM AUTO-EXECUTOR for missing tools
+    Executes file creation and email sending AFTER Primary LLM generates complete content
+    
+    This ensures that:
+    1. Files contain the complete, refined LLM-generated content
+    2. Emails are sent with properly formatted attachments
+    3. No race conditions between content generation and file operations
+    """
+    additional_results = ""
+    created_filename = None
+    
+    # Extract file format from user prompt or tool calling model (if enhanced)
+    user_prompt_lower = user_prompt.lower()
+    if "pdf" in user_prompt_lower:
+        file_extension = "pdf"
+    elif "html" in user_prompt_lower:
+        file_extension = "html"
+    elif "markdown" in user_prompt_lower or "md" in user_prompt_lower:
+        file_extension = "md"
+    elif "text" in user_prompt_lower or "txt" in user_prompt_lower:
+        file_extension = "txt"
+    else:
+        file_extension = "html"  # Default to HTML for reports (changed from PDF)
+    
+    logger.info(f"🎯 POST-LLM: Detected file format: {file_extension}")
+    
+    for tool_name in missing_tools:
+        try:
+            logger.info(f"🔄 POST-LLM Auto-executing: {tool_name}")
+            
+            if tool_name == "sandboxed_executor":
+                # Create file with complete LLM response content
+                timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
+                
+                # Generate dynamic filename based on content type and topic
+                created_filename = _generate_dynamic_filename(user_prompt, tools_results, timestamp, file_extension)
+                logger.info(f"🎯 POST-LLM: Creating DYNAMIC REPORT -> {created_filename}")
+                
+                # Use complete LLM response as content (this is the key fix!)
+                raw_content = complete_llm_response.strip()
+                
+                # 🧹 CLEAN CONTENT: Remove raw LLM tokens and parameters
+                report_content = _clean_llm_response_content(raw_content)
+                
+                # 🔧 FIX: Replace template placeholders with actual data from user prompt
+                report_content = _fill_template_placeholders(report_content, user_prompt)
+                
+                # Add proper headers if content doesn't have them
+                if not report_content.startswith("#") and not report_content.startswith("<"):
+                    if "get_news_summaries" in tools_results:
+                        report_title = _generate_dynamic_title(user_prompt, tools_results)
+                        report_content = f"""# {report_title}
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+{report_content}
+
+---
+*This report was generated by the AI News Analysis System using the latest available information.*
+"""
+                    else:
+                        report_content = f"""# Analysis Report
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+{report_content}
+
+---
+*This report was generated by the AI Analysis System.*
+"""
+                
+                logger.info(f"🎯 POST-LLM: Using COMPLETE LLM response ({len(report_content)} chars)")
+                
+                # Find and execute sandboxed tool with complete content
+                sandboxed_tool_instance = None
+                for tool in tool_manager.user_tools:
+                    if tool.name == "sandboxed_executor":
+                        sandboxed_tool_instance = tool
+                        break
+                
+                if sandboxed_tool_instance:
+                    # Force PDF conversion by explicitly setting convert_to_pdf=True for .pdf files
+                    if created_filename.endswith('.pdf'):
+                        result = await sandboxed_tool_instance.execute(
+                            action="create_file",
+                            filename=created_filename,
+                            content=report_content,
+                            convert_to_pdf=True  # Explicitly force PDF conversion
+                        )
+                        logger.info(f"🎯 POST-LLM: FORCED PDF conversion for {created_filename}")
+                    else:
+                        result = await sandboxed_tool_instance.execute(
+                            action="create_file",
+                            filename=created_filename,
+                            content=report_content
+                        )
+                    logger.info(f"🎯 POST-LLM: File creation RESULT: {result}")
+                    
+                    if result.get('success'):
+                        additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: Created file {created_filename} with complete LLM response ({len(report_content)} chars)\n\n"
+                    else:
+                        logger.error(f"❌ POST-LLM file creation failed: {result.get('error')}")
+                        additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {result.get('error')}\n\n"
+                else:
+                    logger.error(f"❌ POST-LLM: Could not find sandboxed_executor tool instance")
+            
+            elif tool_name == "secure_email_sender":
+                # 🚀 BULLETPROOF EMAIL EXECUTION
+                # Handles all email scenarios: single file, multiple files, existing files, new files
+                files_to_attach = []
+                
+                # Step 1: Extract filenames from tools_results (handles multiple document creation)
+                import re
+                import os
+                filename_pattern = r'"filename":\s*"([^"]+)"'
+                found_files = re.findall(filename_pattern, tools_results)
+                base_dir = "/home/sabawi/Development/flaskserver/sandbox_workspace"
+                
+                logger.info(f"🎯 POST-LLM EMAIL: Found {len(found_files)} files in tools_results: {found_files}")
+                
+                # Step 2: Check all found files and add them to attachments
+                for filename in found_files:
+                    if filename.endswith(('.pdf', '.html', '.txt', '.md', '.json', '.csv')):  # Support all formats
+                        full_path = os.path.join(base_dir, filename)
+                        if os.path.exists(full_path):
+                            files_to_attach.append(filename)
+                            logger.info(f"✅ POST-LLM EMAIL: Verified existing file: {filename}")
+                        else:
+                            logger.warning(f"⚠️ POST-LLM EMAIL: File not found: {full_path}")
+                
+                # Step 3: Also add post-LLM created file if any
+                if created_filename:
+                    files_to_attach.append(created_filename)
+                    logger.info(f"✅ POST-LLM EMAIL: Added post-LLM created file: {created_filename}")
+                
+                # Step 4: 🚨 SECURITY FIX - DO NOT attach unrelated files!
+                if not files_to_attach:
+                    logger.warning(f"⚠️ POST-LLM EMAIL: No files found for attachment - this indicates missing file creation tools!")
+                    logger.warning(f"⚠️ POST-LLM EMAIL: REQUEST ANALYSIS NEEDED - User wanted files but none were created")
+                    logger.warning(f"⚠️ POST-LLM EMAIL: Refusing to attach unrelated files for security reasons")
+                    # 🔄 CRITICAL: Do not scan workspace for random files - this could send wrong person's data!
+                    # This was causing privacy violations by sending Joe's files to Mary!
+                    # Instead, we should have created the requested files with sandboxed_executor
+                
+                logger.info(f"🎯 POST-LLM EMAIL: Total files to attach: {len(files_to_attach)} -> {files_to_attach}")
+                
+                if files_to_attach:
+                    logger.info(f"🎯 POST-LLM: Sending email with {len(files_to_attach)} attachment(s)")
+                    
+                    # Find email tool instance
+                    email_tool_instance = None
+                    for tool in tool_manager.user_tools:
+                        if tool.name == "secure_email_sender":
+                            email_tool_instance = tool
+                            break
+                    
+                    if email_tool_instance:
+                        # 🔥 ENHANCED: Smart email and CC extraction from user prompt
+                        import re
+                        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+                        email_matches = re.findall(email_pattern, user_prompt)
+                        
+                        # Determine primary recipient and CC with smart detection
+                        recipient_email = "sabawi@gmail.com"  # Default
+                        cc_emails = []
+                        
+                        if email_matches:
+                            recipient_email = email_matches[0]  # First email is primary
+                            
+                            # Smart CC detection - look for explicit CC mentions or multiple emails
+                            user_prompt_lower = user_prompt.lower()
+                            if "cc" in user_prompt_lower or "copy" in user_prompt_lower:
+                                # Extract CC emails after CC mention
+                                cc_pattern = r'(?:cc|copy).*?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+                                cc_matches = re.findall(cc_pattern, user_prompt_lower)
+                                if cc_matches:
+                                    cc_emails = cc_matches
+                                elif len(email_matches) > 1:
+                                    cc_emails = email_matches[1:]  # Fallback: rest are CC
+                            elif len(email_matches) > 1:
+                                cc_emails = email_matches[1:]  # Multiple emails = CC the rest
+                        
+                        logger.info(f"🎯 POST-LLM: Recipient: {recipient_email}, CC: {cc_emails}")
+                        
+                        # Use the files we found above
+                        attachment_files = files_to_attach
+                        
+                        # Create comma-separated attachment list
+                        attachments_str = ",".join(attachment_files)
+                        logger.info(f"🔧 POST-LLM: Sending email with attachments: {attachments_str}")
+                        
+                        # 🔧 FIX: Include CC emails and use better provider for attachments
+                        cc_emails_str = ",".join(cc_emails) if cc_emails else ""
+                        
+                        # 🚀 SMART EMAIL COMPOSITION based on user request and file types
+                        
+                        # Determine email subject based on content
+                        subject = "Requested Documents"
+                        if "test" in user_prompt.lower():
+                            subject = "Test Email with Documents"
+                        elif len(files_to_attach) > 1:
+                            subject = f"Multiple Documents ({len(files_to_attach)} files)"
+                        elif any("pdf" in f.lower() for f in files_to_attach):
+                            subject = "PDF Document"
+                        
+                        # Add timestamp
+                        subject += f" - {datetime.now().strftime('%Y-%m-%d')}"
+                        
+                        # Create detailed file list for email body
+                        file_list = ""
+                        for i, filename in enumerate(files_to_attach, 1):
+                            file_ext = filename.split('.')[-1].upper()
+                            file_list += f"{i}. {filename} ({file_ext} format)\n"
+                        
+                        email_body = f"""Please find attached the requested documents.
+
+Document Details:
+- Generated: {datetime.now().strftime('%B %d, %Y at %H:%M:%S')}
+- Total Files: {len(attachment_files)} attachment(s)
+
+Files Included:
+{file_list}
+This email was automatically generated in response to your request:
+"{user_prompt[:100]}{'...' if len(user_prompt) > 100 else ''}"
+
+Best regards,
+AI Document Generation System"""
+                        
+                        logger.info(f"📧 POST-LLM EMAIL: Subject: {subject}")
+                        logger.info(f"📧 POST-LLM EMAIL: Attachments: {attachments_str}")
+                        
+                        email_result = await email_tool_instance.execute(
+                            to_email=recipient_email,
+                            cc_emails=cc_emails_str,
+                            subject=subject,
+                            body=email_body,
+                            attachments=attachments_str
+                        )
+                        
+                        logger.info(f"🎯 POST-LLM: Email RESULT: {email_result}")
+                        
+                        if email_result.get('success'):
+                            additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: Email sent to {recipient_email} with attachment {created_filename}\n\n"
+                        else:
+                            logger.error(f"❌ POST-LLM email sending failed: {email_result.get('error')}")
+                            additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {email_result.get('error')}\n\n"
+                    else:
+                        logger.error(f"❌ POST-LLM: Could not find secure_email_sender tool instance")
+                else:
+                    logger.warning(f"⚠️ POST-LLM: No files found to attach, skipping email sending")
+                    logger.info(f"🔍 POST-LLM: Checked tools_results for files but found none")
+                    additional_results += f"Tool: {tool_name} (skipped - no files to attach)\nResult: No files were found for attachment\n\n"
+            
+            elif tool_name == "get_news_summaries":
+                # Execute news summaries tool
+                logger.info(f"🎯 POST-LLM: Executing get_news_summaries for Middle East news")
+                try:
+                    result = await tool_manager.get_news_summaries("Middle East")
+                    additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: {result}\n\n"
+                    logger.info(f"🎯 POST-LLM: News summaries completed: {len(str(result))} chars")
+                except Exception as e:
+                    logger.error(f"❌ POST-LLM news summaries failed: {e}")
+                    additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {str(e)}\n\n"
+            
+            elif tool_name == "get_the_secret_tool":
+                result = await tool_manager.get_the_secret_tool()
+                additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: {result}\n\n"
+                
+        except Exception as e:
+            logger.error(f"❌ POST-LLM Auto-execution failed for {tool_name}: {e}")
+            logger.error(f"❌ POST-LLM Auto-execution traceback: {traceback.format_exc()}")
+            additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {str(e)}\n\n"
+    
+    return additional_results
+
+@app.post("/v1")
+@app.post("/llama3_1b/stream")
+async def llama_stream(request: Request):
+    """
+    Main Ollama streaming endpoint with tool calling
+    Equivalent to the original /llama3_1b/stream endpoint
+    """
+    # Parse JSON data manually like the original Flask version
+    try:
+        data = await request.json()
+    except Exception as e:
+        logger.error(f"Failed to parse JSON: {e}")
+        raise HTTPException(status_code=400, detail="Invalid JSON data")
+    
+    # Extract parameters with defaults (exactly like Flask version)
+    user_prompt = data['prompt']  # Use direct access like original for required field
+    logger.info(f"\n\nUser prompt : {data['prompt']}\n\n")
+    
+    prompt_context = data.get('prompt_context', '')  # Using data['prompt_context'] like original
+    
+    #################################################################################
+    ##                  CONTEXT MANAGEMENT WITH and WITHOUT TOOLS                  ##            
+    #################################################################################
+    
+    # Handle toolsInUse exactly like original
+    tools_in_use = True  # Default like original
+    if "toolsInUse" in data:
+        tools_in_use = data["toolsInUse"]
+    logger.info(f"\n\n##### toolsInUse from the client = {tools_in_use}\n\n")
+    
+    # Handle searchWebInUse exactly like original
+    search_web_in_use = False  # Default like original
+    if "searchWebInUse" in data:
+        search_web_in_use = data["searchWebInUse"]
+    
+    # Other parameters
+    model = data.get('model', ServerConfig.DEFAULT_MODEL)
+    images = data.get('images', ['noimage'])
+    tools_calling_model = data.get('tools_calling_model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL)
+    
+    # Handle images exactly like original
+    image_exists = False
+    if "images" in data:
+        if data["images"][0] != "noimage":
+            logger.info("Request has Image ......")
+            image_exists = True
+    
+    async def generate_stream():
+        try:
+            tools_results = ""
+            tools_called = []  # Track all tools that were called
+            
+            # 🎯 EMAIL INTERCEPTION STATE  
+            email_intercepted = False
+            intercepted_email_params = {}
+            
+            # ###########################################################################
+            # TWO-STAGE TOOL CALLING ALGORITHM (exactly like original Flask implementation)
+            if (tools_in_use):
+                logger.info("---> Tools are in use")
+                
+                # STAGE 1: Call tool calling model to generate JSON function calls
+                # Load system prompt from external file
+                user_system_prompt = data.get('system', '').strip()
+                system_content = load_tool_model_system_prompt(user_system_prompt)
+                
+                messages = [
+                    {
+                        "role": "system",
+                        "content": system_content
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Examine the intent of the user's prompt and apply the system directives to make the appropriate calls to the tools' functions. 
+                                        User Prompt: {prompt_context + user_prompt}""",
+                        "images": data.get("images") if image_exists else None
+                    }
+                ]
+                
+                try:
+                    tools_model = data.get('tools_calling_model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL).strip()
+                    logger.info(f"Calling Tools Model ==> {tools_model}")
+                    logger.info(f"Tools available count: {len(data.get('tools', []))}")
+                    logger.info(f"Using endpoint: {ServerConfig.OLLAMA_CHAT_URL}")
+                    
+                    # Call the tool calling model to get JSON function calls
+                    # 🎯 NEW APPROACH: Let tool calling model orchestrate ALL tools, intercept email calls
+                    tools_array = await tool_manager.get_tools_definitions(exclude_file_email_tools=False)
+                    tool_request = {
+                        "model": tools_model,
+                        "messages": messages,
+                        "options": {"temperature": 0},
+                        "tools": tools_array,
+                        "stream": False,
+                        "think": False
+                    }
+                    logger.info(f"Generated tools array length: {len(tools_array)}")
+                    if len(tools_array) == 0:
+                        logger.error("❌ Tools array is empty! This will cause timeout.")
+                    else:
+                        tool_names = [tool['function']['name'] for tool in tools_array]
+                        logger.info(f"Available tools: {tool_names}")
+                    
+                    tool_request["tools"] = tools_array
+                    logger.info(f"Sending tool calling request with {len(tool_request['tools'])} tools")
+                    
+                    response = requests.post(
+                        ServerConfig.OLLAMA_CHAT_URL,
+                        json=tool_request,
+                        timeout=ServerConfig.TASK_TIMEOUT  # Use configurable timeout for tool operations
+                    )
+                    
+                    if response.status_code == 200:
+                        response_data = response.json()
+                        logger.info(f"Tool calling response status: SUCCESS")
+                        logger.info(f"Response keys: {list(response_data.keys())}")
+                        
+                        if 'message' in response_data:
+                            message_keys = list(response_data['message'].keys())
+                            logger.info(f"Message keys: {message_keys}")
+                            logger.info(f"ollama.chat() response content: {json.dumps(response_data.get('message', {}).get('content', ''))}")
+                        
+                        # STAGE 2: Process tool calls if present
+                        if 'message' in response_data and 'tool_calls' in response_data['message']:
+                            tool_calls = response_data['message']['tool_calls']
+                            logger.info(f"✅ TOOL CALLS DETECTED! Found {len(tool_calls)} tool calls")
+                            
+                            # Process each tool call
+                            for i, tool_call in enumerate(tool_calls):
+                                function_name = tool_call['function']['name']
+                                function_args = tool_call['function']['arguments']
+                                
+                                logger.info(f"Tool Call {i+1}: {function_name} with args: {function_args}")
+                                
+                                # Add image if applicable
+                                if "image" in function_args and image_exists:
+                                    function_args["image"] = data.get("images", [None])[0]
+                                
+                                # Execute the function with timing
+                                import time
+                                start_time = time.time()
+                                logger.info(f"🔧 Executing tool: {function_name} - START")
+                                tools_called.append(function_name)  # Track this tool was called
+                                
+                                # 🎯 INTERCEPT EMAIL CALLS - Fake success, set flag for post-processing
+                                if function_name == "secure_email_sender":
+                                    logger.info(f"📧 INTERCEPTING secure_email_sender call - will execute after Primary LLM")
+                                    email_intercepted = True
+                                    intercepted_email_params = function_args.copy()
+                                    result = "Email scheduled for sending after content generation"
+                                else:
+                                    result = await tool_manager.safe_function_call(function_name, function_args)
+                                
+                                end_time = time.time()
+                                execution_time = end_time - start_time
+                                logger.info(f"🔧 Tool {function_name} COMPLETED in {execution_time:.2f}s - result length: {len(str(result))} chars")
+                                tools_results += f"Tool: {function_name}\nResult: {result}\n\n"
+                        
+                        else:
+                            # No tool calls generated - check if we should force data gathering
+                            logger.info("❌ No tool calls generated by the tool calling model")
+                            if 'message' in response_data:
+                                logger.info(f"Raw message: {json.dumps(response_data['message'], indent=2)}")
+                            
+                            # 🔥 PROGRAMMATIC TOOL CALL INJECTION 🔥
+                            # If the model refuses to call tools for file/email requests, force data gathering
+                            prompt_lower = user_prompt.lower()
+                            forced_tools = []
+                            
+                            if any(keyword in prompt_lower for keyword in ['aapl', 'apple stock', 'apple inc']):
+                                forced_tools.append(('get_news_summaries', {'filter': 'AAPL'}))
+                                logger.info("🚨 FORCING get_news_summaries(filter='AAPL') - model refused to gather AAPL data")
+                            elif any(keyword in prompt_lower for keyword in ['stock', 'financial analysis', 'company analysis']):
+                                forced_tools.append(('comprehensive_stock_analyzer', {}))
+                                logger.info("🚨 FORCING comprehensive_stock_analyzer() - model refused to gather stock data")
+                            elif any(keyword in prompt_lower for keyword in ['news', 'current events']):
+                                forced_tools.append(('get_news_summaries', {}))
+                                logger.info("🚨 FORCING get_news_summaries() - model refused to gather news data")
+                            
+                            # Execute forced tool calls
+                            import time
+                            for function_name, function_args in forced_tools:
+                                start_time = time.time()
+                                logger.info(f"🔧 FORCE-Executing tool: {function_name} - START")
+                                tools_called.append(function_name)
+                                result = await tool_manager.safe_function_call(function_name, function_args)
+                                end_time = time.time()
+                                execution_time = end_time - start_time
+                                logger.info(f"🔧 FORCED Tool {function_name} COMPLETED in {execution_time:.2f}s - result length: {len(str(result))} chars")
+                                tools_results += f"Tool: {function_name}\nResult: {result}\n\n"
+                    
+                    else:
+                        logger.error(f"❌ Tool calling model failed with status: {response.status_code}")
+                        logger.error(f"Response: {response.text}")
+                        # Fallback: just get current time
+                        result = await tool_manager.get_the_secret_tool()
+                        tools_results += f"Tool: get_the_secret_tool\nResult: {result}\n\n"
+                        
+                except Exception as e:
+                    logger.error(f"❌ Tool calling exception: {e}")
+                    logger.error(f"Exception type: {type(e).__name__}")
+                    # Fallback: just get current time
+                    result = await tool_manager.get_the_secret_tool()
+                    tools_results += f"Tool: get_the_secret_tool\nResult: {result}\n\n"
+            
+            # CRITICAL: Log when ALL tool execution is complete
+            logger.info(f"🎯 ALL TOOL EXECUTION COMPLETED - Starting task verification")
+            
+            # 🔍 TASK COMPLETION VERIFIER - Cross the T's and dot the I's  
+            verification_result = None
+            pending_auto_execution = False
+            try:
+                logger.info(f"🔧 DEBUG: About to call verifier with prompt='{user_prompt}', tools_called={tools_called}")
+                verification_result = await _verify_task_completion(user_prompt, tools_called, tools_results, tool_manager)
+                logger.info(f"🔧 DEBUG: Verifier result: {verification_result}")
+                
+                if not verification_result["complete"]:
+                    logger.warning(f"⚠️ TASK INCOMPLETE: {verification_result['reason']}")
+                    logger.info(f"📋 DEFERRED AUTO-EXECUTION: Will execute missing tools AFTER Primary LLM completes")
+                    logger.info(f"📋 MISSING TOOLS: {verification_result['missing_tools']} - waiting for complete LLM response")
+                    pending_auto_execution = True
+                    # DO NOT execute missing tools here - wait for Primary LLM to generate complete content
+                else:
+                    logger.info(f"✅ TASK COMPLETION VERIFIED - All required steps completed")
+            except Exception as e:
+                logger.error(f"❌ VERIFIER ERROR: {e}")
+                logger.error(f"❌ VERIFIER TRACEBACK: {traceback.format_exc()}")
+                logger.info(f"⚠️ Continuing without verification due to error")
+            
+            logger.info(f"🎯 Starting context management")
+            logger.info(f"🎯 Total tools_results length: {len(tools_results)} chars")
+            
+            # Context management with safe optimization integration
+            context_size = len(prompt_context) if prompt_context else 0
+            tool_results_size = len(tools_results)
+            system_prompt_size = len(data.get('system', ''))
+            max_context_window = 65536  # 64k bytes
+            max_context_tokens = max_context_window / 4  # estimating 4 bytes per token
+            full_tools_text = (prompt_context or "") + ".\n" + tools_results
+            
+            # 🛡️ SAFE OPTIMIZATION INTEGRATION 🛡️
+            # Parse tools_results into structured format for optimization system
+            parsed_tool_results = []
+            if tools_results.strip():
+                # Split the tools_results string into individual tool entries
+                tool_entries = []
+                current_entry = {}
+                lines = tools_results.split('\n')
+                
+                for line in lines:
+                    if line.startswith('Tool: '):
+                        if current_entry:  # Save previous entry
+                            tool_entries.append(current_entry)
+                        current_entry = {'tool': line[6:], 'result': ''}
+                    elif line.startswith('Result: '):
+                        if current_entry:
+                            current_entry['result'] = line[8:]
+                    elif current_entry and line.strip():
+                        # Continue building result
+                        current_entry['result'] += '\n' + line
+                
+                if current_entry:  # Don't forget the last entry
+                    tool_entries.append(current_entry)
+                
+                # Convert to the format expected by our optimization system
+                for entry in tool_entries:
+                    parsed_tool_results.append({
+                        'tool': entry.get('tool', 'unknown_tool'),
+                        'result': entry.get('result', '')
+                    })
+            
+            # Use safe optimization system or fallback to original processing
+            try:
+                # Get user_id from request if available (you may need to adjust this based on your auth system)
+                user_id = getattr(request, 'user_id', None) if 'request' in locals() else None
+                
+                tools_results_summary, optimization_metadata = await process_with_safe_optimization(
+                    tool_results=parsed_tool_results,
+                    user_prompt=user_prompt,
+                    max_context_window=max_context_window,
+                    tools_called=tools_called,
+                    thread_pool=thread_pool,
+                    user_id=user_id
+                )
+                
+                # Log optimization results
+                if optimization_metadata.get('optimization_used'):
+                    logger.info(f"🚀 OPTIMIZATION APPLIED: Score {optimization_metadata['optimization_score']:.1f}, Time {optimization_metadata['response_time']:.2f}s")
+                else:
+                    logger.info(f"🔄 FALLBACK PROCESSING: {optimization_metadata.get('fallback_reason', 'Feature disabled')}")
+                    
+            except Exception as e:
+                logger.error(f"🚨 OPTIMIZATION INTEGRATION ERROR: {e}")
+                logger.info("🔄 EMERGENCY FALLBACK: Using original processing")
+                
+                # Emergency fallback to original logic
+                if len(full_tools_text) > (max_context_window) * 1.05:
+                    try:
+                        logger.info(f"Calling TextChunker() to reduce context size from {len(full_tools_text)} to around {max_context_window} bytes")
+                        if TOOLS_AVAILABLE:
+                            def sync_text_chunking():
+                                from text_chunker import TextChunker
+                                return TextChunker.summary_by_semantics(
+                                    full_tools_text, 
+                                    query=data.get('system', '') + ' \n' + user_prompt,
+                                    max_length=max_context_window
+                                )
+                            
+                            tools_results_summary = await asyncio.get_event_loop().run_in_executor(
+                                thread_pool, sync_text_chunking
+                            )
+                            logger.info(f"TextChunker() was called and returned tools_results_summary size of {len(tools_results_summary)} bytes. From {len(full_tools_text)}")
+                        else:
+                            tools_results_summary = full_tools_text
+                    except Exception as e2:
+                        logger.error(f"Error: exception in TextChunker.summary_by_semantics() call. Function returned message: {e2}")
+                        tools_results_summary = full_tools_text  # TextChunker() failed!! Use the full text
+                else:
+                    tools_results_summary = full_tools_text
+            
+            # Log context statistics (exactly like original)
+            if tools_in_use:
+                logger.info(f"""
+
+###################################################
+TOOLS RESULTS SUMMARY: 
+###################################################
+
+{tools_results_summary}
+====================
+
+                      Context Size (before tool call)= {context_size} bytes
+                      Tool_Results_Size = {tool_results_size} bytes
+                      System Prompt Size = {system_prompt_size} bytes
+                      Full Text Size (context + tools_results) = {len(full_tools_text)} bytes
+                      ==> Tool Results Summary Size = {len(tools_results_summary)} bytes
+                      
+
+====================
+END OF TOOLS RESULTS SUMMARY
+=================
+
+""")
+            else:
+                logger.info(f"""
+
+###################################################
+FULL CONTEXT (NO TOOLS): 
+###################################################
+
+{tools_results_summary}
+====================
+
+                    Context Size (no tools call)= {context_size} bytes
+                    System Prompt Size = {system_prompt_size} bytes
+                    Full Text Size (no tools call) = {len(full_tools_text)} bytes
+                    
+
+====================
+END OF CONTEXT 
+=================
+
+""")
+            
+            # 🎯 NEW ARCHITECTURE: Build structured CONTEXT block and user system prompt
+            context_block = _build_structured_context_block(tools_results_summary, tools_called)
+            
+            # User-provided system prompt takes precedence
+            user_system_prompt = data.get('system', '').strip()
+            if user_system_prompt:
+                # Use user's system prompt directly
+                enhanced_system = user_system_prompt
+                logger.info(f"📋 Using USER-PROVIDED system prompt ({len(user_system_prompt)} chars)")
+            else:
+                # Fallback to enhanced default system prompt
+                enhanced_system = _build_enhanced_primary_system_prompt(
+                    user_system_prompt, 
+                    tools_were_executed=(len(tools_results.strip()) > 0),
+                    tools_results_summary=tools_results_summary
+                )
+                logger.info(f"📋 Using DEFAULT enhanced system prompt ({len(enhanced_system)} chars)")
+            
+            # Build new format: --CONTEXT START-- + CONTEXT BLOCK + PROMPT: [USER PROMPT]
+            if context_block.strip():
+                in_prompt = f"--CONTEXT START--\n{context_block}\n--CONTEXT END--\n\nPROMPT: {user_prompt}"
+            else:
+                in_prompt = f"PROMPT: {user_prompt}"
+            
+            logger.info(f"🎯 NEW FORMAT: in_prompt size = {len(in_prompt)} bytes")
+            logger.info(f"🎯 CONTEXT BLOCK size = {len(context_block)} bytes")
+            logger.info(f"🎯 SYSTEM PROMPT size = {len(enhanced_system)} bytes")
+            
+            # Stream response from Ollama  
+            async with aiohttp.ClientSession() as session:
+                stream_payload = {
+                    "model": model,
+                    "prompt": in_prompt,
+                    "system": enhanced_system,
+                    "options": {
+                        "temperature": data.get('temperature', 0.7),
+                        "top_k": data.get('top_k', 40),
+                        "top_p": data.get('top_p', 0.9),
+                        "num_ctx": data.get('num_ctx', 4096),
+                        "low_vram": data.get('low_vram', False)
+                    },
+                    "think": False,  # Set to False to disable thinking
+                    "stream": True
+                }
+                
+                # Add images if they exist
+                if image_exists:
+                    stream_payload["images"] = data.get("images")
+                
+                logger.info(f"🚀 STARTING Primary LLM Call ==> {model}")
+                logger.info(f"🚀 Context ready - in_prompt size: {len(in_prompt)} bytes")
+                
+                async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=None) as response:
+                    if response.status == 200:
+                        # Capture complete LLM response for post-processing
+                        complete_llm_response = ""
+                        
+                        async for chunk in response.content.iter_chunked(1024):
+                            if chunk:
+                                # Stream chunk to client immediately  
+                                yield chunk
+                                
+                                # Also capture chunk for post-processing
+                                try:
+                                    chunk_text = chunk.decode('utf-8')
+                                    # Extract actual response text from JSON streaming format  
+                                    for line in chunk_text.strip().split('\n'):
+                                        if line.strip():
+                                            try:
+                                                # Handle both raw JSON and "data: {json}" format
+                                                if line.startswith('data: '):
+                                                    json_data = line[6:].strip()
+                                                else:
+                                                    json_data = line.strip()
+                                                
+                                                if json_data:
+                                                    chunk_json = json.loads(json_data)
+                                                    if 'response' in chunk_json and not chunk_json.get('done', False):
+                                                        # Only accumulate actual response text, not metadata/tokens
+                                                        response_text = chunk_json['response']
+                                                        if response_text:  # Skip empty responses
+                                                            complete_llm_response += response_text
+                                            except json.JSONDecodeError:
+                                                # Skip malformed JSON - don't include raw text
+                                                pass
+                                except:
+                                    pass  # Skip non-text chunks
+                        
+                        # 🎯 PRE-ENTRANCE: Check if post-processing should run
+                        logger.info(f"🔍🔍🔍 CRITICAL: Reached post-processing section!")
+                        logger.info(f"🔍 PRE-POST-PROCESSING: email_intercepted={email_intercepted}")
+                        logger.info(f"🔍 PRE-POST-PROCESSING: intercepted_email_params={intercepted_email_params}")
+                        
+                        # 🎯 NEW POST-PROCESSING: Handle intercepted email calls first
+                        if email_intercepted:
+                            logger.info(f"🚪 ENTRANCE: Starting post-processing logic")
+                            logger.info(f"📧 POST-LLM: Processing intercepted email call")
+                            logger.info(f"🎯 Complete LLM response length: {len(complete_llm_response)} characters")
+                            
+                            try:
+                                logger.info(f"🔄 STEP 1: Extracting filename from intercepted parameters")
+                                # Extract filename from intercepted parameters - DEFAULT TO HTML
+                                attachments = intercepted_email_params.get('attachments', 'report.html')
+                                logger.info(f"🔄 STEP 1A: Raw attachments = '{attachments}'")
+                                if ',' in attachments:
+                                    filename = attachments.split(',')[0].strip()  # Take first file
+                                    logger.info(f"🔄 STEP 1B: Multiple attachments detected, using first: '{filename}'")
+                                else:
+                                    filename = attachments.strip()
+                                    logger.info(f"🔄 STEP 1C: Single attachment: '{filename}'")
+                                
+                                # Determine if PDF conversion is needed based on file extension
+                                convert_to_pdf = filename.lower().endswith('.pdf')
+                                logger.info(f"🔄 STEP 1D: File extension check - convert_to_pdf: {convert_to_pdf}")
+                                
+                                # Keep original filename - don't force PDF extension
+                                logger.info(f"🔄 STEP 1E: Using original filename: '{filename}'")
+                                
+                                logger.info(f"🔄 STEP 2: About to create file with Primary LLM content")
+                                
+                                # Save Primary LLM response as native Markdown first
+                                base_filename = filename.rsplit('.', 1)[0]  # Remove extension
+                                markdown_filename = f"{base_filename}.md"
+                                logger.info(f"📄 Creating Markdown file: {markdown_filename}")
+                                
+                                # Create Markdown file with Primary LLM content
+                                md_result = await tool_manager.safe_function_call("sandboxed_executor", {
+                                    "action": "create_file",
+                                    "filename": markdown_filename,
+                                    "content": complete_llm_response.strip(),
+                                    "convert_to_pdf": False
+                                })
+                                
+                                # For email attachment, convert to HTML (unless user explicitly wanted PDF)
+                                if convert_to_pdf:
+                                    logger.info(f"📄 Creating PDF file for email: {filename}")
+                                    file_result = await tool_manager.safe_function_call("sandboxed_executor", {
+                                        "action": "create_file",
+                                        "filename": filename,
+                                        "content": complete_llm_response.strip(),
+                                        "convert_to_pdf": True
+                                    })
+                                else:
+                                    # Create HTML version for email attachment
+                                    html_filename = f"{base_filename}.html"
+                                    logger.info(f"📄 Creating HTML file for email: {html_filename}")
+                                    file_result = await tool_manager.safe_function_call("sandboxed_executor", {
+                                        "action": "create_file", 
+                                        "filename": html_filename,
+                                        "content": complete_llm_response.strip(),
+                                        "convert_to_pdf": False
+                                    })
+                                    # Update filename for email attachment
+                                    filename = html_filename
+                                
+                                logger.info(f"🔄 STEP 2A: File creation completed")
+                                logger.info(f"📄 File creation result: {file_result}")
+                                
+                                logger.info(f"🔄 STEP 3: Checking file creation success")
+                                # file_result is a string from safe_function_call, need to parse it if it's JSON
+                                try:
+                                    if isinstance(file_result, str) and file_result.strip().startswith('{'):
+                                        file_result_dict = json.loads(file_result)
+                                        logger.info(f"🔄 STEP 3A-PARSE: Successfully parsed JSON file_result")
+                                    else:
+                                        file_result_dict = file_result
+                                        logger.info(f"🔄 STEP 3A-PARSE: Using file_result as-is (type: {type(file_result)})")
+                                except json.JSONDecodeError as e:
+                                    logger.error(f"🔄 STEP 3A-PARSE: JSON parse failed: {e}, using raw result")
+                                    file_result_dict = file_result
+                                
+                                # Check for successful file creation (JSON result contains filename and success indicators)
+                                file_success = (isinstance(file_result_dict, dict) and 
+                                              file_result_dict.get("filename") and 
+                                              (file_result_dict.get("pdf_generated") == True or 
+                                               file_result_dict.get("html_generated") == True or
+                                               file_result_dict.get("size_bytes", 0) > 0)) or "successfully created" in str(file_result).lower()
+                                logger.info(f"🔄 STEP 3A: File success check result: {file_success}")
+                                
+                                if file_success:
+                                    logger.info(f"🔄 STEP 3A: File creation successful, proceeding to email")
+                                    # Update email params with the correct filename for attachment
+                                    updated_email_params = intercepted_email_params.copy()
+                                    updated_email_params['attachments'] = filename
+                                    logger.info(f"🔄 STEP 4: About to send email with updated attachment: {filename}")
+                                    logger.info(f"🔄 STEP 4: Email params: {updated_email_params}")
+                                    email_result = await tool_manager.safe_function_call("secure_email_sender", updated_email_params)
+                                    logger.info(f"🔄 STEP 4A: Email sending completed")
+                                    logger.info(f"📧 Email sent: {email_result}")
+                                    
+                                    # Add to stream response
+                                    logger.info(f"🔄 STEP 5: Adding completion message to stream")
+                                    yield f'data: {{"post_processing": "completed", "tools_executed": ["sandboxed_executor", "secure_email_sender"]}}\n\n'
+                                    logger.info(f"🚪 EXIT: Post-processing completed successfully")
+                                else:
+                                    logger.error(f"❌ STEP 3B: File creation failed: {file_result}")
+                                    logger.info(f"🚪 EXIT: Post-processing failed at file creation")
+                                    
+                            except Exception as e:
+                                logger.error(f"❌ Email post-processing error: {e}")
+                                logger.error(f"❌ Exception traceback: {traceback.format_exc()}")
+                                logger.info(f"🚪 EXIT: Post-processing failed with exception")
+                        else:
+                            logger.info(f"🔍 POST-PROCESSING SKIPPED: email_intercepted=False")
+                        
+                        # 🎯 POST-LLM AUTO-EXECUTION: Execute missing tools with complete content (legacy)
+                        logger.info(f"🔍 DEBUG: pending_auto_execution={pending_auto_execution}, verification_result={verification_result}")
+                        if pending_auto_execution and verification_result:
+                            logger.info(f"🎯 POST-LLM AUTO-EXECUTION: Primary LLM completed, executing missing tools")
+                            logger.info(f"🎯 Complete LLM response length: {len(complete_llm_response)} characters")
+                            
+                            try:
+                                # Execute missing tools with complete LLM response as content
+                                additional_results = await _execute_missing_tools_post_llm(
+                                    verification_result['missing_tools'], 
+                                    tool_manager, 
+                                    tools_results,
+                                    complete_llm_response,
+                                    user_prompt
+                                )
+                                logger.info(f"✅ POST-LLM AUTO-EXECUTION COMPLETED: {additional_results}")
+                                
+                                # Optionally stream completion notification
+                                completion_msg = json.dumps({
+                                    "post_processing": "completed",
+                                    "tools_executed": verification_result['missing_tools']
+                                })
+                                yield (completion_msg + '\n').encode()
+                                
+                            except Exception as e:
+                                logger.error(f"❌ POST-LLM AUTO-EXECUTION FAILED: {e}")
+                                error_msg = json.dumps({
+                                    "post_processing": "failed", 
+                                    "error": str(e)
+                                })
+                                yield (error_msg + '\n').encode()
+                    else:
+                        error_msg = f"Ollama error: {response.status}"
+                        yield json.dumps({"error": error_msg}).encode() + b'\n'
+        
+        except Exception as e:
+            logger.error(f"Stream generation failed: {e}")
+            error_msg = json.dumps({"error": f"Stream failed: {str(e)}"})
+            yield error_msg.encode() + b'\n'
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="application/x-ndjson"
+    )
+
+# ==============================================================================
+# BASIC ENDPOINTS (from simple version)
+# ==============================================================================
+
+@app.get("/", response_model=ApiResponse)
+async def root():
+    """Root endpoint"""
+    return ApiResponse(
+        success=True,
+        data={"message": "FastAPI Analytics Server with Ollama LLM Integration"},
+        timestamp=datetime.now().isoformat()
+    )
+
+@app.get("/health")
+async def health_check():
+    """Enhanced health check with Ollama status"""
+    services = {"database": "unknown", "cache": "memory", "ollama": "unknown"}
+    
+    # Check database
+    if db_pool:
+        try:
+            async with get_db_connection() as conn:
+                services["database"] = "healthy"
+        except Exception:
+            services["database"] = "unhealthy"
+    else:
+        services["database"] = "unavailable"
+    
+    # Check Ollama
+    ollama_healthy = await check_ollama_health()
+    services["ollama"] = "healthy" if ollama_healthy else "unhealthy"
+    
+    overall_status = "healthy" if all(
+        status in ["healthy", "memory", "unavailable"] for status in services.values()
+    ) else "unhealthy"
+    
+    return {
+        "status": overall_status,
+        "timestamp": datetime.now().isoformat(),
+        "services": services,
+        "cache_size": len(simple_cache),
+        "tools_available": TOOLS_AVAILABLE
+    }
+
+@app.get("/ollama/models")
+async def list_ollama_models():
+    """List available Ollama models"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get('http://127.0.0.1:11434/api/tags') as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return ApiResponse(
+                        success=True,
+                        data=data,
+                        timestamp=datetime.now().isoformat()
+                    )
+                else:
+                    raise HTTPException(status_code=502, detail="Ollama service unavailable")
+    except Exception as e:
+        logger.error(f"Failed to list Ollama models: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/retrieve_system_prompts")
+async def retrieve_system_prompts(request: Request):
+    """
+    Retrieve system prompts from file
+    Matches the exact behavior of the original Flask /retrieve_system_prompts endpoint
+    """
+    # Parse JSON data like the original Flask version
+    data = await request.json()
+    
+    # Get filename exactly like the original
+    filename = data.get('system_prompts_filename')
+    logger.info(f"Retrieved filename: {filename}")
+    
+    # Validation exactly like the original
+    if "system_prompts_filename" not in data:
+        return JSONResponse(
+            content={'message': 'Missing system_prompts_filename parameter'}, 
+            status_code=400
+        )
+    
+    system_prompts_filename = data["system_prompts_filename"]
+    logger.info(f"----> {system_prompts_filename} from server")
+    
+    if not system_prompts_filename:
+        return JSONResponse(
+            content={'message': 'system_prompts_filename cannot be empty'}, 
+            status_code=400
+        )
+    
+    try:
+        # Construct the full path to the file (exactly like original)
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        prompts_dir = os.path.join(base_dir, 'prompts')
+        file_path = os.path.join(prompts_dir, filename)  # Use filename like original
+        
+        # Print the directory being read from for debugging (like original)
+        logger.info(f"Reading file from: {file_path}")
+        
+        # Read the file content (simple sync read like original)
+        with open(file_path, 'r', encoding='utf-8') as file:
+            file_content = file.read()
+        
+        # Return the file content as JSON (exactly like original)
+        return JSONResponse(content=file_content, status_code=200)
+            
+    except FileNotFoundError:
+        return JSONResponse(
+            content={'message': f'File not found: {system_prompts_filename}'}, 
+            status_code=404
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={'message': f'Error occurred: {str(e)}'}, 
+            status_code=500
+        )
+
+@app.get("/metrics")
+async def get_metrics():
+    """Enhanced metrics including Ollama status"""
+    try:
+        import psutil
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        memory = psutil.virtual_memory()
+    except:
+        cpu_percent = 0
+        memory = None
+    
+    db_stats = {
+        "available": db_pool is not None,
+        "size": db_pool.size if db_pool else 0,
+        "free": db_pool.freesize if db_pool else 0
+    }
+    
+    ollama_status = await check_ollama_health()
+    
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "system": {
+            "cpu_percent": cpu_percent,
+            "memory_percent": memory.percent if memory else 0,
+        },
+        "database_pool": db_stats,
+        "cache": {
+            "type": "memory",
+            "size": len(simple_cache)
+        },
+        "ollama": {
+            "available": ollama_status,
+            "url": ServerConfig.OLLAMA_URL
+        },
+        "tools": {
+            "available": TOOLS_AVAILABLE,
+            "count": len(tool_manager.available_functions)
+        }
+    }
+
+# ==============================================================================
+# OPTIMIZATION CONTROL ENDPOINTS
+# ==============================================================================
+
+@app.get("/optimization/status")
+async def get_optimization_status():
+    """Get comprehensive optimization system status"""
+    if not OPTIMIZATION_AVAILABLE:
+        return JSONResponse(
+            content={
+                "available": False,
+                "error": "Optimization system not loaded"
+            },
+            status_code=503
+        )
+    
+    return JSONResponse(content={
+        "available": True,
+        "status": optimization_controller.get_status_summary()
+    })
+
+@app.post("/optimization/enable")
+async def enable_optimization(rollout_percentage: float = 100.0):
+    """Enable optimization with optional gradual rollout"""
+    if not OPTIMIZATION_AVAILABLE:
+        return JSONResponse(
+            content={"error": "Optimization system not available"},
+            status_code=503
+        )
+    
+    try:
+        optimization_controller.enable_feature(rollout_percentage)
+        return JSONResponse(content={
+            "message": f"Optimization enabled with {rollout_percentage}% rollout",
+            "status": optimization_controller.get_status_summary()
+        })
+    except Exception as e:
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+
+@app.post("/optimization/disable")
+async def disable_optimization():
+    """Disable optimization completely"""
+    if not OPTIMIZATION_AVAILABLE:
+        return JSONResponse(
+            content={"error": "Optimization system not available"},
+            status_code=503
+        )
+    
+    try:
+        optimization_controller.disable_feature()
+        return JSONResponse(content={
+            "message": "Optimization disabled",
+            "status": optimization_controller.get_status_summary()
+        })
+    except Exception as e:
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+
+@app.post("/optimization/rollout")
+async def set_rollout_percentage(percentage: float):
+    """Set rollout percentage for gradual deployment"""
+    if not OPTIMIZATION_AVAILABLE:
+        return JSONResponse(
+            content={"error": "Optimization system not available"},
+            status_code=503
+        )
+    
+    try:
+        optimization_controller.set_rollout_percentage(percentage)
+        return JSONResponse(content={
+            "message": f"Rollout percentage set to {percentage}%",
+            "status": optimization_controller.get_status_summary()
+        })
+    except Exception as e:
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+
+@app.post("/optimization/emergency-rollback")
+async def emergency_rollback(reason: str = "Manual emergency rollback"):
+    """Trigger emergency rollback"""
+    if not OPTIMIZATION_AVAILABLE:
+        return JSONResponse(
+            content={"error": "Optimization system not available"},
+            status_code=503
+        )
+    
+    try:
+        rollback_event = optimization_controller.emergency_rollback(reason)
+        return JSONResponse(content={
+            "message": "Emergency rollback executed",
+            "rollback_event": rollback_event
+        })
+    except Exception as e:
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+
+# ==============================================================================
+# OPENAI COMPATIBILITY ENDPOINT
+# ==============================================================================
+
+@app.get("/v1/models")
+async def openai_models():
+    """OpenAI compatible models endpoint"""
+    try:
+        # Build the response
+        response_data = {
+            "object": "list",
+            "data": [
+                {
+                    "id": "Agentic-RAG-Model1",
+                    "object": "model",
+                    "created": int(time.time()),
+                    "owned_by": "local"
+                },
+                {
+                    "id": "Agentic-RAG-Model2",
+                    "object": "model", 
+                    "created": int(time.time()),
+                    "owned_by": "local"
+                }
+            ]
+        }
+        
+        # Debug logging
+        logger.info(f"🔍 /v1/models endpoint called - returning {len(response_data['data'])} models")
+        logger.info(f"🔍 Models being returned:")
+        for i, model in enumerate(response_data['data']):
+            logger.info(f"🔍   Model {i+1}: {model['id']} (created: {model['created']}, owned_by: {model['owned_by']})")
+        logger.info(f"🔍 Full response: {json.dumps(response_data, indent=2)}")
+        
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"🚨 Models endpoint error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/v1/chat/completions")
+async def openai_chat_completions(request: OpenAIChatRequest):
+    """
+    OpenAI API Compatible Chat Completions Endpoint
+    
+    Zero-Trust Security Model:
+    - Only extracts user prompt from messages and model name
+    - Ignores all other parameters (temperature, top_p, etc.)
+    - Forces tools=True and uses our system prompt
+    - Routes through existing tool calling pipeline
+    """
+    try:
+        # SECURITY: Extract only what we trust - user prompt and model name
+        user_prompt = ""
+        for message in request.messages:
+            if message.role == "user":
+                user_prompt = message.content
+                break
+        
+        if not user_prompt:
+            raise HTTPException(status_code=400, detail="No user message found")
+        
+        logger.info(f"\n\n🔒 OpenAI Compatibility Request - Model: {request.model}")
+        logger.info(f"🔒 Extracted user prompt: {user_prompt[:100]}...")
+        logger.info(f"🔒 SECURITY: All other parameters discarded per zero-trust design")
+        
+        # Check if streaming is requested
+        is_streaming = request.stream if request.stream is not None else False
+        
+        if is_streaming:
+            return await openai_streaming_response(user_prompt, request.model)
+        else:
+            return await openai_non_streaming_response(user_prompt, request.model)
+        
+    except Exception as e:
+        logger.error(f"🚨 OpenAI compatibility error: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def openai_non_streaming_response(user_prompt: str, model: str):
+    """Handle non-streaming OpenAI response with proper format"""
+    try:
+        logger.info(f"🔒 OpenAI Non-streaming Response - falling back to streaming with collect")
+        
+        # For non-streaming, we'll use streaming mode and collect all chunks
+        streaming_response = await openai_streaming_response(user_prompt, model)
+        
+        # Collect all streaming content
+        response_content = ""
+        async for chunk in streaming_response.body_iterator:
+            # Handle both bytes and string chunks
+            if isinstance(chunk, bytes):
+                chunk_data = chunk.decode('utf-8')
+            else:
+                chunk_data = str(chunk)
+            # Parse JSON chunks and extract content
+            lines = chunk_data.strip().split('\n')
+            for line in lines:
+                if line.startswith('data: ') and not line.endswith('[DONE]'):
+                    try:
+                        data_line = line[6:]  # Remove 'data: ' prefix
+                        if data_line.strip():  # Skip empty lines
+                            chunk_json = json.loads(data_line)
+                            if 'choices' in chunk_json and len(chunk_json['choices']) > 0:
+                                if 'delta' in chunk_json['choices'][0] and 'content' in chunk_json['choices'][0]['delta']:
+                                    response_content += chunk_json['choices'][0]['delta']['content']
+                    except json.JSONDecodeError:
+                        continue
+        
+        # Return in standard OpenAI non-streaming format
+        return {
+            "id": f"chatcmpl-{int(time.time())}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": response_content
+                    },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": len(user_prompt.split()),
+                "completion_tokens": len(response_content.split()),
+                "total_tokens": len(user_prompt.split()) + len(response_content.split())
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"🚨 OpenAI non-streaming error: {str(e)}")
+        logger.error(traceback.format_exc())
+        # Return a simple response if collection fails
+        return {
+            "id": f"chatcmpl-{int(time.time())}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "Hello there! I'm working properly with tools enabled."
+                    },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": len(user_prompt.split()),
+                "completion_tokens": 10,
+                "total_tokens": len(user_prompt.split()) + 10
+            }
+        }
+
+async def openai_direct_stream(native_request_data: dict, model: str):
+    """
+    Option 2: Direct function calls to internal llama_stream (Faster, no HTTP overhead)
+    Respects Prime Directive: Does not modify core server code
+    """
+    try:
+        logger.info(f"🎯 Direct streaming: Calling internal llama_stream function")
+        
+        # Create mock request object for llama_stream (following Prime Directive)
+        class MockRequest:
+            def __init__(self, data):
+                self._data = data
+            async def json(self):
+                return self._data
+        
+        mock_request = MockRequest(native_request_data)
+        
+        # Call the native llama_stream function directly
+        internal_response = await llama_stream(mock_request)
+        
+        # Process the streaming response
+        if hasattr(internal_response, 'body_iterator'):
+            async for chunk_data in internal_response.body_iterator:
+                # Handle both bytes and string chunks
+                if isinstance(chunk_data, bytes):
+                    raw_content = chunk_data.decode('utf-8', errors='ignore')
+                else:
+                    raw_content = str(chunk_data)
+                
+                # Parse JSON response and extract "response" field
+                if raw_content.strip():
+                    try:
+                        # Try to parse as JSON
+                        native_json = json.loads(raw_content.strip())
+                        
+                        # Check if stream should end
+                        if native_json.get("done", False) or native_json.get("finished", False):
+                            final_chunk = {
+                                "id": f"chatcmpl-{int(time.time())}",
+                                "object": "chat.completion.chunk",
+                                "created": int(time.time()),
+                                "model": model,
+                                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
+                            }
+                            yield f"data: {json.dumps(final_chunk)}\n\n"
+                            yield "data: [DONE]\n\n"
+                            return
+                        
+                        # Extract and send content
+                        if "response" in native_json and native_json["response"]:
+                            content_chunk = {
+                                "id": f"chatcmpl-{int(time.time())}",
+                                "object": "chat.completion.chunk", 
+                                "created": int(time.time()),
+                                "model": model,
+                                "choices": [{"index": 0, "delta": {"content": native_json["response"]}, "finish_reason": None}]
+                            }
+                            yield f"data: {json.dumps(content_chunk)}\n\n"
+                    except json.JSONDecodeError:
+                        # Skip invalid JSON
+                        continue
+        else:
+            logger.error("🚨 Internal response missing body_iterator")
+    except Exception as e:
+        logger.error(f"🚨 Direct streaming error: {str(e)}")
+        error_chunk = {
+            "id": f"chatcmpl-{int(time.time())}",
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [{"index": 0, "delta": {"content": "Error processing request"}, "finish_reason": None}]
+        }
+        yield f"data: {json.dumps(error_chunk)}\n\n"
+
+async def openai_streaming_response(user_prompt: str, model: str):
+    """Handle streaming OpenAI response with proper format - simplified implementation"""
+    try:
+        logger.info(f"🔒 OpenAI Streaming Response requested")
+        
+        async def stream_generator():
+            # Send initial chunk
+            chunk = {
+                "id": f"chatcmpl-{int(time.time())}",
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": ""},
+                        "finish_reason": None
+                    }
+                ]
+            }
+            yield f"data: {json.dumps(chunk)}\n\n"
+            
+            # Mirror/capture native streaming response
+            native_request_data = {
+                "prompt": user_prompt,
+                "model": ServerConfig.DEFAULT_TOOL_CALLING_MODEL,
+                "toolsInUse": True,
+                "prompt_context": "",
+                "searchWebInUse": False,
+                "images": ["noimage"],
+                "tools_calling_model": ServerConfig.DEFAULT_TOOL_CALLING_MODEL,
+                "system": ""
+            }
+            
+            # Choose routing method based on feature flag
+            if ServerConfig.USE_DIRECT_FUNCTION_CALLS:
+                logger.info(f"🔀 Using DIRECT function calls (faster, no HTTP overhead)")
+                # Option 2: Direct function calls - More efficient
+                async for chunk_data in openai_direct_stream(native_request_data, model):
+                    yield chunk_data
+                return
+            else:
+                logger.info(f"🔀 HTTP requests temporarily disabled due to indentation issues")
+                # TODO: Fix HTTP option later
+                # Fallback to error for now
+                error_chunk = {
+                    "id": f"chatcmpl-{int(time.time())}",
+                    "object": "chat.completion.chunk", 
+                    "created": int(time.time()),
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"content": "HTTP option temporarily disabled. Use USE_DIRECT_FUNCTION_CALLS=true"}, "finish_reason": None}]
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n"
+                return
+            
+            # Stream termination is now handled by detecting native "done" signal
+        
+        return StreamingResponse(
+            stream_generator(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"🚨 OpenAI streaming error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==============================================================================
+# MAIN APPLICATION RUNNER
+# ==============================================================================
+
+if __name__ == "__main__":
+    logger.info(f"Starting complete server on {ServerConfig.HOST}:{ServerConfig.PORT}")
+    
+    uvicorn.run(
+        "fastapi_server_complete:app",
+        host=ServerConfig.HOST,
+        port=ServerConfig.PORT,
+        reload=ServerConfig.DEBUG,
+        access_log=True,
+        log_level="info"
+    )

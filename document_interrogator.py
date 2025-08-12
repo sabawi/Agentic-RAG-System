@@ -1,0 +1,1406 @@
+"""
+FAISS Document Interrogation System
+Advanced document processing, embedding, and retrieval for directory-based document collections
+Integrates with existing 2-stage LLM architecture as Stage 0 (RAG Retrieval)
+"""
+
+import os
+import sqlite3
+import json
+import pickle
+import hashlib
+import logging
+import asyncio
+from typing import Dict, List, Optional, Tuple, Any, Union
+from dataclasses import dataclass, field
+from pathlib import Path
+from datetime import datetime
+import time
+
+# Document processing
+try:
+    import PyPDF2
+    import docx
+    import openpyxl
+    from bs4 import BeautifulSoup
+    import pytesseract
+    from PIL import Image
+    DOCUMENT_PROCESSING_AVAILABLE = True
+except ImportError as e:
+    DOCUMENT_PROCESSING_AVAILABLE = False
+    DOCUMENT_PROCESSING_ERROR = str(e)
+
+# FAISS and embeddings
+try:
+    import faiss
+    import numpy as np
+    FAISS_AVAILABLE = True
+except ImportError as e:
+    FAISS_AVAILABLE = False
+    FAISS_ERROR = str(e)
+
+# File monitoring
+try:
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+    WATCHDOG_AVAILABLE = True
+except ImportError as e:
+    WATCHDOG_AVAILABLE = False
+    WATCHDOG_ERROR = str(e)
+
+# Existing server integration
+from http_helpers import pooled_post
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class DocumentChunk:
+    """Represents a processed document chunk with metadata"""
+    chunk_id: str
+    document_path: str
+    content: str
+    chunk_index: int
+    total_chunks: int
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    embedding: Optional[np.ndarray] = None
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+
+@dataclass 
+class DocumentInfo:
+    """Document metadata and processing info"""
+    file_path: str
+    file_hash: str
+    file_type: str
+    file_size: int
+    total_chunks: int
+    processed_at: str
+    last_modified: str
+
+
+class DocumentProcessor:
+    """Handles extraction of text from various document types"""
+    
+    SUPPORTED_TYPES = {
+        '.txt': 'text',
+        '.md': 'markdown', 
+        '.html': 'html',
+        '.pdf': 'pdf',
+        '.docx': 'word',
+        '.xlsx': 'excel',
+        '.jpg': 'image',
+        '.jpeg': 'image',
+        '.png': 'image',
+        '.bmp': 'image',
+        '.tiff': 'image'
+    }
+    
+    def __init__(self):
+        self.chunk_size = 1000  # Characters per chunk
+        self.chunk_overlap = 200  # Overlap between chunks
+        
+        if not DOCUMENT_PROCESSING_AVAILABLE:
+            logger.warning(f"⚠️ Document processing libraries not available: {DOCUMENT_PROCESSING_ERROR}")
+            logger.info("💡 Install with: pip install PyPDF2 python-docx openpyxl beautifulsoup4 pytesseract pillow")
+    
+    async def process_document(self, file_path: str) -> List[DocumentChunk]:
+        """Process a document into chunks with extracted text"""
+        if not DOCUMENT_PROCESSING_AVAILABLE:
+            logger.error("❌ Document processing libraries not available")
+            return []
+            
+        try:
+            file_path = Path(file_path)
+            if not file_path.exists():
+                raise FileNotFoundError(f"File not found: {file_path}")
+            
+            # Get file info
+            file_type = file_path.suffix.lower()
+            if file_type not in self.SUPPORTED_TYPES:
+                logger.warning(f"Unsupported file type: {file_type}")
+                return []
+            
+            # Extract text based on file type
+            text_content = await self._extract_text(file_path, file_type)
+            if not text_content.strip():
+                logger.warning(f"No text extracted from: {file_path}")
+                return []
+            
+            # Create chunks
+            chunks = self._create_chunks(text_content, str(file_path))
+            logger.info(f"✅ Processed {file_path.name}: {len(chunks)} chunks")
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to process {file_path}: {e}")
+            return []
+    
+    async def _extract_text(self, file_path: Path, file_type: str) -> str:
+        """Extract text from document based on file type"""
+        try:
+            if file_type == '.txt' or file_type == '.md':
+                return file_path.read_text(encoding='utf-8', errors='ignore')
+            
+            elif file_type == '.html':
+                html_content = file_path.read_text(encoding='utf-8', errors='ignore')
+                soup = BeautifulSoup(html_content, 'html.parser')
+                return soup.get_text(separator=' ', strip=True)
+            
+            elif file_type == '.pdf':
+                return await self._extract_pdf_text(file_path)
+            
+            elif file_type == '.docx':
+                doc = docx.Document(str(file_path))
+                return '\n'.join([paragraph.text for paragraph in doc.paragraphs])
+            
+            elif file_type == '.xlsx':
+                workbook = openpyxl.load_workbook(str(file_path))
+                text_content = []
+                for sheet_name in workbook.sheetnames:
+                    sheet = workbook[sheet_name]
+                    for row in sheet.iter_rows(values_only=True):
+                        row_text = ' '.join([str(cell) for cell in row if cell is not None])
+                        if row_text.strip():
+                            text_content.append(row_text)
+                return '\n'.join(text_content)
+            
+            elif file_type in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']:
+                return await self._extract_image_text(file_path)
+            
+            else:
+                return ""
+                
+        except Exception as e:
+            logger.error(f"❌ Text extraction failed for {file_path}: {e}")
+            return ""
+    
+    async def _extract_pdf_text(self, file_path: Path) -> str:
+        """Extract text from PDF using PyPDF2"""
+        try:
+            with open(file_path, 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                text_content = []
+                
+                for page_num, page in enumerate(reader.pages):
+                    try:
+                        page_text = page.extract_text()
+                        if page_text.strip():
+                            text_content.append(f"[Page {page_num + 1}]\n{page_text}")
+                    except Exception as e:
+                        logger.warning(f"Failed to extract page {page_num + 1} from {file_path}: {e}")
+                
+                return '\n\n'.join(text_content)
+                
+        except Exception as e:
+            logger.error(f"❌ PDF extraction failed for {file_path}: {e}")
+            return ""
+    
+    async def _extract_image_text(self, file_path: Path) -> str:
+        """Extract text from image using OCR"""
+        try:
+            image = Image.open(str(file_path))
+            text = pytesseract.image_to_string(image)
+            return text.strip()
+        except Exception as e:
+            logger.warning(f"⚠️ OCR failed for {file_path}: {e}")
+            return f"[Image: {file_path.name}]"  # Fallback metadata
+    
+    def _create_chunks(self, text: str, document_path: str) -> List[DocumentChunk]:
+        """Split text into overlapping chunks"""
+        chunks = []
+        if len(text) <= self.chunk_size:
+            # Single chunk for small documents
+            chunk_id = self._generate_chunk_id(document_path, 0)
+            chunks.append(DocumentChunk(
+                chunk_id=chunk_id,
+                document_path=document_path,
+                content=text,
+                chunk_index=0,
+                total_chunks=1,
+                metadata={'length': len(text)}
+            ))
+        else:
+            # Multiple chunks with overlap
+            start = 0
+            chunk_index = 0
+            
+            while start < len(text):
+                end = min(start + self.chunk_size, len(text))
+                chunk_text = text[start:end]
+                
+                chunk_id = self._generate_chunk_id(document_path, chunk_index)
+                chunks.append(DocumentChunk(
+                    chunk_id=chunk_id,
+                    document_path=document_path,
+                    content=chunk_text,
+                    chunk_index=chunk_index,
+                    total_chunks=0,  # Will be set after all chunks created
+                    metadata={'start': start, 'end': end, 'length': len(chunk_text)}
+                ))
+                
+                start = end - self.chunk_overlap
+                chunk_index += 1
+                
+                if end >= len(text):
+                    break
+            
+            # Update total chunks for all chunks
+            total_chunks = len(chunks)
+            for chunk in chunks:
+                chunk.total_chunks = total_chunks
+        
+        return chunks
+    
+    def _generate_chunk_id(self, document_path: str, chunk_index: int) -> str:
+        """Generate unique chunk ID"""
+        content = f"{document_path}:{chunk_index}"
+        return hashlib.md5(content.encode()).hexdigest()
+
+
+class FAISSDocumentStore:
+    """FAISS-based vector storage with SQLite metadata"""
+    
+    def __init__(self, storage_dir: str = "document_store"):
+        if not FAISS_AVAILABLE:
+            raise ImportError(f"FAISS not available: {FAISS_ERROR}")
+            
+        self.storage_dir = Path(storage_dir)
+        self.storage_dir.mkdir(exist_ok=True)
+        
+        # FAISS index file paths
+        self.index_path = self.storage_dir / "faiss.index"
+        self.metadata_path = self.storage_dir / "metadata.db"
+        
+        # Initialize components
+        self.dimension = 768  # nomic-embed-text dimension
+        self.faiss_index = None
+        self.metadata_db = None
+        self.chunk_counter = 0
+        
+        self._initialize_storage()
+    
+    def _initialize_storage(self):
+        """Initialize FAISS index and SQLite database"""
+        try:
+            # Initialize FAISS index
+            if self.index_path.exists():
+                self.faiss_index = faiss.read_index(str(self.index_path))
+                self.chunk_counter = self.faiss_index.ntotal
+                logger.info(f"📚 Loaded existing FAISS index with {self.chunk_counter} vectors")
+            else:
+                self.faiss_index = faiss.IndexFlatIP(self.dimension)  # Inner product similarity
+                logger.info(f"🔧 Created new FAISS index (dimension: {self.dimension})")
+            
+            # Initialize SQLite database
+            self.metadata_db = sqlite3.connect(str(self.metadata_path), check_same_thread=False)
+            self._create_tables()
+            
+        except Exception as e:
+            logger.error(f"❌ Storage initialization failed: {e}")
+            raise
+    
+    def _create_tables(self):
+        """Create SQLite tables for metadata"""
+        cursor = self.metadata_db.cursor()
+        
+        # Documents table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS documents (
+                file_path TEXT PRIMARY KEY,
+                file_hash TEXT NOT NULL,
+                file_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL,
+                total_chunks INTEGER NOT NULL,
+                processed_at TEXT NOT NULL,
+                last_modified TEXT NOT NULL
+            )
+        ''')
+        
+        # Chunks table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chunks (
+                chunk_id TEXT PRIMARY KEY,
+                faiss_index INTEGER NOT NULL,
+                document_path TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                total_chunks INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                metadata TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (document_path) REFERENCES documents (file_path)
+            )
+        ''')
+        
+        self.metadata_db.commit()
+    
+    async def add_chunks(self, chunks: List[DocumentChunk]) -> bool:
+        """Add document chunks to FAISS index and SQLite"""
+        try:
+            if not chunks:
+                return True
+            
+            # Generate embeddings for chunks
+            embeddings = await self._generate_embeddings([chunk.content for chunk in chunks])
+            if not embeddings:
+                logger.error("❌ Failed to generate embeddings")
+                return False
+            
+            # Add to FAISS index
+            embeddings_array = np.vstack(embeddings)
+            faiss_start_index = self.faiss_index.ntotal
+            self.faiss_index.add(embeddings_array)
+            
+            # Add to SQLite
+            cursor = self.metadata_db.cursor()
+            for i, chunk in enumerate(chunks):
+                faiss_index = faiss_start_index + i
+                cursor.execute('''
+                    INSERT OR REPLACE INTO chunks 
+                    (chunk_id, faiss_index, document_path, chunk_index, total_chunks, content, metadata, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    chunk.chunk_id,
+                    faiss_index,
+                    chunk.document_path,
+                    chunk.chunk_index,
+                    chunk.total_chunks,
+                    chunk.content,
+                    json.dumps(chunk.metadata),
+                    chunk.created_at
+                ))
+            
+            self.metadata_db.commit()
+            self.chunk_counter = self.faiss_index.ntotal
+            
+            # Save FAISS index
+            await self._save_index()
+            
+            logger.info(f"✅ Added {len(chunks)} chunks to document store")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to add chunks: {e}")
+            return False
+    
+    async def search_similar(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+        """Search for similar document chunks"""
+        try:
+            if self.faiss_index.ntotal == 0:
+                return []
+            
+            # Generate query embedding
+            query_embeddings = await self._generate_embeddings([query])
+            if not query_embeddings:
+                return []
+            
+            query_vector = np.array(query_embeddings[0]).reshape(1, -1)
+            
+            # Search FAISS index
+            scores, indices = self.faiss_index.search(query_vector, min(k, self.faiss_index.ntotal))
+            
+            # Get metadata from SQLite
+            results = []
+            cursor = self.metadata_db.cursor()
+            
+            for score, faiss_idx in zip(scores[0], indices[0]):
+                if faiss_idx == -1:  # No more results
+                    break
+                
+                cursor.execute('''
+                    SELECT chunk_id, document_path, chunk_index, content, metadata, created_at
+                    FROM chunks WHERE faiss_index = ?
+                ''', (int(faiss_idx),))
+                
+                row = cursor.fetchone()
+                if row:
+                    chunk_id, doc_path, chunk_idx, content, metadata_json, created_at = row
+                    results.append({
+                        'chunk_id': chunk_id,
+                        'document_path': doc_path,
+                        'chunk_index': chunk_idx,
+                        'content': content,
+                        'metadata': json.loads(metadata_json),
+                        'similarity_score': float(score),
+                        'created_at': created_at
+                    })
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"❌ Search failed: {e}")
+            return []
+    
+    async def _check_embedding_service_health(self) -> bool:
+        """Check if embedding service is healthy and responsive"""
+        try:
+            payload = {"model": "nomic-embed-text", "prompt": "health check"}
+            response_data = await pooled_post(
+                "http://127.0.0.1:11435/api/embeddings",
+                json=payload,
+                timeout=10
+            )
+            return response_data['status_code'] == 200
+        except Exception as e:
+            logger.error(f"❌ Embedding service health check failed: {e}")
+            return False
+    
+    async def _restart_embedding_service(self) -> bool:
+        """Restart the embedding service"""
+        try:
+            logger.info("🔄 Attempting to restart embedding service...")
+            
+            # Kill any existing ollama processes on port 11435
+            kill_result = await asyncio.create_subprocess_shell(
+                "pkill -f 'ollama.*11435'",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await kill_result.wait()
+            
+            # Wait a moment for cleanup
+            await asyncio.sleep(2)
+            
+            # Start new embedding service
+            start_result = await asyncio.create_subprocess_shell(
+                "OLLAMA_HOST=127.0.0.1:11435 nohup ollama serve > /dev/null 2>&1 &",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await start_result.wait()
+            
+            # Wait for service to start
+            await asyncio.sleep(5)
+            
+            # Verify it's working
+            return await self._check_embedding_service_health()
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to restart embedding service: {e}")
+            return False
+    
+    async def _generate_embeddings(self, texts: List[str]) -> Optional[List[np.ndarray]]:
+        """Generate embeddings using Ollama via existing HTTP pool with health checking"""
+        try:
+            # First check if service is healthy
+            if not await self._check_embedding_service_health():
+                logger.warning("⚠️ Embedding service unhealthy, attempting restart...")
+                
+                # Try to restart service up to 3 times
+                for attempt in range(3):
+                    if await self._restart_embedding_service():
+                        logger.info(f"✅ Embedding service restarted successfully (attempt {attempt + 1})")
+                        break
+                    else:
+                        logger.warning(f"❌ Restart attempt {attempt + 1} failed")
+                        await asyncio.sleep(3)
+                else:
+                    logger.error("❌ Failed to restart embedding service after 3 attempts")
+                    logger.error("🛑 RECOMMENDATION: Manual intervention required - check ollama installation and restart embedding service manually")
+                    logger.error("🛑 Command to restart: OLLAMA_HOST=127.0.0.1:11435 ollama serve")
+                    return None
+            async def generate_single_embedding(text: str) -> Optional[np.ndarray]:
+                """Generate embedding for a single text"""
+                try:
+                    payload = {
+                        "model": "nomic-embed-text",  # Standard embedding model
+                        "prompt": text
+                    }
+                    
+                    response_data = await pooled_post(
+                        "http://127.0.0.1:11435/api/embeddings",  # Use dedicated embedding instance
+                        json=payload,
+                        timeout=120  # Increased timeout from 30s to 120s
+                    )
+                    
+                    if response_data['status_code'] == 200:
+                        embedding_data = json.loads(response_data['text'])
+                        embedding = np.array(embedding_data['embedding'], dtype=np.float32)
+                        return embedding
+                    else:
+                        logger.error(f"❌ Embedding generation failed: {response_data['status_code']}")
+                        return None
+                        
+                except Exception as e:
+                    logger.error(f"❌ Single embedding error: {e}")
+                    return None
+            
+            # Process embeddings in batches to avoid overwhelming the service
+            BATCH_SIZE = 25  # Increased batch size for better efficiency
+            all_embeddings = []
+            total_batches = (len(texts) + BATCH_SIZE - 1) // BATCH_SIZE
+            
+            logger.info(f"🔄 Processing {len(texts)} embeddings in {total_batches} batches of {BATCH_SIZE}")
+            
+            for batch_num in range(total_batches):
+                start_idx = batch_num * BATCH_SIZE
+                end_idx = min(start_idx + BATCH_SIZE, len(texts))
+                batch_texts = texts[start_idx:end_idx]
+                
+                # Process current batch in parallel
+                batch_tasks = [generate_single_embedding(text) for text in batch_texts]
+                batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+                
+                # Validate batch results
+                batch_embeddings = []
+                for i, result in enumerate(batch_results):
+                    if isinstance(result, Exception):
+                        logger.error(f"❌ Batch {batch_num + 1}/{total_batches}, task {i} failed with exception: {result}")
+                        return None
+                    elif result is not None:
+                        batch_embeddings.append(result)
+                    else:
+                        logger.error(f"❌ Batch {batch_num + 1}/{total_batches}, task {i} returned None")
+                        return None
+                
+                all_embeddings.extend(batch_embeddings)
+                logger.info(f"✅ Completed batch {batch_num + 1}/{total_batches}: {len(batch_embeddings)} embeddings")
+                
+                # Longer delay between batches to prevent service overload
+                if batch_num < total_batches - 1:  # Don't delay after the last batch
+                    await asyncio.sleep(2.0)  # 2 second delay between batches
+            
+            logger.info(f"✅ Generated {len(all_embeddings)} embeddings across {total_batches} batches")
+            return all_embeddings
+            
+        except Exception as e:
+            logger.error(f"❌ Parallel embedding generation error: {e}")
+            return None
+    
+    async def _save_index(self):
+        """Save FAISS index to disk"""
+        try:
+            faiss.write_index(self.faiss_index, str(self.index_path))
+        except Exception as e:
+            logger.error(f"❌ Failed to save FAISS index: {e}")
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get document store statistics"""
+        try:
+            cursor = self.metadata_db.cursor()
+            
+            # Count documents
+            cursor.execute("SELECT COUNT(*) FROM documents")
+            doc_count = cursor.fetchone()[0]
+            
+            # Count chunks
+            cursor.execute("SELECT COUNT(*) FROM chunks")
+            chunk_count = cursor.fetchone()[0]
+            
+            return {
+                'total_documents': doc_count,
+                'total_chunks': chunk_count,
+                'faiss_vectors': self.faiss_index.ntotal,
+                'storage_directory': str(self.storage_dir),
+                'index_dimension': self.dimension
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to get stats: {e}")
+            return {}
+
+
+if WATCHDOG_AVAILABLE:
+    class DirectoryWatcher(FileSystemEventHandler):
+        """File system watcher for automatic document processing"""
+        
+        def __init__(self, interrogator):
+            self.interrogator = interrogator
+        
+        def on_created(self, event):
+            if not event.is_directory:
+                logger.info(f"📄 New file detected: {event.src_path}")
+                asyncio.create_task(self.interrogator._process_single_file(event.src_path))
+        
+        def on_modified(self, event):
+            if not event.is_directory:
+                logger.info(f"📝 File modified: {event.src_path}")
+                asyncio.create_task(self.interrogator._process_single_file(event.src_path))
+
+
+class DocumentInterrogator:
+    """Main document interrogation system integrating with 2-stage LLM architecture"""
+    
+    def __init__(self, storage_dir: str = "document_store"):
+        self.processor = DocumentProcessor()
+        self.store = None
+        self.observer = None
+        self.watched_directories = set()
+        
+        # Configuration file path
+        self.config_file = Path("watched_directories.json")
+        self.config = self._load_config()
+        
+        # Scan synchronization to prevent infinite loops
+        self._scan_lock = asyncio.Lock()
+        self._scan_in_progress = False
+        
+        # Initialize FAISS store if available
+        if FAISS_AVAILABLE:
+            try:
+                self.store = FAISSDocumentStore(storage_dir)
+                logger.info("🔍 Document Interrogator initialized with FAISS")
+                
+                # Auto-scan for changes on startup based on configuration (temporarily disabled for API testing)
+                if False: # self.config.get('config', {}).get('scan_on_startup', False):
+                    logger.info("🚀 Startup scan enabled - using safe implementation")
+                    asyncio.create_task(self._safe_startup_config_scan())
+                
+            except Exception as e:
+                logger.error(f"❌ FAISS initialization failed: {e}")
+                self.store = None
+        else:
+            logger.warning(f"⚠️ FAISS not available: {FAISS_ERROR}")
+            logger.info("💡 Install with: pip install faiss-cpu numpy")
+    
+    async def index_directory(self, directory_path: str, recursive: bool = True) -> Dict[str, Any]:
+        """Index all documents in a directory"""
+        if not self.store:
+            return {
+                'error': 'FAISS not available',
+                'processed': 0,
+                'failed': 0
+            }
+            
+        try:
+            directory = Path(directory_path)
+            if not directory.exists() or not directory.is_dir():
+                raise ValueError(f"Invalid directory: {directory_path}")
+            
+            results = {
+                'processed': 0,
+                'failed': 0,
+                'total_chunks': 0,
+                'files': []
+            }
+            
+            # Get all supported files
+            pattern = "**/*" if recursive else "*"
+            all_files = []
+            
+            for ext in self.processor.SUPPORTED_TYPES.keys():
+                all_files.extend(directory.glob(f"{pattern}{ext}"))
+            
+            logger.info(f"📚 Found {len(all_files)} documents to process")
+            
+            # Process each file
+            for file_path in all_files:
+                try:
+                    chunks = await self.processor.process_document(str(file_path))
+                    if chunks:
+                        success = await self.store.add_chunks(chunks)
+                        if success:
+                            results['processed'] += 1
+                            results['total_chunks'] += len(chunks)
+                            results['files'].append({
+                                'path': str(file_path),
+                                'chunks': len(chunks),
+                                'status': 'success'
+                            })
+                        else:
+                            results['failed'] += 1
+                            results['files'].append({
+                                'path': str(file_path),
+                                'status': 'failed_storage'
+                            })
+                    else:
+                        results['failed'] += 1
+                        results['files'].append({
+                            'path': str(file_path),
+                            'status': 'failed_processing'
+                        })
+                        
+                except Exception as e:
+                    logger.error(f"❌ Failed to process {file_path}: {e}")
+                    results['failed'] += 1
+                    results['files'].append({
+                        'path': str(file_path),
+                        'status': 'error',
+                        'error': str(e)
+                    })
+            
+            logger.info(f"✅ Indexing complete: {results['processed']} processed, {results['failed']} failed")
+            return results
+            
+        except Exception as e:
+            logger.error(f"❌ Directory indexing failed: {e}")
+            raise
+    
+    async def search_documents(self, query: str, k: int = 5) -> Dict[str, Any]:
+        """Search documents for relevant content (Stage 0 RAG retrieval)"""
+        if not self.store:
+            return {
+                'chunks': [],
+                'context': '',
+                'sources': [],
+                'query': query,
+                'error': 'FAISS not available'
+            }
+            
+        try:
+            # Search for relevant chunks
+            similar_chunks = await self.store.search_similar(query, k)
+            
+            if not similar_chunks:
+                return {
+                    'chunks': [],
+                    'context': '',
+                    'sources': [],
+                    'query': query
+                }
+            
+            # Prepare context for 2-stage LLM
+            context_parts = []
+            sources = []
+            
+            for chunk in similar_chunks:
+                doc_name = Path(chunk['document_path']).name
+                context_parts.append(f"[Document: {doc_name}]\n{chunk['content']}")
+                sources.append({
+                    'document': chunk['document_path'],
+                    'document_name': doc_name,
+                    'chunk_index': chunk['chunk_index'],
+                    'similarity_score': chunk['similarity_score']
+                })
+            
+            # Create structured context for LLM
+            context = "\n\n---\n\n".join(context_parts)
+            
+            return {
+                'chunks': similar_chunks,
+                'context': context,
+                'sources': sources,
+                'query': query,
+                'chunks_found': len(similar_chunks)
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Document search failed: {e}")
+            return {
+                'chunks': [],
+                'context': '',
+                'sources': [],
+                'query': query,
+                'error': str(e)
+            }
+    
+    def start_watching(self, directory_path: str):
+        """Start watching directory for changes"""
+        if not WATCHDOG_AVAILABLE:
+            logger.warning("⚠️ Directory watching not available - watchdog not installed")
+            return False
+            
+        try:
+            if not self.observer:
+                self.observer = Observer()
+            
+            directory = Path(directory_path)
+            if directory.exists():
+                event_handler = DirectoryWatcher(self)
+                self.observer.schedule(event_handler, str(directory), recursive=True)
+                self.watched_directories.add(str(directory))
+                
+                if not self.observer.is_alive():
+                    self.observer.start()
+                
+                logger.info(f"👁️ Started watching directory: {directory_path}")
+                return True
+            else:
+                logger.error(f"❌ Directory not found: {directory_path}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to start watching {directory_path}: {e}")
+            return False
+    
+    def stop_watching(self):
+        """Stop watching all directories"""
+        try:
+            if self.observer and self.observer.is_alive():
+                self.observer.stop()
+                self.observer.join()
+                self.watched_directories.clear()
+                logger.info("🛑 Stopped directory watching")
+        except Exception as e:
+            logger.error(f"❌ Failed to stop watching: {e}")
+    
+    def _load_config(self) -> Dict[str, Any]:
+        """Load configuration from watched_directories.json"""
+        try:
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config = json.load(f)
+                    logger.info(f"📋 Loaded watch configuration: {len(config.get('directories', []))} directories")
+                    return config
+            else:
+                # Create default config
+                default_config = {
+                    "version": "1.0",
+                    "config": {
+                        "scan_on_startup": True,
+                        "batch_size": 25,
+                        "scan_interval_minutes": 60,
+                        "auto_watch_enabled": True
+                    },
+                    "directories": [],
+                    "last_scan": None,
+                    "stats": {
+                        "total_directories": 0,
+                        "active_directories": 0,
+                        "last_config_update": datetime.now().isoformat()
+                    }
+                }
+                self._save_config(default_config)
+                return default_config
+        except Exception as e:
+            logger.error(f"❌ Error loading config: {e}")
+            return {"config": {}, "directories": []}
+    
+    def _save_config(self, config: Dict[str, Any] = None):
+        """Save configuration to watched_directories.json"""
+        try:
+            if config is None:
+                config = self.config
+            
+            config['stats']['last_config_update'] = datetime.now().isoformat()
+            
+            with open(self.config_file, 'w') as f:
+                json.dump(config, f, indent=2)
+                
+        except Exception as e:
+            logger.error(f"❌ Error saving config: {e}")
+    
+    async def _startup_config_scan(self):
+        """Scan directories from config for changes that occurred while server was offline"""
+        async with self._scan_lock:
+            if self._scan_in_progress:
+                logger.info("⏳ Scan already in progress, skipping duplicate scan request")
+                return
+                
+            self._scan_in_progress = True
+            try:
+                await asyncio.sleep(3)  # Wait for full initialization
+                
+                directories = self.config.get('directories', [])
+                enabled_dirs = [d for d in directories if d.get('enabled', True)]
+                
+                if not enabled_dirs:
+                    logger.info("📋 No directories configured for watching")
+                    self._scan_in_progress = False
+                    return
+                    
+                logger.info(f"🔍 Startup config scan: Checking {len(enabled_dirs)} configured directories")
+                changes_found = 0
+                
+                for dir_config in enabled_dirs:
+                    directory_path = dir_config['path']
+                    recursive = dir_config.get('recursive', True)
+                    
+                    directory = Path(directory_path)
+                    if not directory.exists():
+                        logger.warning(f"⚠️ Configured directory not found: {directory_path}")
+                        continue
+                    
+                    logger.info(f"🔍 Scanning: {directory_path}")
+                    
+                    if recursive:
+                        file_pattern = directory.rglob('*')
+                    else:
+                        file_pattern = directory.glob('*')
+                    
+                    for file_path in file_pattern:
+                        if file_path.is_file() and file_path.suffix.lower() in self.processor.SUPPORTED_TYPES:
+                            if await self._file_needs_reindexing(str(file_path)):
+                                await self._process_single_file(str(file_path))
+                                changes_found += 1
+                
+                # Update last scan time
+                self.config['last_scan'] = datetime.now().isoformat()
+                self._save_config()
+                
+                if changes_found > 0:
+                    logger.info(f"🔄 Startup scan complete: {changes_found} files reindexed")
+                else:
+                    logger.info("✅ Startup scan: All configured directories up to date")
+                    
+                # Auto-start watching if enabled
+                if self.config.get('config', {}).get('auto_watch_enabled', True):
+                    await self._start_watching_configured_directories()
+                    
+            except Exception as e:
+                logger.error(f"❌ Startup config scan failed: {e}")
+            finally:
+                self._scan_in_progress = False
+    
+    async def _file_needs_reindexing(self, file_path: str) -> bool:
+        """Check if file needs reindexing based on modification time and hash"""
+        try:
+            if not self.store:
+                return True  # No store connection, process file to be safe
+                
+            file_stat = Path(file_path).stat()
+            current_mtime = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
+            
+            # Calculate current file hash
+            with open(file_path, 'rb') as f:
+                current_hash = hashlib.md5(f.read()).hexdigest()
+            
+            # Check database for existing record
+            cursor = self.store.metadata_db.cursor()
+            cursor.execute('''
+                SELECT file_hash, last_modified FROM documents 
+                WHERE file_path = ?
+            ''', (file_path,))
+            
+            result = cursor.fetchone()
+            if not result:
+                logger.debug(f"📋 New file detected: {Path(file_path).name}")
+                return True  # New file, needs indexing
+            
+            stored_hash, stored_mtime = result
+            
+            # Compare hash and modification time
+            if stored_hash != current_hash:
+                logger.info(f"🔄 Change detected (hash): {Path(file_path).name}")
+                return True
+            elif stored_mtime != current_mtime:
+                logger.info(f"🔄 Change detected (mtime): {Path(file_path).name}")
+                return True
+                
+            logger.debug(f"✅ File up-to-date: {Path(file_path).name}")
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking file {file_path}: {e}")
+            return True  # On error, process file to be safe
+    
+    async def _record_document_metadata(self, file_path: str):
+        """Record document metadata after successful processing"""
+        try:
+            if not self.store:
+                logger.warning(f"📋 No store connection for metadata recording: {Path(file_path).name}")
+                return
+                
+            file_stat = Path(file_path).stat()
+            current_mtime = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
+            
+            # Calculate current file hash
+            with open(file_path, 'rb') as f:
+                current_hash = hashlib.md5(f.read()).hexdigest()
+            
+            # Record in documents table
+            cursor = self.store.metadata_db.cursor()
+            file_stat = Path(file_path).stat()
+            cursor.execute('''
+                INSERT OR REPLACE INTO documents 
+                (file_path, file_hash, file_type, file_size, total_chunks, processed_at, last_modified)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (file_path, current_hash, Path(file_path).suffix.lower(), 
+                  file_stat.st_size, 0, datetime.now().isoformat(), current_mtime))
+            
+            self.store.metadata_db.commit()
+            
+            # Verify the record was saved
+            cursor.execute('SELECT file_hash, last_modified FROM documents WHERE file_path = ?', (file_path,))
+            verify_result = cursor.fetchone()
+            if verify_result:
+                logger.debug(f"📝 Metadata recorded: {Path(file_path).name} (hash: {current_hash[:8]}...)")
+            else:
+                logger.error(f"❌ Metadata verification failed: {Path(file_path).name}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to record document metadata for {file_path}: {e}")
+    
+    async def _start_watching_configured_directories(self):
+        """Start watching all enabled directories from config"""
+        if not WATCHDOG_AVAILABLE:
+            logger.warning("⚠️ Auto-watching disabled - watchdog not installed")
+            return
+            
+        enabled_dirs = [d for d in self.config.get('directories', []) if d.get('enabled', True)]
+        
+        for dir_config in enabled_dirs:
+            directory_path = dir_config['path']
+            if Path(directory_path).exists():
+                self.start_watching(directory_path)
+            else:
+                logger.warning(f"⚠️ Cannot watch non-existent directory: {directory_path}")
+    
+    def add_watch_directory(self, directory_path: str, recursive: bool = True, enabled: bool = True, description: str = ""):
+        """Add a directory to the watch configuration"""
+        try:
+            # Check if directory already exists in config
+            for dir_config in self.config.get('directories', []):
+                if dir_config['path'] == directory_path:
+                    logger.warning(f"⚠️ Directory already in config: {directory_path}")
+                    return False
+            
+            new_dir = {
+                "path": directory_path,
+                "recursive": recursive,
+                "enabled": enabled,
+                "description": description,
+                "added_at": datetime.now().isoformat()
+            }
+            
+            if 'directories' not in self.config:
+                self.config['directories'] = []
+            
+            self.config['directories'].append(new_dir)
+            
+            # Update stats
+            self.config['stats']['total_directories'] = len(self.config['directories'])
+            self.config['stats']['active_directories'] = len([d for d in self.config['directories'] if d.get('enabled', True)])
+            
+            self._save_config()
+            logger.info(f"➕ Added directory to config: {directory_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error adding directory to config: {e}")
+            return False
+    
+    def remove_watch_directory(self, directory_path: str):
+        """Remove a directory from the watch configuration"""
+        try:
+            original_count = len(self.config.get('directories', []))
+            self.config['directories'] = [d for d in self.config.get('directories', []) if d['path'] != directory_path]
+            
+            if len(self.config['directories']) < original_count:
+                # Update stats
+                self.config['stats']['total_directories'] = len(self.config['directories'])
+                self.config['stats']['active_directories'] = len([d for d in self.config['directories'] if d.get('enabled', True)])
+                
+                self._save_config()
+                logger.info(f"➖ Removed directory from config: {directory_path}")
+                return True
+            else:
+                logger.warning(f"⚠️ Directory not found in config: {directory_path}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error removing directory from config: {e}")
+            return False
+    
+    async def smart_index_directory(self, directory_path: str, recursive: bool = True) -> Dict[str, Any]:
+        """Smart directory indexing that only processes changed files"""
+        if not self.store:
+            return {
+                'success': False,
+                'error': 'FAISS not available',
+                'processed': 0,
+                'failed': 0,
+                'skipped': 0,
+                'message': 'Document store not initialized'
+            }
+        
+        try:
+            directory = Path(directory_path)
+            if not directory.exists() or not directory.is_dir():
+                return {
+                    'success': False,
+                    'error': f'Invalid directory: {directory_path}',
+                    'processed': 0,
+                    'failed': 0,
+                    'skipped': 0
+                }
+            
+            results = {
+                'processed': 0,
+                'failed': 0,
+                'skipped': 0,
+                'files': [],
+                'total_files_found': 0
+            }
+            
+            # Get file list
+            if recursive:
+                file_pattern = directory.rglob('*')
+            else:
+                file_pattern = directory.glob('*')
+            
+            files_found = [f for f in file_pattern if f.is_file() and f.suffix.lower() in self.processor.SUPPORTED_TYPES]
+            results['total_files_found'] = len(files_found)
+            
+            logger.info(f"📚 Smart indexing: Found {len(files_found)} supported files")
+            
+            # Check each file for changes
+            for file_path in files_found:
+                try:
+                    if await self._file_needs_reindexing(str(file_path)):
+                        # File needs processing
+                        success = await self._process_single_file(str(file_path))
+                        if success:
+                            results['processed'] += 1
+                            results['files'].append({
+                                'file': str(file_path),
+                                'status': 'processed',
+                                'reason': 'modified or new'
+                            })
+                        else:
+                            results['failed'] += 1
+                            results['files'].append({
+                                'file': str(file_path),
+                                'status': 'failed',
+                                'reason': 'processing error'
+                            })
+                            # Stop on embedding service failure
+                            break
+                    else:
+                        # File is up to date
+                        results['skipped'] += 1
+                        results['files'].append({
+                            'file': str(file_path),
+                            'status': 'skipped',
+                            'reason': 'up-to-date'
+                        })
+                        
+                except Exception as e:
+                    logger.error(f"❌ Error processing {file_path}: {e}")
+                    results['failed'] += 1
+                    results['files'].append({
+                        'file': str(file_path),
+                        'status': 'failed',
+                        'reason': str(e)
+                    })
+            
+            # Generate appropriate message
+            if results['processed'] == 0 and results['failed'] == 0:
+                results['message'] = f"Scan completed: No modified or new files indexed, all {results['skipped']} files are up-to-date"
+            elif results['failed'] > 0:
+                results['message'] = f"Scan completed with errors: {results['processed']} processed, {results['failed']} failed, {results['skipped']} up-to-date"
+            else:
+                results['message'] = f"Scan completed: {results['processed']} new/modified files indexed, {results['skipped']} files up-to-date"
+                
+            results['success'] = True
+            logger.info(f"✅ Smart indexing complete: {results['message']}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"❌ Smart directory indexing failed: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'processed': 0,
+                'failed': 0,
+                'skipped': 0,
+                'message': f'Smart indexing failed: {str(e)}'
+            }
+    
+    async def _safe_startup_config_scan(self):
+        """Safe version of startup config scan with limits and detailed logging"""
+        if self._scan_in_progress:
+            logger.info("⏳ Safe scan skipped - scan already in progress")
+            return
+            
+        self._scan_in_progress = True
+        try:
+            await asyncio.sleep(1)  # Brief initialization wait
+            
+            directories = self.config.get('directories', [])
+            enabled_dirs = [d for d in directories if d.get('enabled', True)]
+            
+            if not enabled_dirs:
+                logger.info("📋 No directories configured for watching")
+                return
+                
+            logger.info(f"🔍 Safe scan: Starting scan of {len(enabled_dirs)} configured directories")
+            total_files_scanned = 0
+            total_files_processed = 0
+            MAX_FILES_PER_SCAN = 100  # Safety limit
+            
+            for dir_idx, dir_config in enumerate(enabled_dirs):
+                directory_path = dir_config['path']
+                recursive = dir_config.get('recursive', True)
+                
+                directory = Path(directory_path)
+                if not directory.exists():
+                    logger.warning(f"⚠️ Directory {dir_idx+1}/{len(enabled_dirs)} not found: {directory_path}")
+                    continue
+                
+                logger.info(f"🔍 Scanning directory {dir_idx+1}/{len(enabled_dirs)}: {directory_path}")
+                
+                # Get file list with limit
+                if recursive:
+                    file_pattern = directory.rglob('*')
+                else:
+                    file_pattern = directory.glob('*')
+                
+                dir_files_scanned = 0
+                dir_files_processed = 0
+                
+                for file_path in file_pattern:
+                    if total_files_scanned >= MAX_FILES_PER_SCAN:
+                        logger.warning(f"🛑 Reached safety limit of {MAX_FILES_PER_SCAN} files - stopping scan")
+                        break
+                        
+                    if file_path.is_file() and file_path.suffix.lower() in self.processor.SUPPORTED_TYPES:
+                        total_files_scanned += 1
+                        dir_files_scanned += 1
+                        
+                        if dir_files_scanned % 10 == 0:  # Log every 10 files
+                            logger.info(f"📊 Directory {dir_idx+1}: scanned {dir_files_scanned} files")
+                        
+                        if await self._file_needs_reindexing(str(file_path)):
+                            logger.info(f"🔄 Processing: {file_path.name}")
+                            success = await self._process_single_file(str(file_path))
+                            
+                            if success:
+                                total_files_processed += 1
+                                dir_files_processed += 1
+                                
+                                if dir_files_processed >= 5:  # Limit per directory
+                                    logger.info(f"📈 Directory {dir_idx+1}: processed {dir_files_processed} files, moving to next directory")
+                                    break
+                            else:
+                                logger.error(f"🛑 Stopping scan due to embedding service failure")
+                                logger.error(f"🔄 Will retry during next watch interval (scan_interval_minutes: {self.config.get('config', {}).get('scan_interval_minutes', 60)})")
+                                return  # Stop scanning immediately
+                
+                if total_files_scanned >= MAX_FILES_PER_SCAN:
+                    break
+                    
+                logger.info(f"✅ Directory {dir_idx+1} complete: {dir_files_scanned} scanned, {dir_files_processed} processed")
+            
+            # Update last scan time
+            self.config['last_scan'] = datetime.now().isoformat()
+            self._save_config()
+            
+            logger.info(f"🎉 Safe scan complete: {total_files_scanned} files scanned, {total_files_processed} files processed")
+                
+        except Exception as e:
+            logger.error(f"❌ Safe startup config scan failed: {e}")
+        finally:
+            self._scan_in_progress = False
+    
+    async def force_scan_changes(self):
+        """Force scan all configured directories for changes"""
+        async with self._scan_lock:
+            if self._scan_in_progress:
+                logger.info("⏳ Scan already in progress, skipping duplicate scan request")
+                return {"status": "skipped", "reason": "scan_in_progress"}
+                
+            logger.info("🔄 Force scan requested - using safe implementation")
+            await self._safe_startup_config_scan()
+            return {"status": "completed", "reason": "safe_scan_finished"}
+    
+    def get_config_status(self) -> Dict[str, Any]:
+        """Get current configuration status"""
+        return {
+            "config_file_exists": self.config_file.exists(),
+            "config": self.config.get('config', {}),
+            "directories": self.config.get('directories', []),
+            "stats": self.config.get('stats', {}),
+            "last_scan": self.config.get('last_scan'),
+            "currently_watching": list(self.watched_directories)
+        }
+
+    async def _process_single_file(self, file_path: str):
+        """Process a single file (used by directory watcher)"""
+        if not self.store:
+            return
+            
+        try:
+            chunks = await self.processor.process_document(file_path)
+            if chunks:
+                success = await self.store.add_chunks(chunks)
+                if success:
+                    # Record document metadata for change detection
+                    await self._record_document_metadata(file_path)
+                    logger.info(f"✅ Auto-processed: {file_path}")
+                    return True
+                else:
+                    logger.error(f"❌ Failed to add chunks (likely embedding service issue): {file_path}")
+                    return False
+            else:
+                logger.warning(f"⚠️ No chunks generated for: {file_path}")
+                # Even if no chunks, record that we processed the file
+                await self._record_document_metadata(file_path)
+                return True  # Not an error, just no content to process
+        except Exception as e:
+            logger.error(f"❌ Auto-processing failed for {file_path}: {e}")
+            return False
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get system statistics"""
+        base_stats = {
+            'faiss_available': FAISS_AVAILABLE,
+            'document_processing_available': DOCUMENT_PROCESSING_AVAILABLE,
+            'watchdog_available': WATCHDOG_AVAILABLE,
+            'watched_directories': list(self.watched_directories),
+            'is_watching': self.observer.is_alive() if self.observer else False,
+            'supported_file_types': list(self.processor.SUPPORTED_TYPES.keys())
+        }
+        
+        if self.store:
+            store_stats = self.store.get_stats()
+            return {**base_stats, **store_stats}
+        else:
+            return base_stats
+    
+    def is_ready(self) -> bool:
+        """Check if the system is ready for document interrogation"""
+        return (FAISS_AVAILABLE and 
+                DOCUMENT_PROCESSING_AVAILABLE and 
+                self.store is not None)
+    
+    async def start_background_scanning(self):
+        """Start the background periodic scanning task"""
+        if not self.config.get('config', {}).get('auto_watch_enabled', False):
+            logger.info("📋 Background scanning disabled in configuration")
+            return
+            
+        scan_interval_minutes = self.config.get('config', {}).get('scan_interval_minutes', 60)
+        if scan_interval_minutes <= 0:
+            logger.warning("⚠️ Invalid scan_interval_minutes, background scanning disabled")
+            return
+            
+        logger.info(f"🔄 Starting background scanning every {scan_interval_minutes} minutes")
+        self._background_scan_task = asyncio.create_task(self._background_scan_loop(scan_interval_minutes))
+    
+    async def stop_background_scanning(self):
+        """Stop the background periodic scanning task"""
+        if hasattr(self, '_background_scan_task') and self._background_scan_task:
+            logger.info("🛑 Stopping background scanning task")
+            self._background_scan_task.cancel()
+            try:
+                await self._background_scan_task
+            except asyncio.CancelledError:
+                pass
+            self._background_scan_task = None
+    
+    async def _background_scan_loop(self, interval_minutes: int):
+        """Background loop that performs periodic scans"""
+        interval_seconds = interval_minutes * 60
+        
+        try:
+            while True:
+                # Wait for the specified interval
+                await asyncio.sleep(interval_seconds)
+                
+                # Perform the periodic scan
+                logger.info(f"⏰ Periodic scan starting (interval: {interval_minutes}min)")
+                try:
+                    await self._safe_startup_config_scan()
+                    logger.info(f"✅ Periodic scan completed successfully")
+                except Exception as e:
+                    logger.error(f"❌ Periodic scan failed: {e}")
+                    
+        except asyncio.CancelledError:
+            logger.info("🛑 Background scanning loop cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"❌ Background scanning loop error: {e}")
+            # Wait a bit before the loop would restart (if it does)
+            await asyncio.sleep(60)
+
+
+# Global instance
+document_interrogator = None
+
+def get_document_interrogator(storage_dir: str = "document_store") -> DocumentInterrogator:
+    """Get or create global document interrogator instance"""
+    global document_interrogator
+    if document_interrogator is None:
+        document_interrogator = DocumentInterrogator(storage_dir)
+    return document_interrogator

@@ -910,11 +910,19 @@ class SecureEmailSenderTool(BaseUserTool):
                 if sanitized_path:
                     attachment_paths = [sanitized_path]
             else:
-                # Auto-detect recent report files if no attachments specified
-                recent_reports = self._detect_recent_reports()
-                if recent_reports:
-                    print(f"🔍 AUTO-DETECT: Found {len(recent_reports)} recent report(s): {', '.join(recent_reports)}")
-                    attachment_paths = recent_reports
+                # 🆕 ENHANCED: Support plain text emails without attachments
+                # Only auto-detect files if user explicitly mentions attachments, files, or reports
+                if any(keyword in body.lower() for keyword in ["attach", "file", "report", "document", "pdf"]) and \
+                   not any(exclude in body.lower() for exclude in ["summarize", "summary", "conversation"]):
+                    # Auto-detect recent report files if no attachments specified
+                    recent_reports = self._detect_recent_reports()
+                    if recent_reports:
+                        print(f"🔍 AUTO-DETECT: Found {len(recent_reports)} recent report(s): {', '.join(recent_reports)}")
+                        attachment_paths = recent_reports
+                    else:
+                        print(f"📧 PLAIN TEXT EMAIL: No files detected, sending text-only email")
+                else:
+                    print(f"📧 PLAIN TEXT EMAIL: Sending text summary without file attachments")
             
             # 🆕 NEW: Wait for all attachments to be ready before proceeding
             wait_for_attachments = parsed_args.get("wait_for_attachments", True)

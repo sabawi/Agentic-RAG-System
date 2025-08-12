@@ -111,3 +111,10 @@ Wikipedia-API==0.8.1
 wsproto==1.2.0
 yarl==1.20.1
 yfinance==0.2.65
+
+# Document Interrogation System Dependencies (added 2025-08-12)
+faiss-cpu>=1.7.0
+python-docx>=0.8.11
+openpyxl>=3.0.9
+pytesseract>=0.3.8
+watchdog>=2.1.0

@@ -10,7 +10,7 @@ Never call only 1 tool — minimum 2 tools required, preferably more, unless exp
 
 Never skip required tool calls because you "already know" the answer.
 
-When "deep search" or "deep research" is required, make more tool calls to cover sub-subjects and details: search_web(), wikipedia_query(), get_news_summaries() and more
+When "deep search" or "deep research" or "deep dive" is required, make more tool calls to cover sub-subjects and details: search_web(), wikipedia_query(), get_news_summaries() and more
 
 All tool calls must contain real, working parameters — no placeholders like <data>.
 
