@@ -28,6 +28,33 @@ from concurrent.futures import ThreadPoolExecutor
 import aiohttp
 import requests
 
+# HTTP Connection Pooling
+from http_pool_manager import http_pool, init_http_pool, cleanup_http_pool
+from http_helpers import pooled_get, pooled_post, requests_compatible_get, requests_compatible_post
+
+# Phase 2B: Advanced Response Streaming & Buffer Optimization
+try:
+    from phase2b_rollback_controller import (
+        rollback_controller, enable_phase2b_feature, disable_phase2b_feature, 
+        is_phase2b_feature_enabled, FeatureFlag, emergency_rollback_phase2b
+    )
+    from phase2b_performance_monitor import (
+        performance_monitor, record_performance_metric, get_performance_health
+    )
+    from phase2b_streaming_fallback import (
+        streaming_wrapper, process_response_with_streaming, get_streaming_statistics
+    )
+    from phase2b_buffer_manager import (
+        buffer_manager, start_buffer_management, stop_buffer_management, get_buffer_statistics
+    )
+    from phase2b_response_classifier import (
+        response_classifier, classify_response, get_classification_statistics
+    )
+    PHASE2B_AVAILABLE = True
+except ImportError as e:
+    PHASE2B_AVAILABLE = False
+    PHASE2B_IMPORT_ERROR = str(e)
+
 # FastAPI imports
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -715,7 +742,7 @@ class AsyncToolManager:
                 # Web content extraction (simplified version)
                 def get_text_from_url(url):
                     try:
-                        response = requests.get(url, timeout=10, headers={
+                        response = requests_compatible_get(url, timeout=10, headers={
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                         })
                         response.raise_for_status()
@@ -829,7 +856,7 @@ class AsyncToolManager:
                 # Simplified URL content extraction (to avoid Selenium dependency issues)
                 def get_text_from_url_simplified(url):
                     try:
-                        response = requests.get(url, timeout=10, headers={
+                        response = requests_compatible_get(url, timeout=10, headers={
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                         })
                         response.raise_for_status()
@@ -909,7 +936,7 @@ class AsyncToolManager:
                         
                         # Check with magic if available
                         try:
-                            full_response = requests.get(url, stream=True, timeout=10)
+                            full_response = requests_compatible_get(url, timeout=10)
                             mime = magic.Magic(mime=True)
                             content_type = mime.from_buffer(full_response.content[:1024])
                             return content_type == 'application/pdf'
@@ -921,7 +948,7 @@ class AsyncToolManager:
                 
                 def extract_pdf_text(url: str) -> str:
                     try:
-                        response = requests.get(url, timeout=30)
+                        response = requests_compatible_get(url, timeout=30)
                         pdf_file = io.BytesIO(response.content)
                         pdf_reader = PyPDF2.PdfReader(pdf_file)
                         
@@ -1049,7 +1076,7 @@ class AsyncToolManager:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
-            response = requests.get(url, headers=headers, timeout=30)
+            response = requests_compatible_get(url, headers=headers, timeout=30)
             response.raise_for_status()
 
             # Check if we actually got a PDF
@@ -1411,11 +1438,36 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting FastAPI server with Ollama integration...")
     await init_db_pool()
+    await init_http_pool()
     
-    # Test Ollama connection
+    # Initialize Phase 2B components safely
+    if PHASE2B_AVAILABLE:
+        try:
+            logger.info("🚀 Initializing Phase 2B: Advanced Response Streaming & Buffer Optimization")
+            
+            # Start performance monitoring first (always enabled for safety)
+            performance_monitor.start_monitoring()
+            
+            # Initialize buffer management
+            await start_buffer_management()
+            
+            # Initialize streaming wrapper (features disabled by default)
+            # Features will only activate when explicitly enabled via rollback controller
+            
+            logger.info("✅ Phase 2B components initialized with rollback safety")
+            logger.info(f"🛡️ Rollback controller status: {rollback_controller.get_status()}")
+            
+        except Exception as e:
+            logger.error(f"❌ Phase 2B initialization failed: {e}")
+            logger.warning("🔄 Falling back to Phase 2A operation")
+            # Continue with Phase 2A - don't fail startup
+    else:
+        logger.info("ℹ️ Phase 2B not available - continuing with Phase 2A operation")
+    
+    # Test Ollama connection using connection pool
     try:
-        response = requests.get('http://127.0.0.1:11434/api/tags', timeout=5)
-        if response.status_code == 200:
+        response_data = await pooled_get('http://127.0.0.1:11434/api/tags', timeout=5)
+        if response_data['status_code'] == 200:
             logger.info("Ollama service is available")
         else:
             logger.warning("Ollama service test failed")
@@ -1426,7 +1478,19 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down...")
+    
+    # Shutdown Phase 2B components safely
+    if PHASE2B_AVAILABLE:
+        try:
+            logger.info("🔄 Shutting down Phase 2B components...")
+            performance_monitor.stop_monitoring()
+            await stop_buffer_management()
+            logger.info("✅ Phase 2B components shutdown complete")
+        except Exception as e:
+            logger.error(f"❌ Phase 2B shutdown error: {e}")
+    
     await close_db_pool()
+    await cleanup_http_pool()
     thread_pool.shutdown(wait=True)
 
 # ==============================================================================
@@ -1486,10 +1550,10 @@ async def run_cpu_intensive_task(func, *args, **kwargs):
     return await loop.run_in_executor(thread_pool, func, *args, **kwargs)
 
 async def check_ollama_health() -> bool:
-    """Check if Ollama service is healthy"""
+    """Check if Ollama service is healthy using connection pool"""
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get('http://127.0.0.1:11434/api/tags', timeout=5) as response:
+        async with http_pool.get_session() as session:
+            async with session.get('http://127.0.0.1:11434/api/tags', timeout=aiohttp.ClientTimeout(total=5)) as response:
                 return response.status == 200
     except:
         return False
@@ -1744,8 +1808,8 @@ async def llama_prompt(request: OllamaPromptRequest):
         if request.context:
             payload["context"] = request.context
         
-        # Use async HTTP client
-        async with aiohttp.ClientSession() as session:
+        # Use HTTP connection pool
+        async with http_pool.get_session() as session:
             async with session.post(
                 ServerConfig.OLLAMA_URL,
                 json=payload,
@@ -2821,11 +2885,24 @@ async def llama_stream(request: Request):
                     tool_request["tools"] = tools_array
                     logger.info(f"Sending tool calling request with {len(tool_request['tools'])} tools")
                     
-                    response = requests.post(
+                    response_data = await pooled_post(
                         ServerConfig.OLLAMA_CHAT_URL,
                         json=tool_request,
                         timeout=ServerConfig.TASK_TIMEOUT  # Use configurable timeout for tool operations
                     )
+                    
+                    # Convert pooled response to requests-like object for compatibility
+                    class CompatResponse:
+                        def __init__(self, data):
+                            self.status_code = data['status_code']
+                            self.text = data['text']
+                            self.content = data['content']
+                            self.headers = data['headers']
+                        def json(self):
+                            import json
+                            return json.loads(self.text)
+                    
+                    response = CompatResponse(response_data)
                     
                     if response.status_code == 200:
                         response_data = response.json()
@@ -3180,8 +3257,8 @@ END OF CONTEXT
             logger.info(f"🎯 CONTEXT BLOCK size = {len(context_block)} bytes")
             logger.info(f"🎯 SYSTEM PROMPT size = {len(enhanced_system)} bytes")
             
-            # Stream response from Ollama  
-            async with aiohttp.ClientSession() as session:
+            # Stream response from Ollama using connection pool
+            async with http_pool.get_session() as session:
                 stream_payload = {
                     "model": model,
                     "prompt": in_prompt,
@@ -3450,7 +3527,7 @@ async def health_check():
 async def list_ollama_models():
     """List available Ollama models"""
     try:
-        async with aiohttp.ClientSession() as session:
+        async with http_pool.get_session() as session:
             async with session.get('http://127.0.0.1:11434/api/tags') as response:
                 if response.status == 200:
                     data = await response.json()
@@ -3987,6 +4064,172 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
     except Exception as e:
         logger.error(f"🚨 OpenAI streaming error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==============================================================================
+# PHASE 2B MANAGEMENT ENDPOINTS
+# ==============================================================================
+
+if PHASE2B_AVAILABLE:
+    @app.get("/phase2b/status")
+    async def get_phase2b_status():
+        """Get Phase 2B system status and feature flags"""
+        try:
+            return {
+                "success": True,
+                "rollback_controller": rollback_controller.get_status(),
+                "performance_health": get_performance_health(),
+                "streaming_stats": get_streaming_statistics(),
+                "buffer_stats": get_buffer_statistics(),
+                "classification_stats": get_classification_statistics(),
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"❌ Phase 2B status error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/phase2b/feature/{feature_name}/enable")
+    async def enable_phase2b_feature_endpoint(feature_name: str):
+        """Enable a Phase 2B feature"""
+        try:
+            # Validate feature name
+            feature_map = {
+                "streaming": FeatureFlag.STREAMING_FALLBACK,
+                "buffer_optimization": FeatureFlag.BUFFER_OPTIMIZATION,
+                "response_classification": FeatureFlag.RESPONSE_CLASSIFICATION,
+                "performance_monitoring": FeatureFlag.PERFORMANCE_MONITORING,
+                "response_streaming": FeatureFlag.RESPONSE_STREAMING
+            }
+            
+            if feature_name not in feature_map:
+                return {
+                    "success": False, 
+                    "error": f"Invalid feature name. Available: {list(feature_map.keys())}"
+                }
+            
+            feature = feature_map[feature_name]
+            success = enable_phase2b_feature(feature)
+            
+            if success:
+                logger.info(f"✅ Phase 2B feature enabled: {feature_name}")
+                return {
+                    "success": True,
+                    "message": f"Feature {feature_name} enabled successfully",
+                    "status": rollback_controller.get_status()
+                }
+            else:
+                return {"success": False, "error": "Failed to enable feature"}
+                
+        except Exception as e:
+            logger.error(f"❌ Feature enable error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/phase2b/feature/{feature_name}/disable")
+    async def disable_phase2b_feature_endpoint(feature_name: str):
+        """Disable a Phase 2B feature"""
+        try:
+            feature_map = {
+                "streaming": FeatureFlag.STREAMING_FALLBACK,
+                "buffer_optimization": FeatureFlag.BUFFER_OPTIMIZATION,
+                "response_classification": FeatureFlag.RESPONSE_CLASSIFICATION,
+                "response_streaming": FeatureFlag.RESPONSE_STREAMING
+                # Note: performance_monitoring cannot be disabled for safety
+            }
+            
+            if feature_name not in feature_map:
+                return {
+                    "success": False, 
+                    "error": f"Invalid feature name. Available: {list(feature_map.keys())}"
+                }
+            
+            feature = feature_map[feature_name]
+            success = disable_phase2b_feature(feature)
+            
+            if success:
+                logger.info(f"🔒 Phase 2B feature disabled: {feature_name}")
+                return {
+                    "success": True,
+                    "message": f"Feature {feature_name} disabled successfully",
+                    "status": rollback_controller.get_status()
+                }
+            else:
+                return {"success": False, "error": "Failed to disable feature"}
+                
+        except Exception as e:
+            logger.error(f"❌ Feature disable error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/phase2b/rollback/emergency")
+    async def emergency_rollback_endpoint():
+        """Emergency rollback to Phase 2A baseline"""
+        try:
+            logger.warning("🚨 Emergency rollback requested via API")
+            success = emergency_rollback_phase2b()
+            
+            if success:
+                return {
+                    "success": True,
+                    "message": "Emergency rollback successful - Phase 2A baseline restored",
+                    "status": rollback_controller.get_status()
+                }
+            else:
+                return {"success": False, "error": "Emergency rollback failed"}
+                
+        except Exception as e:
+            logger.critical(f"💥 Emergency rollback API error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/phase2b/rollback/clear-emergency")
+    async def clear_emergency_fallback_endpoint():
+        """Clear emergency fallback mode to allow feature activation"""
+        try:
+            logger.info("🔄 Clearing emergency fallback mode via API")
+            success = rollback_controller.disable_emergency_fallback()
+            
+            if success:
+                return {
+                    "success": True,
+                    "message": "Emergency fallback cleared - features can now be enabled",
+                    "status": rollback_controller.get_status()
+                }
+            else:
+                return {"success": False, "error": "Failed to clear emergency fallback"}
+                
+        except Exception as e:
+            logger.error(f"❌ Clear emergency fallback error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.get("/phase2b/checkpoints")
+    async def list_rollback_checkpoints():
+        """List available rollback checkpoints"""
+        try:
+            checkpoints = rollback_controller.list_checkpoints()
+            return {
+                "success": True,
+                "checkpoints": checkpoints,
+                "count": len(checkpoints)
+            }
+        except Exception as e:
+            logger.error(f"❌ Checkpoint listing error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @app.post("/phase2b/rollback/{checkpoint_id}")
+    async def rollback_to_checkpoint_endpoint(checkpoint_id: str):
+        """Rollback to a specific checkpoint"""
+        try:
+            success = rollback_controller.rollback_to_checkpoint(checkpoint_id)
+            
+            if success:
+                return {
+                    "success": True,
+                    "message": f"Rollback to {checkpoint_id} successful",
+                    "status": rollback_controller.get_status()
+                }
+            else:
+                return {"success": False, "error": f"Rollback to {checkpoint_id} failed"}
+                
+        except Exception as e:
+            logger.error(f"❌ Rollback error: {e}")
+            return {"success": False, "error": str(e)}
 
 # ==============================================================================
 # MAIN APPLICATION RUNNER
