@@ -632,37 +632,37 @@ class AsyncToolManager:
                     "world": [
                         "https://apnews.com/world-news",
                         "https://www.aljazeera.com/europe/",
-                        "https://www.reuters.com/world/"
+                        "https://feeds.bbci.co.uk/news/world/rss.xml"
                     ],
                     "national": [
                         "https://apnews.com/us-news",
-                        "https://www.reuters.com/world/us/",
+                        "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml",
                         "https://www.npr.org/sections/national/"
                     ],
                     "business": [
                         "https://www.npr.org/sections/business/",
-                        "https://www.reuters.com/business/"
+                        "https://feeds.bbci.co.uk/news/business/rss.xml"
                     ],
                     "finance": [
-                        "https://www.reuters.com/markets/global-market-data/",
+                        "https://www.cnbc.com/id/100003114/device/rss/rss.html",
                         "https://www.cnbc.com/economy/",
                         "https://finance.yahoo.com/topic/stock-market-news/",
-                        "https://www.reuters.com/markets/us/",
+                        "https://feeds.bbci.co.uk/news/business/rss.xml",
                         "https://finance.yahoo.com/topic/latest-news/"
                     ],
                     "science": [
-                        "https://www.reuters.com/technology/",
+                        "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
                         "https://www.sciencenews.org/all-stories",
                         "https://www.npr.org/sections/science/"
                     ],
                     "news": [        
                         "https://apnews.com/hub/ap-top-news",
-                        "https://www.reuters.com/",
+                        "https://feeds.bbci.co.uk/news/rss.xml",
                         "https://www.npr.org/sections/news/"
                     ],
                     "default": [
                         "https://apnews.com/hub/ap-top-news",
-                        "https://www.reuters.com/"
+                        "https://feeds.bbci.co.uk/news/rss.xml"
                     ]
                 }
                 
@@ -1549,7 +1549,9 @@ async def log_requests(request: Request, call_next):
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
-    logger.info(f"{request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s")
+    # Output condition: Request completed
+    status_text = "OK" if response.status_code < 400 else "ERR" if response.status_code >= 500 else "WARN"
+    logger.info(f"{status_text} {request.method} {request.url.path} | {response.status_code} | {process_time:.3f}s")
     return response
 
 # ==============================================================================
@@ -2800,16 +2802,20 @@ async def llama_stream(request: Request):
     Main Ollama streaming endpoint with tool calling
     Equivalent to the original /llama3_1b/stream endpoint
     """
+    logger.info("🔧 DEBUG: Endpoint /llama3_1b/stream called")
     # Parse JSON data manually like the original Flask version
     try:
         data = await request.json()
+        logger.info("🔧 DEBUG: JSON parsed successfully")
     except Exception as e:
         logger.error(f"Failed to parse JSON: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON data")
     
     # Extract parameters with defaults (exactly like Flask version)
     user_prompt = data['prompt']  # Use direct access like original for required field
-    logger.info(f"\n\nUser prompt : {data['prompt']}\n\n")
+    model = data.get('model', ServerConfig.DEFAULT_MODEL)  # Get model early for logging
+    # Input condition: User request received
+    logger.info(f"Request: {len(user_prompt)} chars | Model: {model} | Tools: {'ON' if True else 'OFF'}")
     
     prompt_context = data.get('prompt_context', '')  # Using data['prompt_context'] like original
     
@@ -2821,7 +2827,8 @@ async def llama_stream(request: Request):
     tools_in_use = True  # Default like original
     if "toolsInUse" in data:
         tools_in_use = data["toolsInUse"]
-    logger.info(f"\n\n##### toolsInUse from the client = {tools_in_use}\n\n")
+    # Tool usage mode determined
+    logger.info(f"Tool usage mode: {tools_in_use}")
     
     # Handle searchWebInUse exactly like original
     search_web_in_use = False  # Default like original
@@ -2829,7 +2836,7 @@ async def llama_stream(request: Request):
         search_web_in_use = data["searchWebInUse"]
     
     # Other parameters
-    model = data.get('model', ServerConfig.DEFAULT_MODEL)
+    # model already extracted above for logging
     images = data.get('images', ['noimage'])
     tools_calling_model = data.get('tools_calling_model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL)
     
@@ -2837,10 +2844,12 @@ async def llama_stream(request: Request):
     image_exists = False
     if "images" in data:
         if data["images"][0] != "noimage":
-            logger.info("Request has Image ......")
+            logger.info("Image processing enabled")
             image_exists = True
     
     async def generate_stream():
+        import time  # Import time at function start for timing measurements
+        logger.info("🔧 DEBUG: generate_stream() function called")
         try:
             tools_results_list = []  # Use list for O(1) append vs O(n²) string concatenation
             tools_called = []  # Track all tools that were called
@@ -2852,7 +2861,8 @@ async def llama_stream(request: Request):
             # ###########################################################################
             # TWO-STAGE TOOL CALLING ALGORITHM (exactly like original Flask implementation)
             if (tools_in_use):
-                logger.info("---> Tools are in use")
+                # Tool execution phase initiated
+                logger.info("🔧 DEBUG: Entering tool execution phase")
                 
                 # STAGE 1: Call tool calling model to generate JSON function calls
                 # Load system prompt from external file
@@ -2874,9 +2884,8 @@ async def llama_stream(request: Request):
                 
                 try:
                     tools_model = data.get('tools_calling_model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL).strip()
-                    logger.info(f"Calling Tools Model ==> {tools_model}")
-                    logger.info(f"Tools available count: {len(data.get('tools', []))}")
-                    logger.info(f"Using endpoint: {ServerConfig.OLLAMA_CHAT_URL}")
+                    # Tool calling model preparation
+                    logger.info(f"Tool calling: {tools_model} with {len(data.get('tools', []))} tools")
                     
                     # Call the tool calling model to get JSON function calls
                     # 🎯 NEW APPROACH: Let tool calling model orchestrate ALL tools, intercept email calls
@@ -2898,7 +2907,7 @@ async def llama_stream(request: Request):
                         "stream": False,
                         "think": False
                     }
-                    logger.info(f"Generated tools array length: {len(tools_array)}")
+                    # Tools array prepared
                     if len(tools_array) == 0:
                         logger.error("❌ Tools array is empty! This will cause timeout.")
                     else:
@@ -2906,13 +2915,15 @@ async def llama_stream(request: Request):
                         logger.info(f"Available tools: {tool_names}")
                     
                     tool_request["tools"] = tools_array
-                    logger.info(f"Sending tool calling request with {len(tool_request['tools'])} tools")
+                    # Tool request being sent
+                    logger.info("🔧 DEBUG: About to call Ollama tool model")
                     
                     response_data = await pooled_post(
                         ServerConfig.OLLAMA_CHAT_URL,
                         json=tool_request,
                         timeout=ServerConfig.TASK_TIMEOUT  # Use configurable timeout for tool operations
                     )
+                    logger.info("🔧 DEBUG: Ollama tool model response received")
                     
                     # Convert pooled response to requests-like object for compatibility
                     class CompatResponse:
@@ -2929,28 +2940,29 @@ async def llama_stream(request: Request):
                     
                     if response.status_code == 200:
                         response_data = response.json()
-                        logger.info(f"Tool calling response status: SUCCESS")
-                        logger.info(f"Response keys: {list(response_data.keys())}")
+                        # Tool calling completed successfully
                         
                         if 'message' in response_data:
                             message_keys = list(response_data['message'].keys())
-                            logger.info(f"Message keys: {message_keys}")
-                            logger.info(f"ollama.chat() response content: {json.dumps(response_data.get('message', {}).get('content', ''))}")
+                            # Debug: Log what the tool calling model returned
+                            logger.info(f"🔧 DEBUG: Tool model response keys: {message_keys}")
+                            if 'content' in response_data['message']:
+                                content = response_data['message']['content'][:200]
+                                logger.info(f"🔧 DEBUG: Tool model content: {content}")
                         
                         # STAGE 2: Process tool calls if present
                         if 'message' in response_data and 'tool_calls' in response_data['message']:
                             tool_calls = response_data['message']['tool_calls']
-                            logger.info(f"✅ TOOL CALLS DETECTED! Found {len(tool_calls)} tool calls")
+                            logger.info(f"🎯 TOOL CALLS DETECTED: {len(tool_calls)} tools to execute")
                             
                             # Process each tool call - PARALLEL EXECUTION OPTIMIZATION
-                            import time
                             import asyncio
                             
                             # Log all tool calls upfront
                             for i, tool_call in enumerate(tool_calls):
                                 function_name = tool_call['function']['name']
                                 function_args = tool_call['function']['arguments']
-                                logger.info(f"Tool Call {i+1}: {function_name} with args: {function_args}")
+                                # Tool call registered
                                 tools_called.append(function_name)  # Track this tool was called
                             
                             # Define async function for parallel execution
@@ -2965,11 +2977,11 @@ async def llama_stream(request: Request):
                                 
                                 # Execute the function with timing
                                 start_time = time.time()
-                                logger.info(f"🔧 Executing tool: {function_name} - START")
+                                logger.info(f"==> TOOL {i+1} CALLED: {function_name}({', '.join([f'{k}=\"{str(v)[:50]}...\"' if len(str(v)) > 50 else f'{k}=\"{v}\"' for k, v in function_args.items()])})")
                                 
                                 # 🎯 INTERCEPT EMAIL CALLS - Fake success, set flag for post-processing
                                 if function_name == "secure_email_sender":
-                                    logger.info(f"📧 INTERCEPTING secure_email_sender call - will execute after Primary LLM")
+                                    logger.info(f"📧 TOOL {i+1} DEFERRED: {function_name} - Email intercepted for post-processing")
                                     result = "Email scheduled for sending after content generation"
                                     # Handle email interception in parallel context
                                     return (function_name, result, start_time, True, function_args.copy())
@@ -2979,18 +2991,18 @@ async def llama_stream(request: Request):
                             
                             # Execute all tools in parallel using asyncio.gather
                             tool_execution_start = time.time()
-                            logger.info(f"🚀 PARALLEL EXECUTION: Starting {len(tool_calls)} tools concurrently")
+                            logger.info(f"🚀 EXECUTING {len(tool_calls)} TOOLS IN PARALLEL 🚀")
                             
                             tool_tasks = [execute_single_tool((i, tool_call)) for i, tool_call in enumerate(tool_calls)]
                             tool_results_list = await asyncio.gather(*tool_tasks, return_exceptions=True)
                             
                             total_parallel_time = time.time() - tool_execution_start
-                            logger.info(f"🚀 PARALLEL EXECUTION COMPLETED: All {len(tool_calls)} tools finished in {total_parallel_time:.2f}s")
+                            logger.info(f"⏱️ PARALLEL EXECUTION COMPLETE: {len(tool_calls)} tools in {total_parallel_time:.2f}s")
                             
                             # Process results and handle any email interceptions
-                            for result_data in tool_results_list:
+                            for i, result_data in enumerate(tool_results_list):
                                 if isinstance(result_data, Exception):
-                                    logger.error(f"🚨 Tool execution failed: {str(result_data)}")
+                                    logger.error(f"❌ TOOL {i+1} ERROR: {str(result_data)}")
                                     continue
                                 
                                 function_name, result, start_time, is_email, email_params = result_data
@@ -3002,7 +3014,14 @@ async def llama_stream(request: Request):
                                     email_intercepted = True
                                     intercepted_email_params = email_params
                                 
-                                logger.info(f"🔧 Tool {function_name} COMPLETED in {execution_time:.2f}s - result length: {len(str(result))} chars")
+                                # Determine status and format output
+                                if result and len(str(result)) > 0:
+                                    if "error" in str(result).lower() or "failed" in str(result).lower():
+                                        logger.info(f"⚠️ TOOL {i+1} OUTPUT: PARTIAL SUCCESS - {function_name} | {execution_time:.2f}s | {len(str(result))} chars")
+                                    else:
+                                        logger.info(f"✅ TOOL {i+1} OUTPUT: SUCCESS!! - {function_name} | {execution_time:.2f}s | {len(str(result))} chars")
+                                else:
+                                    logger.info(f"❌ TOOL {i+1} OUTPUT: ERROR - {function_name} | {execution_time:.2f}s | No output received")
                                 tools_results_list.append(f"Tool: {function_name}\nResult: {result}\n\n")
                         
                         else:
@@ -3039,12 +3058,11 @@ async def llama_stream(request: Request):
                             
                             # Execute forced tool calls - PARALLEL EXECUTION OPTIMIZATION
                             if forced_tools:
-                                import time
                                 import asyncio
                                 
                                 # Log all forced tool calls upfront
                                 for function_name, function_args in forced_tools:
-                                    logger.info(f"🔧 FORCE-Executing tool: {function_name} - START")
+                                    logger.info(f"🔧 FORCED Tool {function_name}: START | Args: {list(forced_args.keys())}")
                                     tools_called.append(function_name)
                                 
                                 # Define async function for parallel forced execution
@@ -3073,7 +3091,7 @@ async def llama_stream(request: Request):
                                     function_name, result, start_time = result_data
                                     end_time = time.time()
                                     execution_time = end_time - start_time
-                                    logger.info(f"🔧 FORCED Tool {function_name} COMPLETED in {execution_time:.2f}s - result length: {len(str(result))} chars")
+                                    logger.info(f"🔧 FORCED Tool {function_name}: COMPLETE | {execution_time:.2f}s | Result: {len(str(result))} chars")
                                     tools_results_list.append(f"Tool: {function_name}\nResult: {result}\n\n")
                     
                     else:
@@ -3276,9 +3294,8 @@ END OF CONTEXT
             else:
                 in_prompt = f"PROMPT: {user_prompt}"
             
-            logger.info(f"🎯 NEW FORMAT: in_prompt size = {len(in_prompt)} bytes")
-            logger.info(f"🎯 CONTEXT BLOCK size = {len(context_block)} bytes")
-            logger.info(f"🎯 SYSTEM PROMPT size = {len(enhanced_system)} bytes")
+            # Core metrics for debugging
+            logger.info(f"📜 Prompt: {len(in_prompt)} bytes | Context: {len(context_block)} | System: {len(enhanced_system)}")
             
             # Stream response from Ollama using connection pool
             async with http_pool.get_session() as session:
@@ -3301,8 +3318,9 @@ END OF CONTEXT
                 if image_exists:
                     stream_payload["images"] = data.get("images")
                 
-                logger.info(f"🚀 STARTING Primary LLM Call ==> {model}")
-                logger.info(f"🚀 Context ready - in_prompt size: {len(in_prompt)} bytes")
+                logger.info(f"🤖 PRIMARY LLM: {model} | Input: {len(in_prompt)} bytes | Tools: {len(tools_called)}")
+                llm_start_time = time.time()
+                # LLM input ready
                 
                 async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=None) as response:
                     if response.status == 200:
@@ -3340,14 +3358,18 @@ END OF CONTEXT
                                 except:
                                     pass  # Skip non-text chunks
                         
-                        # 🎯 PRE-ENTRANCE: Check if post-processing should run
+                        # Output condition: PRIMARY LLM completed
+                        llm_duration = time.time() - llm_start_time
+                        logger.info(f"🤖 PRIMARY LLM: COMPLETE | {llm_duration:.2f}s | Output: {len(complete_llm_response)} chars")
+                        
+                        # Post-processing phase
                         logger.info(f"🔍🔍🔍 CRITICAL: Reached post-processing section!")
                         logger.info(f"🔍 PRE-POST-PROCESSING: email_intercepted={email_intercepted}")
                         logger.info(f"🔍 PRE-POST-PROCESSING: intercepted_email_params={intercepted_email_params}")
                         
                         # 🎯 NEW POST-PROCESSING: Handle intercepted email calls first
                         if email_intercepted:
-                            logger.info(f"🚪 ENTRANCE: Starting post-processing logic")
+                            logger.info(f"📧 POST-LLM EMAIL: Processing deferred email")
                             logger.info(f"📧 POST-LLM: Processing intercepted email call")
                             logger.info(f"🎯 Complete LLM response length: {len(complete_llm_response)} characters")
                             

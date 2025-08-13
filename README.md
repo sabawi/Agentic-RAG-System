@@ -1,4 +1,4 @@
-# Agentic RAG System v0.8
+# Agentic RAG System v0.8.1
 
 A high-performance FastAPI-based agentic RAG (Retrieval-Augmented Generation) system with Ollama LLM integration and comprehensive tool calling capabilities.
 
@@ -78,12 +78,17 @@ flaskserver/
 - Python 3.12+
 - Ollama service running
 - MySQL/MariaDB (optional)
+- System tools: `jq`, `bc` (for testing framework)
 
 ### Setup
 ```bash
 # Clone the repository
 git clone https://github.com/sabawi/agentic-rag-system.git
 cd agentic-rag-system
+
+# Install system dependencies (Ubuntu/Debian)
+sudo apt-get update
+sudo apt-get install jq bc
 
 # Setup virtual environment and dependencies
 ./setup_fastapi.sh
@@ -180,16 +185,28 @@ ollama pull qwen3:8b         # Primary LLM
 ollama pull llama3.1:8b      # Alternative model
 ```
 
-## 🧪 Testing
+## 🧪 Testing & Development
 
-Comprehensive test suite available in `testing/` directory:
+Comprehensive testing and development tools available in `testing/` directory:
 
+### Quick Health Check
 ```bash
 cd testing/
+./quick_health_check.sh            # Fast system verification
+```
+
+### Comprehensive Testing
+```bash
+./comprehensive_test_suite.sh       # Full system test suite
+./test_embedding_service.sh         # Document processing & search tests
+./test_api_endpoints.sh             # All API endpoints with curl examples
+```
+
+### Legacy Python Tests
+```bash
 python test_fastapi.py              # Basic functionality
 python test_tool_calling.py         # Tool calling system
 python test_comprehensive_news.py   # Enhanced news function
-./curl_test.sh                      # Shell-based tests
 ```
 
 See `testing/TestingReadme.md` for detailed testing documentation.
@@ -214,9 +231,18 @@ This system represents a complete migration from the original Flask implementati
 
 ## 📈 Version History
 
-### v0.8 (Current)
+### v0.8.1 (Current)
+- **📚 Complete Developer Documentation** - Comprehensive API reference with 400+ curl examples
+- **🧪 Advanced Testing Framework** - 4 specialized test suites covering all endpoints
+- **🔍 Embedding Service Debug Guide** - Deep troubleshooting for document processing
+- **⚡ Performance Bug Fixes** - Fixed time variable errors and parallel tool execution
+- **🛠️ Troubleshooting Guide** - Complete issue diagnosis and resolution procedures
+- **📋 100% Endpoint Coverage** - All 32 endpoints documented and tested
+- **🎯 Quick Health Checks** - Fast system verification tools
+
+### v0.8.0 (Previous)
 - Complete FastAPI migration
-- Enhanced news function with full article content
+- Enhanced news function with full article content  
 - Updated to ddgs package (from deprecated duckduckgo_search)
 - **User-Defined Tools System** - Extensible tool architecture
 - **Secure Email Tool** - Professional email sending with attachments
@@ -241,11 +267,23 @@ This system represents a complete migration from the original Flask implementati
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
+## 📚 Documentation
+
+### Developer Resources
+- **[Developer API Reference](DEVELOPER_API_REFERENCE.md)** - Complete API documentation with curl examples
+- **[Embedding Service Debug Guide](EMBEDDING_SERVICE_DEBUG_GUIDE.md)** - Document processing troubleshooting
+- **[Troubleshooting Guide](TROUBLESHOOTING_GUIDE.md)** - Common issues and solutions
+- **[Testing Documentation](testing/TestingReadme.md)** - Comprehensive testing information
+
+### Architecture Documentation  
+- **[System Architecture](SYSTEM_ARCHITECTURE.md)** - Technical architecture overview
+- **[Implementation Guide](IMPLEMENTATION_GUIDE.md)** - Development implementation details
+- **[Claude Memory](CLAUDE.md)** - Project instructions and system memory
+
 ## 🔗 Links
 
 - **Repository**: https://github.com/sabawi/agentic-rag-system
 - **Issues**: https://github.com/sabawi/agentic-rag-system/issues
-- **Documentation**: See testing/TestingReadme.md for detailed testing info
 
 ## 📞 Support
 
@@ -253,4 +291,4 @@ For questions and support, please open an issue on GitHub or contact the maintai
 
 ---
 
-**Agentic RAG System v0.8** - High-performance agentic RAG with Ollama integration
+**Agentic RAG System v0.8.1** - High-performance agentic RAG with Ollama integration
