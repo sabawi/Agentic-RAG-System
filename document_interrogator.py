@@ -17,18 +17,44 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-# Document processing
+# Import integrity monitoring
+try:
+    from faiss_integrity_monitor import check_and_repair_faiss_integrity
+    INTEGRITY_MONITORING_AVAILABLE = True
+except ImportError:
+    INTEGRITY_MONITORING_AVAILABLE = False
+    logger.warning("⚠️ FAISS integrity monitoring not available")
+
+# Document processing with multi-engine OCR support
 try:
     import PyPDF2
     import docx
     import openpyxl
     from bs4 import BeautifulSoup
-    import pytesseract
     from PIL import Image
+    
+    # Multi-engine OCR system with intelligent fallback
+    OCR_ENGINES = []
+    
+    # Primary: EasyOCR (recommended)
+    try:
+        import easyocr
+        OCR_ENGINES.append(('easyocr', 'available'))
+    except ImportError:
+        OCR_ENGINES.append(('easyocr', 'missing'))
+    
+    # Fallback: Tesseract
+    try:
+        import pytesseract
+        OCR_ENGINES.append(('tesseract', 'available'))
+    except ImportError:
+        OCR_ENGINES.append(('tesseract', 'missing'))
+    
     DOCUMENT_PROCESSING_AVAILABLE = True
 except ImportError as e:
     DOCUMENT_PROCESSING_AVAILABLE = False
     DOCUMENT_PROCESSING_ERROR = str(e)
+    OCR_ENGINES = []
 
 # FAISS and embeddings
 try:
@@ -48,8 +74,164 @@ except ImportError as e:
     WATCHDOG_AVAILABLE = False
     WATCHDOG_ERROR = str(e)
 
+# =============================================================================
+# CONFIGURATION CONSTANTS
+# =============================================================================
+
+# Embedding Model Configuration
+EMBEDDING_MODEL_NAME = "mxbai-embed-large"
+EMBEDDING_DIMENSION = 1024  # Vector dimension for mxbai-embed-large
+
+# Service Endpoints and Networking
+OLLAMA_EMBEDDING_HOST = "127.0.0.1"
+OLLAMA_EMBEDDING_PORT = 11435
+OLLAMA_MAIN_PORT = 11434
+EMBEDDING_SERVICE_URL = f"http://{OLLAMA_EMBEDDING_HOST}:{OLLAMA_EMBEDDING_PORT}/api/embeddings"
+
+# Timeout and Retry Configuration
+EMBEDDING_TIMEOUT_SECONDS = 120  # Timeout for embedding generation
+HEALTH_CHECK_TIMEOUT_SECONDS = 10  # Timeout for health checks
+SERVICE_RESTART_DELAY_SECONDS = 5  # Wait time after service restart
+RETRY_DELAY_SECONDS = 3  # Delay between retry attempts
+MAX_SERVICE_RESTART_ATTEMPTS = 3  # Maximum service restart attempts
+
+# Processing Configuration
+DEFAULT_BATCH_SIZE = 25  # Default embedding batch size
+DEFAULT_CHUNK_SIZE = 1000  # Characters per document chunk
+DEFAULT_SEARCH_RESULTS = 5  # Default number of search results
+MAX_FILES_PER_DIRECTORY_SCAN = 5  # Safety limit for directory processing
+MAX_FILES_PER_TOTAL_SCAN = 100  # Total safety limit for scanning
+SCAN_PROGRESS_LOG_INTERVAL = 10  # Log progress every N files
+
+# Configuration Defaults
+DEFAULT_SCAN_INTERVAL_MINUTES = 60  # Default periodic scan interval
+STARTUP_INITIALIZATION_DELAY = 3  # Seconds to wait during startup
+
 # Existing server integration
 from http_helpers import pooled_post
+
+# =============================================================================
+# OCR ENGINE MANAGER - Multi-engine OCR with intelligent fallback
+# =============================================================================
+
+class OCREngineManager:
+    """Intelligent OCR engine management with fallback system"""
+    
+    def __init__(self):
+        self.primary_engine = None
+        self.fallback_engines = []
+        self._initialize_engines()
+    
+    def _initialize_engines(self):
+        """Initialize available OCR engines in priority order"""
+        for engine_name, status in OCR_ENGINES:
+            try:
+                if engine_name == 'easyocr' and status == 'available':
+                    reader = easyocr.Reader(['en'])
+                    if self.primary_engine is None:
+                        self.primary_engine = ('easyocr', reader)
+                        logger.info("🚀 EasyOCR initialized as primary OCR engine")
+                    else:
+                        self.fallback_engines.append(('easyocr', reader))
+                        
+                elif engine_name == 'tesseract' and status == 'available':
+                    # Test if tesseract binary is available
+                    try:
+                        test_img = Image.new('RGB', (100, 30), color='white')
+                        pytesseract.image_to_string(test_img)
+                        
+                        if self.primary_engine is None:
+                            self.primary_engine = ('tesseract', pytesseract)
+                            logger.info("📝 Tesseract initialized as primary OCR engine")
+                        else:
+                            self.fallback_engines.append(('tesseract', pytesseract))
+                    except Exception:
+                        logger.warning("⚠️ Tesseract library present but binary not accessible")
+                        
+            except Exception as e:
+                logger.warning(f"Failed to initialize {engine_name}: {e}")
+        
+        if self.primary_engine is None:
+            logger.error("❌ No OCR engines available")
+        else:
+            logger.info(f"✅ OCR system ready: {self.primary_engine[0]} + {len(self.fallback_engines)} fallbacks")
+    
+    async def extract_text(self, image_path: Path) -> str:
+        """Extract text with intelligent fallback"""
+        # Try primary engine
+        if self.primary_engine:
+            result = await self._try_engine(self.primary_engine, image_path)
+            if result:
+                return result
+        
+        # Try fallback engines
+        for engine in self.fallback_engines:
+            result = await self._try_engine(engine, image_path)
+            if result:
+                logger.info(f"✅ Fallback {engine[0]} succeeded for {image_path.name}")
+                return result
+        
+        # All engines failed
+        logger.error(f"❌ All OCR engines failed for {image_path}")
+        return f"[Image: {image_path.name}] - OCR failed"
+    
+    async def _try_engine(self, engine_tuple, image_path: Path) -> Optional[str]:
+        """Try a specific OCR engine"""
+        engine_name, engine = engine_tuple
+        try:
+            if engine_name == 'easyocr':
+                # Start with basic call to isolate any parameter issues
+                logger.debug(f"Attempting EasyOCR processing for {image_path}")
+                results = engine.readtext(str(image_path), paragraph=True)
+                logger.debug(f"EasyOCR returned {len(results)} results")
+                
+                if not results:
+                    logger.warning(f"EasyOCR returned no results for {image_path}")
+                    return None
+                
+                # Enhanced post-processing with confidence filtering and text cleanup
+                filtered_text = []
+                for i, result in enumerate(results):
+                    # Handle different EasyOCR result formats
+                    if len(result) == 3:
+                        bbox, text, confidence = result
+                    elif len(result) == 2:
+                        bbox, text = result
+                        confidence = 1.0  # Assume high confidence if not provided
+                    else:
+                        logger.warning(f"Unexpected result format: {result}")
+                        continue
+                    
+                    logger.debug(f"Result {i}: '{text}' (confidence: {confidence})")
+                    if confidence > 0.3 and text.strip():  # Include medium-confidence text
+                        # Clean up common OCR artifacts while preserving document structure
+                        cleaned_text = text.strip()
+                        
+                        # Fix common OCR character confusion in documents
+                        cleaned_text = cleaned_text.replace('|l', 'll')  # Common l/| confusion
+                        cleaned_text = cleaned_text.replace('1I', 'Il')  # 1/I confusion
+                        cleaned_text = cleaned_text.replace('S@', 'SA')  # @ confusion in STATES
+                        cleaned_text = cleaned_text.replace('Ou', 'ou')  # O/o normalization
+                        
+                        # Only add if still has content after cleaning
+                        if cleaned_text and len(cleaned_text) > 1:
+                            filtered_text.append(cleaned_text)
+                
+                final_text = ' '.join(filtered_text).strip()
+                logger.info(f"EasyOCR extracted {len(results)} regions, filtered to {len(filtered_text)} regions, final text: {len(final_text)} chars")
+                return final_text if final_text else None
+                
+            elif engine_name == 'tesseract':
+                image = Image.open(str(image_path))
+                text = engine.image_to_string(image)
+                return text.strip() if text.strip() else None
+                
+        except Exception as e:
+            logger.error(f"OCR engine {engine_name} failed for {image_path}: {e}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return None
 
 logger = logging.getLogger(__name__)
 
@@ -97,12 +279,13 @@ class DocumentProcessor:
     }
     
     def __init__(self):
-        self.chunk_size = 1000  # Characters per chunk
+        self.chunk_size = DEFAULT_CHUNK_SIZE
         self.chunk_overlap = 200  # Overlap between chunks
+        self.ocr_manager = OCREngineManager() if DOCUMENT_PROCESSING_AVAILABLE else None
         
         if not DOCUMENT_PROCESSING_AVAILABLE:
             logger.warning(f"⚠️ Document processing libraries not available: {DOCUMENT_PROCESSING_ERROR}")
-            logger.info("💡 Install with: pip install PyPDF2 python-docx openpyxl beautifulsoup4 pytesseract pillow")
+            logger.info("💡 Install with: pip install PyPDF2 python-docx openpyxl beautifulsoup4 easyocr pillow")
     
     async def process_document(self, file_path: str) -> List[DocumentChunk]:
         """Process a document into chunks with extracted text"""
@@ -197,14 +380,11 @@ class DocumentProcessor:
             return ""
     
     async def _extract_image_text(self, file_path: Path) -> str:
-        """Extract text from image using OCR"""
-        try:
-            image = Image.open(str(file_path))
-            text = pytesseract.image_to_string(image)
-            return text.strip()
-        except Exception as e:
-            logger.warning(f"⚠️ OCR failed for {file_path}: {e}")
-            return f"[Image: {file_path.name}]"  # Fallback metadata
+        """Extract text from image using multi-engine OCR"""
+        if not self.ocr_manager:
+            return f"[Image: {file_path.name}] - OCR not available"
+        
+        return await self.ocr_manager.extract_text(file_path)
     
     def _create_chunks(self, text: str, document_path: str) -> List[DocumentChunk]:
         """Split text into overlapping chunks"""
@@ -273,7 +453,7 @@ class FAISSDocumentStore:
         self.metadata_path = self.storage_dir / "metadata.db"
         
         # Initialize components
-        self.dimension = 768  # nomic-embed-text dimension
+        self.dimension = EMBEDDING_DIMENSION
         self.faiss_index = None
         self.metadata_db = None
         self.chunk_counter = 0
@@ -383,7 +563,7 @@ class FAISSDocumentStore:
             logger.error(f"❌ Failed to add chunks: {e}")
             return False
     
-    async def search_similar(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+    async def search_similar(self, query: str, k: int = DEFAULT_SEARCH_RESULTS) -> List[Dict[str, Any]]:
         """Search for similar document chunks"""
         try:
             if self.faiss_index.ntotal == 0:
@@ -406,6 +586,13 @@ class FAISSDocumentStore:
             for score, faiss_idx in zip(scores[0], indices[0]):
                 if faiss_idx == -1:  # No more results
                     break
+                
+                # 🎯 RELEVANCE FILTERING: Skip very dissimilar results
+                # For FAISS IndexFlatIP, higher scores = more similar
+                # Threshold 130+ includes all passport docs (134.8, 129.9) but may include some noise
+                if score < 130.0:
+                    logger.info(f"⚠️ Skipping low-relevance result: score={score:.1f} < 130.0 (faiss_idx={faiss_idx})")
+                    continue
                 
                 cursor.execute('''
                     SELECT chunk_id, document_path, chunk_index, content, metadata, created_at
@@ -434,11 +621,11 @@ class FAISSDocumentStore:
     async def _check_embedding_service_health(self) -> bool:
         """Check if embedding service is healthy and responsive"""
         try:
-            payload = {"model": "nomic-embed-text", "prompt": "health check"}
+            payload = {"model": EMBEDDING_MODEL_NAME, "prompt": "health check", "keep_alive": -1}
             response_data = await pooled_post(
-                "http://127.0.0.1:11435/api/embeddings",
+                EMBEDDING_SERVICE_URL,
                 json=payload,
-                timeout=10
+                timeout=HEALTH_CHECK_TIMEOUT_SECONDS
             )
             return response_data['status_code'] == 200
         except Exception as e:
@@ -446,39 +633,97 @@ class FAISSDocumentStore:
             return False
     
     async def _restart_embedding_service(self) -> bool:
-        """Restart the embedding service"""
+        """Restart the embedding service - CORRECTED VERSION"""
         try:
             logger.info("🔄 Attempting to restart embedding service...")
             
-            # Kill any existing ollama processes on port 11435
-            kill_result = await asyncio.create_subprocess_shell(
-                "pkill -f 'ollama.*11435'",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            await kill_result.wait()
+            # First, check if we need a separate instance at all
+            # Modern Ollama can handle both LLM and embedding requests on the same port
             
-            # Wait a moment for cleanup
-            await asyncio.sleep(2)
-            
-            # Start new embedding service
-            start_result = await asyncio.create_subprocess_shell(
-                "OLLAMA_HOST=127.0.0.1:11435 nohup ollama serve > /dev/null 2>&1 &",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            await start_result.wait()
-            
-            # Wait for service to start
-            await asyncio.sleep(5)
-            
-            # Verify it's working
-            return await self._check_embedding_service_health()
-            
+            # Option 1: Use the main Ollama instance (RECOMMENDED)
+            # Just ensure the embedding model is pulled and loaded
+            try:
+                # Pull the embedding model if not already present
+                pull_result = await asyncio.create_subprocess_shell(
+                    f"ollama pull {EMBEDDING_MODEL_NAME}",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await pull_result.communicate()
+                
+                if pull_result.returncode != 0:
+                    logger.error(f"Failed to pull embedding model: {stderr.decode()}")
+                    return False
+                    
+                # Pre-load the model to keep it in memory
+                load_payload = {
+                    "model": EMBEDDING_MODEL_NAME,
+                    "keep_alive": -1  # Keep loaded indefinitely
+                }
+                
+                # Use the main Ollama port for embeddings
+                response = await pooled_post(
+                    f"http://{OLLAMA_EMBEDDING_HOST}:{OLLAMA_MAIN_PORT}/api/embeddings",
+                    json={
+                        "model": EMBEDDING_MODEL_NAME,
+                        "prompt": "warmup",
+                        "keep_alive": -1
+                    },
+                    timeout=30
+                )
+                
+                return response['status_code'] == 200
+                
+            except Exception as e:
+                logger.error(f"Failed to setup embedding model: {e}")
+                
+                # Option 2: If you really need a separate instance (NOT RECOMMENDED)
+                # Kill ALL ollama processes and restart with specific port
+                logger.info("Attempting fallback: Kill all Ollama and restart on specific port")
+                
+                # Kill all ollama processes
+                kill_result = await asyncio.create_subprocess_shell(
+                    "pkill -f 'ollama serve' || true",  # || true prevents error if no process found
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                await kill_result.wait()
+                
+                # Wait for processes to fully terminate
+                await asyncio.sleep(3)
+                
+                # Start Ollama on the embedding port using a proper daemon approach
+                # Note: This will be the ONLY Ollama instance running
+                start_cmd = f"""
+                export OLLAMA_HOST=0.0.0.0:{OLLAMA_EMBEDDING_PORT} && \
+                ollama serve 2>/dev/null 1>/dev/null &
+                """
+                
+                start_result = await asyncio.create_subprocess_shell(
+                    start_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                await start_result.wait()
+                
+                # Wait longer for service to fully start
+                await asyncio.sleep(10)  # Ollama needs time to initialize
+                
+                # Pull and load the embedding model
+                pull_result = await asyncio.create_subprocess_shell(
+                    f"OLLAMA_HOST=127.0.0.1:{OLLAMA_EMBEDDING_PORT} ollama pull {EMBEDDING_MODEL_NAME}",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                await pull_result.communicate()
+                
+                # Verify it's working
+                return await self._check_embedding_service_health()
+                
         except Exception as e:
             logger.error(f"❌ Failed to restart embedding service: {e}")
             return False
-    
+        
     async def _generate_embeddings(self, texts: List[str]) -> Optional[List[np.ndarray]]:
         """Generate embeddings using Ollama via existing HTTP pool with health checking"""
         try:
@@ -486,31 +731,32 @@ class FAISSDocumentStore:
             if not await self._check_embedding_service_health():
                 logger.warning("⚠️ Embedding service unhealthy, attempting restart...")
                 
-                # Try to restart service up to 3 times
-                for attempt in range(3):
+                # Try to restart service up to maximum attempts
+                for attempt in range(MAX_SERVICE_RESTART_ATTEMPTS):
                     if await self._restart_embedding_service():
                         logger.info(f"✅ Embedding service restarted successfully (attempt {attempt + 1})")
                         break
                     else:
                         logger.warning(f"❌ Restart attempt {attempt + 1} failed")
-                        await asyncio.sleep(3)
+                        await asyncio.sleep(RETRY_DELAY_SECONDS)
                 else:
-                    logger.error("❌ Failed to restart embedding service after 3 attempts")
+                    logger.error(f"❌ Failed to restart embedding service after {MAX_SERVICE_RESTART_ATTEMPTS} attempts")
                     logger.error("🛑 RECOMMENDATION: Manual intervention required - check ollama installation and restart embedding service manually")
-                    logger.error("🛑 Command to restart: OLLAMA_HOST=127.0.0.1:11435 ollama serve")
+                    logger.error(f"🛑 Command to restart: OLLAMA_HOST={OLLAMA_EMBEDDING_HOST}:{OLLAMA_EMBEDDING_PORT} ollama serve")
                     return None
             async def generate_single_embedding(text: str) -> Optional[np.ndarray]:
                 """Generate embedding for a single text"""
                 try:
                     payload = {
-                        "model": "nomic-embed-text",  # Standard embedding model
-                        "prompt": text
+                        "model": EMBEDDING_MODEL_NAME,  # High-quality embedding model
+                        "prompt": text,
+                        "keep_alive": -1  # Keep model loaded permanently
                     }
                     
                     response_data = await pooled_post(
-                        "http://127.0.0.1:11435/api/embeddings",  # Use dedicated embedding instance
+                        EMBEDDING_SERVICE_URL,  # Use dedicated embedding instance
                         json=payload,
-                        timeout=120  # Increased timeout from 30s to 120s
+                        timeout=EMBEDDING_TIMEOUT_SECONDS
                     )
                     
                     if response_data['status_code'] == 200:
@@ -526,7 +772,7 @@ class FAISSDocumentStore:
                     return None
             
             # Process embeddings in batches to avoid overwhelming the service
-            BATCH_SIZE = 25  # Increased batch size for better efficiency
+            BATCH_SIZE = DEFAULT_BATCH_SIZE  # Efficient batch size for embedding generation
             all_embeddings = []
             total_batches = (len(texts) + BATCH_SIZE - 1) // BATCH_SIZE
             
@@ -641,6 +887,15 @@ class DocumentInterrogator:
                 self.store = FAISSDocumentStore(storage_dir)
                 logger.info("🔍 Document Interrogator initialized with FAISS")
                 
+                # 🛡️ PRODUCTION SAFETY: Automatic FAISS integrity monitoring
+                if INTEGRITY_MONITORING_AVAILABLE:
+                    logger.info("🛡️ Running FAISS integrity check...")
+                    asyncio.create_task(self._run_integrity_check_on_startup())
+                    # Schedule periodic integrity checks (every 6 hours)
+                    asyncio.create_task(self._schedule_periodic_integrity_checks())
+                else:
+                    logger.warning("⚠️ FAISS integrity monitoring disabled - potential corruption may go undetected")
+                
                 # Auto-scan for changes on startup based on configuration (temporarily disabled for API testing)
                 if False: # self.config.get('config', {}).get('scan_on_startup', False):
                     logger.info("🚀 Startup scan enabled - using safe implementation")
@@ -726,7 +981,7 @@ class DocumentInterrogator:
             logger.error(f"❌ Directory indexing failed: {e}")
             raise
     
-    async def search_documents(self, query: str, k: int = 5) -> Dict[str, Any]:
+    async def search_documents(self, query: str, k: int = DEFAULT_SEARCH_RESULTS) -> Dict[str, Any]:
         """Search documents for relevant content (Stage 0 RAG retrieval)"""
         if not self.store:
             return {
@@ -838,8 +1093,8 @@ class DocumentInterrogator:
                     "version": "1.0",
                     "config": {
                         "scan_on_startup": True,
-                        "batch_size": 25,
-                        "scan_interval_minutes": 60,
+                        "batch_size": DEFAULT_BATCH_SIZE,
+                        "scan_interval_minutes": DEFAULT_SCAN_INTERVAL_MINUTES,
                         "auto_watch_enabled": True
                     },
                     "directories": [],
@@ -879,7 +1134,7 @@ class DocumentInterrogator:
                 
             self._scan_in_progress = True
             try:
-                await asyncio.sleep(3)  # Wait for full initialization
+                await asyncio.sleep(STARTUP_INITIALIZATION_DELAY)  # Wait for full initialization
                 
                 directories = self.config.get('directories', [])
                 enabled_dirs = [d for d in directories if d.get('enabled', True)]
@@ -1187,6 +1442,66 @@ class DocumentInterrogator:
                 'message': f'Smart indexing failed: {str(e)}'
             }
     
+    async def _run_integrity_check_on_startup(self):
+        """
+        🛡️ PRODUCTION SAFETY: Run comprehensive FAISS integrity check on startup
+        Automatically detects and repairs corruption to prevent production issues
+        """
+        try:
+            # Give system time to fully initialize
+            await asyncio.sleep(2)
+            
+            if not self.store:
+                logger.error("❌ Cannot run integrity check - FAISS store not available")
+                return
+                
+            logger.info("🔍 Starting FAISS-SQLite integrity validation...")
+            
+            # Run comprehensive integrity check with automatic repair
+            system_healthy = await check_and_repair_faiss_integrity(self.store)
+            
+            if system_healthy:
+                logger.info("✅ FAISS integrity check passed - system is healthy")
+            else:
+                logger.error("🚨 FAISS integrity check failed - manual intervention may be required")
+                logger.error("🚨 Document search functionality may be compromised")
+                
+        except Exception as e:
+            logger.error(f"❌ Critical error during integrity check: {e}")
+            logger.error("🚨 FAISS system integrity unknown - proceed with caution")
+    
+    async def _schedule_periodic_integrity_checks(self):
+        """
+        🛡️ PRODUCTION SAFETY: Schedule periodic integrity checks
+        Runs every 6 hours to detect corruption early
+        """
+        CHECK_INTERVAL = 6 * 60 * 60  # 6 hours in seconds
+        
+        while True:
+            try:
+                await asyncio.sleep(CHECK_INTERVAL)
+                
+                if not self.store:
+                    logger.warning("⚠️ Skipping periodic integrity check - FAISS store not available")
+                    continue
+                
+                logger.info("🔍 Running scheduled FAISS integrity check...")
+                
+                # Run quick integrity check (non-blocking)
+                system_healthy = await check_and_repair_faiss_integrity(self.store)
+                
+                if system_healthy:
+                    logger.info("✅ Periodic integrity check passed")
+                else:
+                    logger.error("🚨 Periodic integrity check detected issues")
+                    
+            except asyncio.CancelledError:
+                logger.info("🛑 Periodic integrity monitoring stopped")
+                break
+            except Exception as e:
+                logger.error(f"❌ Error in periodic integrity check: {e}")
+                # Continue monitoring despite errors
+    
     async def _safe_startup_config_scan(self):
         """Safe version of startup config scan with limits and detailed logging"""
         if self._scan_in_progress:
@@ -1207,7 +1522,7 @@ class DocumentInterrogator:
             logger.info(f"🔍 Safe scan: Starting scan of {len(enabled_dirs)} configured directories")
             total_files_scanned = 0
             total_files_processed = 0
-            MAX_FILES_PER_SCAN = 100  # Safety limit
+            MAX_FILES_PER_SCAN = MAX_FILES_PER_TOTAL_SCAN  # Safety limit
             
             for dir_idx, dir_config in enumerate(enabled_dirs):
                 directory_path = dir_config['path']
@@ -1238,7 +1553,7 @@ class DocumentInterrogator:
                         total_files_scanned += 1
                         dir_files_scanned += 1
                         
-                        if dir_files_scanned % 10 == 0:  # Log every 10 files
+                        if dir_files_scanned % SCAN_PROGRESS_LOG_INTERVAL == 0:  # Log progress periodically
                             logger.info(f"📊 Directory {dir_idx+1}: scanned {dir_files_scanned} files")
                         
                         if await self._file_needs_reindexing(str(file_path)):
@@ -1249,12 +1564,12 @@ class DocumentInterrogator:
                                 total_files_processed += 1
                                 dir_files_processed += 1
                                 
-                                if dir_files_processed >= 5:  # Limit per directory
+                                if dir_files_processed >= MAX_FILES_PER_DIRECTORY_SCAN:  # Limit per directory
                                     logger.info(f"📈 Directory {dir_idx+1}: processed {dir_files_processed} files, moving to next directory")
                                     break
                             else:
                                 logger.error(f"🛑 Stopping scan due to embedding service failure")
-                                logger.error(f"🔄 Will retry during next watch interval (scan_interval_minutes: {self.config.get('config', {}).get('scan_interval_minutes', 60)})")
+                                logger.error(f"🔄 Will retry during next watch interval (scan_interval_minutes: {self.config.get('config', {}).get('scan_interval_minutes', DEFAULT_SCAN_INTERVAL_MINUTES)})")
                                 return  # Stop scanning immediately
                 
                 if total_files_scanned >= MAX_FILES_PER_SCAN:
@@ -1350,7 +1665,7 @@ class DocumentInterrogator:
             logger.info("📋 Background scanning disabled in configuration")
             return
             
-        scan_interval_minutes = self.config.get('config', {}).get('scan_interval_minutes', 60)
+        scan_interval_minutes = self.config.get('config', {}).get('scan_interval_minutes', DEFAULT_SCAN_INTERVAL_MINUTES)
         if scan_interval_minutes <= 0:
             logger.warning("⚠️ Invalid scan_interval_minutes, background scanning disabled")
             return
