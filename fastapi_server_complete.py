@@ -2906,58 +2906,68 @@ async def llama_stream(request: Request):
                 try:
                     # Get tool calling model from LLM abstraction config
                     tool_config = config_loader.get_llm_config('tool_calling')
-                    # logger.info(f"🔍 MODEL TRACE 1: Raw tool_config = {tool_config}")
+                    logger.info(f"🔍 MODEL TRACE 1: Raw tool_config = {tool_config}")
                     
                     configured_tool_model = tool_config.get('config', {}).get('model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL)
-                    # logger.info(f"🔍 MODEL TRACE 2: configured_tool_model = {configured_tool_model}")
-                    # logger.info(f"🔍 MODEL TRACE 3: ServerConfig.DEFAULT_TOOL_CALLING_MODEL = {ServerConfig.DEFAULT_TOOL_CALLING_MODEL}")
+                    logger.info(f"🔍 MODEL TRACE 2: configured_tool_model = {configured_tool_model}")
+                    logger.info(f"🔍 MODEL TRACE 3: ServerConfig.DEFAULT_TOOL_CALLING_MODEL = {ServerConfig.DEFAULT_TOOL_CALLING_MODEL}")
                     
                     tool_provider_type = tool_config.get('type', 'ollama')
-                    # logger.info(f"🔍 MODEL TRACE 4: tool_provider_type = {tool_provider_type}")
+                    logger.info(f"🔍 MODEL TRACE 4: tool_provider_type = {tool_provider_type}")
                     
                     request_model = data.get('tools_calling_model')
-                    # logger.info(f"🔍 MODEL TRACE 5: request override model = {request_model}")
+                    logger.info(f"🔍 MODEL TRACE 5: request override model = {request_model}")
                     
                     # For OpenAI provider, always use the configured model, ignore user override
                     if tool_provider_type == 'openai':
                         tools_model = configured_tool_model
-                        # logger.info(f"🔍 MODEL TRACE 5.5: OpenAI provider - using configured model = {tools_model}")
+                        logger.info(f"🔍 MODEL TRACE 5.5: OpenAI provider - using configured model = {tools_model}")
                     else:
                         tools_model = data.get('tools_calling_model', configured_tool_model).strip()
-                    # logger.info(f"🔍 MODEL TRACE 6: Final tools_model = {tools_model}")
+                    logger.info(f"🔍 MODEL TRACE 6: Final tools_model = {tools_model}")
                     
                     # Tool calling model preparation
-                    # 🚫 SMART TOOL FILTERING: Exclude inappropriate tools for meta-tasks
-                    if any(meta_pattern in user_prompt.lower() for meta_pattern in [
+                    # 🚫 META-TASK OPTIMIZATION: Skip tool calling entirely for simple tasks
+                    is_meta_task = any(meta_pattern in user_prompt.lower() for meta_pattern in [
                         'generate a concise', 'title with emoji', 'generate 1-3 broad tags', 
                         'summarizing the chat history', 'categorizing the main themes'
-                    ]):
-                        # For meta-tasks, exclude action tools (calendar, email, etc.)
-                        tools_array = await tool_manager.get_tools_definitions(exclude_file_email_tools=True)
-                        logger.info("🚫 META-TASK DETECTED: Filtered out action tools (calendar, email, etc.)")
-                    else:
-                        tools_array = await tool_manager.get_tools_definitions(exclude_file_email_tools=False)
+                    ])
                     
-                    # Tool calling model preparation with correct tool count
-                    logger.info(f"Tool calling: {tools_model} via {tool_provider_type} with {len(tools_array)} tools")
-                    tool_request = {
-                        "model": tools_model,
-                        "messages": messages,
-                        "options": {
-                            "temperature": 0,
-                            "num_ctx": 8192,  # Increase context window for tool calling model
-                            "num_predict": 4096  # Allow longer tool responses - no more "Details..." truncation
-                        },
-                        "tools": tools_array,
-                        "stream": False,
-                        "think": False
-                    }
-                    # Tools array prepared
-                    if len(tools_array) == 0:
-                        logger.error("❌ Tools array is empty! This will cause timeout.")
+                    if is_meta_task:
+                        # PERFORMANCE OPTIMIZATION: Skip tool calling entirely for meta-tasks
+                        logger.info("🚀 META-TASK BYPASS: Skipping tool calling for title/tag generation")
+                        tools_results = ""  # Empty tools results for meta-tasks
+                        tools_called = []   # No tools called
+                        email_intercepted = False
+                        intercepted_email_params = {}
+                        pending_auto_execution = False
+                        verification_result = {'complete': True, 'reason': 'Meta-task - no tools needed', 'missing_tools': [], 'pattern': 'meta_task'}
+                        tools_array = []  # Empty tools array to prevent UnboundLocalError
+                        tool_request = {}  # Empty tool request to prevent UnboundLocalError
                     else:
-                        tool_names = [tool['function']['name'] for tool in tools_array]
-                        logger.info(f"Available tools: {tool_names}")
+                        # Normal tool processing for non-meta tasks
+                        tools_array = await tool_manager.get_tools_definitions(exclude_file_email_tools=False)
+                        
+                        # Tool calling model preparation with correct tool count
+                        logger.info(f"Tool calling: {tools_model} via {tool_provider_type} with {len(tools_array)} tools")
+                        tool_request = {
+                            "model": tools_model,
+                            "messages": messages,
+                            "options": {
+                                "temperature": 0,
+                                "num_ctx": 8192,  # Increase context window for tool calling model
+                                "num_predict": 4096  # Allow longer tool responses - no more "Details..." truncation
+                            },
+                            "tools": tools_array,
+                            "stream": False,
+                            "think": False
+                        }
+                        # Tools array prepared
+                        if len(tools_array) == 0:
+                            logger.error("❌ Tools array is empty! This will cause timeout.")
+                        else:
+                            tool_names = [tool['function']['name'] for tool in tools_array]
+                            logger.info(f"Available tools: {tool_names}")
                     
                     tool_request["tools"] = tools_array
                     # Tool request being sent
@@ -4272,6 +4282,12 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
             yield f"data: {json.dumps(chunk)}\n\n"
             
             # Mirror/capture native streaming response
+            # FIX: Read tool calling model from config instead of using hardcoded default
+            from utils.config_loader import ConfigLoader
+            temp_config_loader = ConfigLoader()
+            tool_config = temp_config_loader.get_llm_config('tool_calling')
+            configured_tool_model = tool_config.get('config', {}).get('model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL)
+            
             native_request_data = {
                 "prompt": user_prompt,
                 "model": ServerConfig.DEFAULT_MODEL,  # Use PRIMARY model, not tool calling model
@@ -4279,7 +4295,7 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
                 "prompt_context": "",
                 "searchWebInUse": False,
                 "images": ["noimage"],
-                "tools_calling_model": ServerConfig.DEFAULT_TOOL_CALLING_MODEL,
+                "tools_calling_model": configured_tool_model,  # FIX: Use config instead of hardcoded
                 "system": ""
             }
             
