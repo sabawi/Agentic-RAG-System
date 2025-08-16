@@ -26,6 +26,9 @@ from typing import Dict, Any, List, Optional, AsyncGenerator
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 import aiohttp
+# LLM Abstraction Layer
+from llm_providers.manager import llm_manager
+from utils.config_loader import config_loader
 import requests
 
 # HTTP Connection Pooling
@@ -1514,6 +1517,12 @@ async def lifespan(app: FastAPI):
     
     await close_db_pool()
     await cleanup_http_pool()
+    # Shutdown LLM abstraction layer
+    try:
+        await llm_manager.shutdown()
+        logger.info("🛑 LLM Manager shutdown complete")
+    except Exception as e:
+        logger.error(f"❌ LLM Manager shutdown failed: {e}")
     thread_pool.shutdown(wait=True)
 
 # ==============================================================================
@@ -2813,7 +2822,17 @@ async def llama_stream(request: Request):
     
     # Extract parameters with defaults (exactly like Flask version)
     user_prompt = data['prompt']  # Use direct access like original for required field
-    model = data.get('model', ServerConfig.DEFAULT_MODEL)  # Get model early for logging
+    # Get primary model from LLM abstraction config
+    primary_config = config_loader.get_llm_config('primary')
+    configured_primary_model = primary_config.get('config', {}).get('model', ServerConfig.DEFAULT_MODEL)
+    primary_provider_type = primary_config.get('type', 'ollama')
+    
+    # For primary LLM, always use configured model to respect LLM abstraction
+    if primary_provider_type == 'ollama':
+        model = configured_primary_model  # Force configured primary model
+        # logger.info(f"🔍 PRIMARY MODEL: Using configured model = {model}")
+    else:
+        model = data.get('model', configured_primary_model)  # Allow override for non-ollama providers
     # Input condition: User request received
     logger.info(f"Request: {len(user_prompt)} chars | Model: {model} | Tools: {'ON' if True else 'OFF'}")
     
@@ -2866,7 +2885,9 @@ async def llama_stream(request: Request):
                 
                 # STAGE 1: Call tool calling model to generate JSON function calls
                 # Load system prompt from external file
-                user_system_prompt = data.get('system', '').strip()
+                # ENFORCE: Tool calling model ONLY uses pre_tool_model_system_prompt.txt
+                # No user system prompts allowed for tool calling - they can conflict with core instructions
+                user_system_prompt = ""  # Force empty - only use file instructions
                 system_content = load_tool_model_system_prompt(user_system_prompt)
                 
                 messages = [
@@ -2883,12 +2904,29 @@ async def llama_stream(request: Request):
                 ]
                 
                 try:
-                    tools_model = data.get('tools_calling_model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL).strip()
-                    # Tool calling model preparation
-                    logger.info(f"Tool calling: {tools_model} with {len(data.get('tools', []))} tools")
+                    # Get tool calling model from LLM abstraction config
+                    tool_config = config_loader.get_llm_config('tool_calling')
+                    # logger.info(f"🔍 MODEL TRACE 1: Raw tool_config = {tool_config}")
                     
-                    # Call the tool calling model to get JSON function calls
-                    # 🎯 NEW APPROACH: Let tool calling model orchestrate ALL tools, intercept email calls
+                    configured_tool_model = tool_config.get('config', {}).get('model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL)
+                    # logger.info(f"🔍 MODEL TRACE 2: configured_tool_model = {configured_tool_model}")
+                    # logger.info(f"🔍 MODEL TRACE 3: ServerConfig.DEFAULT_TOOL_CALLING_MODEL = {ServerConfig.DEFAULT_TOOL_CALLING_MODEL}")
+                    
+                    tool_provider_type = tool_config.get('type', 'ollama')
+                    # logger.info(f"🔍 MODEL TRACE 4: tool_provider_type = {tool_provider_type}")
+                    
+                    request_model = data.get('tools_calling_model')
+                    # logger.info(f"🔍 MODEL TRACE 5: request override model = {request_model}")
+                    
+                    # For OpenAI provider, always use the configured model, ignore user override
+                    if tool_provider_type == 'openai':
+                        tools_model = configured_tool_model
+                        # logger.info(f"🔍 MODEL TRACE 5.5: OpenAI provider - using configured model = {tools_model}")
+                    else:
+                        tools_model = data.get('tools_calling_model', configured_tool_model).strip()
+                    # logger.info(f"🔍 MODEL TRACE 6: Final tools_model = {tools_model}")
+                    
+                    # Tool calling model preparation
                     # 🚫 SMART TOOL FILTERING: Exclude inappropriate tools for meta-tasks
                     if any(meta_pattern in user_prompt.lower() for meta_pattern in [
                         'generate a concise', 'title with emoji', 'generate 1-3 broad tags', 
@@ -2899,10 +2937,17 @@ async def llama_stream(request: Request):
                         logger.info("🚫 META-TASK DETECTED: Filtered out action tools (calendar, email, etc.)")
                     else:
                         tools_array = await tool_manager.get_tools_definitions(exclude_file_email_tools=False)
+                    
+                    # Tool calling model preparation with correct tool count
+                    logger.info(f"Tool calling: {tools_model} via {tool_provider_type} with {len(tools_array)} tools")
                     tool_request = {
                         "model": tools_model,
                         "messages": messages,
-                        "options": {"temperature": 0},
+                        "options": {
+                            "temperature": 0,
+                            "num_ctx": 8192,  # Increase context window for tool calling model
+                            "num_predict": 4096  # Allow longer tool responses - no more "Details..." truncation
+                        },
                         "tools": tools_array,
                         "stream": False,
                         "think": False
@@ -2916,14 +2961,51 @@ async def llama_stream(request: Request):
                     
                     tool_request["tools"] = tools_array
                     # Tool request being sent
-                    logger.info("🔧 DEBUG: About to call Ollama tool model")
+                    logger.info(f"🔧 DEBUG: About to call {tool_provider_type} tool model: {tools_model}")
                     
-                    response_data = await pooled_post(
-                        ServerConfig.OLLAMA_CHAT_URL,
-                        json=tool_request,
-                        timeout=ServerConfig.TASK_TIMEOUT  # Use configurable timeout for tool operations
-                    )
-                    logger.info("🔧 DEBUG: Ollama tool model response received")
+                    # Use LLM abstraction layer for tool calling
+                    if tool_provider_type == 'openai':
+                        # Use LLM manager for OpenAI tool calling
+                        # CRITICAL FIX: Pass system prompt to OpenAI tool calling
+                        logger.info(f"🚨 SERVER DEBUG: Passing system_prompt length = {len(system_content)} chars")
+                        logger.info(f"🚨 SERVER DEBUG: system_prompt preview = {system_content[:150]}...")
+                        
+                        tool_result = await llm_manager.generate_tools(
+                            prompt=user_prompt,
+                            tools=tools_array,
+                            model=tools_model,
+                            timeout=ServerConfig.TASK_TIMEOUT,
+                            system_prompt=system_content
+                        )
+                        
+                        # Convert to expected format
+                        response_data = {
+                            'status_code': 200,
+                            'text': json.dumps({
+                                "message": {
+                                    "role": "assistant",
+                                    "content": tool_result.get("content", ""),
+                                    "tool_calls": tool_result.get("tool_calls", [])
+                                }
+                            }),
+                            'content': json.dumps({
+                                "message": {
+                                    "role": "assistant", 
+                                    "content": tool_result.get("content", ""),
+                                    "tool_calls": tool_result.get("tool_calls", [])
+                                }
+                            }).encode(),
+                            'headers': {'content-type': 'application/json'}
+                        }
+                        logger.info(f"🔧 DEBUG: {tool_provider_type} tool model response received ({len(tool_result.get('tool_calls', []))} tools)")
+                    else:
+                        # Fallback to direct Ollama call
+                        response_data = await pooled_post(
+                            ServerConfig.OLLAMA_CHAT_URL,
+                            json=tool_request,
+                            timeout=ServerConfig.TASK_TIMEOUT
+                        )
+                        logger.info("🔧 DEBUG: Ollama tool model response received")
                     
                     # Convert pooled response to requests-like object for compatibility
                     class CompatResponse:
@@ -2947,8 +3029,12 @@ async def llama_stream(request: Request):
                             # Debug: Log what the tool calling model returned
                             logger.info(f"🔧 DEBUG: Tool model response keys: {message_keys}")
                             if 'content' in response_data['message']:
-                                content = response_data['message']['content'][:200]
-                                logger.info(f"🔧 DEBUG: Tool model content: {content}")
+                                content = response_data['message']['content']
+                                if content is not None:
+                                    content = content[:200]
+                                    logger.info(f"🔧 DEBUG: Tool model content: {content}")
+                                else:
+                                    logger.info(f"🔧 DEBUG: Tool model content: None (content is null)")
                         
                         # STAGE 2: Process tool calls if present
                         if 'message' in response_data and 'tool_calls' in response_data['message']:
@@ -2960,16 +3046,47 @@ async def llama_stream(request: Request):
                             
                             # Log all tool calls upfront
                             for i, tool_call in enumerate(tool_calls):
-                                function_name = tool_call['function']['name']
-                                function_args = tool_call['function']['arguments']
+                                # Defensive programming for tool call structure
+                                if not tool_call or 'function' not in tool_call:
+                                    logger.warning(f"⚠️ Invalid tool call structure at index {i}: {tool_call}")
+                                    continue
+                                    
+                                function_data = tool_call['function']
+                                if not function_data or 'name' not in function_data:
+                                    logger.warning(f"⚠️ Invalid function data at index {i}: {function_data}")
+                                    continue
+                                    
+                                function_name = function_data['name']
+                                function_args = function_data.get('arguments', '{}')
                                 # Tool call registered
                                 tools_called.append(function_name)  # Track this tool was called
                             
                             # Define async function for parallel execution
                             async def execute_single_tool(tool_call_data):
                                 i, tool_call = tool_call_data
-                                function_name = tool_call['function']['name']
-                                function_args = tool_call['function']['arguments']
+                                
+                                # Defensive programming for parallel execution
+                                if not tool_call or 'function' not in tool_call:
+                                    logger.error(f"❌ Invalid tool call in parallel execution at index {i}: {tool_call}")
+                                    return (f"invalid_tool_{i}", "Error: Invalid tool call structure", time.time(), False, None)
+                                
+                                function_data = tool_call['function']
+                                if not function_data or 'name' not in function_data:
+                                    logger.error(f"❌ Invalid function data in parallel execution at index {i}: {function_data}")
+                                    return (f"invalid_function_{i}", "Error: Invalid function data", time.time(), False, None)
+                                
+                                function_name = function_data['name']
+                                function_args_raw = function_data.get('arguments', '{}')
+                                
+                                # Parse JSON string to dict if needed
+                                if isinstance(function_args_raw, str):
+                                    try:
+                                        function_args = json.loads(function_args_raw)
+                                    except json.JSONDecodeError:
+                                        logger.warning(f"Failed to parse function arguments: {function_args_raw}")
+                                        function_args = {}
+                                else:
+                                    function_args = function_args_raw or {}
                                 
                                 # Add image if applicable
                                 if "image" in function_args and image_exists:
@@ -2989,15 +3106,23 @@ async def llama_stream(request: Request):
                                     result = await tool_manager.safe_function_call(function_name, function_args)
                                     return (function_name, result, start_time, False, None)
                             
+                            # Filter valid tool calls before parallel execution
+                            valid_tool_calls = []
+                            for i, tool_call in enumerate(tool_calls):
+                                if tool_call and 'function' in tool_call and tool_call['function'] and 'name' in tool_call['function']:
+                                    valid_tool_calls.append((i, tool_call))
+                                else:
+                                    logger.warning(f"⚠️ Skipping invalid tool call at index {i}: {tool_call}")
+                            
                             # Execute all tools in parallel using asyncio.gather
                             tool_execution_start = time.time()
-                            logger.info(f"🚀 EXECUTING {len(tool_calls)} TOOLS IN PARALLEL 🚀")
+                            logger.info(f"🚀 EXECUTING {len(valid_tool_calls)} VALID TOOLS IN PARALLEL (from {len(tool_calls)} total) 🚀")
                             
-                            tool_tasks = [execute_single_tool((i, tool_call)) for i, tool_call in enumerate(tool_calls)]
+                            tool_tasks = [execute_single_tool(tool_call_data) for tool_call_data in valid_tool_calls]
                             tool_results_list = await asyncio.gather(*tool_tasks, return_exceptions=True)
                             
                             total_parallel_time = time.time() - tool_execution_start
-                            logger.info(f"⏱️ PARALLEL EXECUTION COMPLETE: {len(tool_calls)} tools in {total_parallel_time:.2f}s")
+                            logger.info(f"⏱️ PARALLEL EXECUTION COMPLETE: {len(valid_tool_calls)} valid tools in {total_parallel_time:.2f}s")
                             
                             # Process results and handle any email interceptions
                             for i, result_data in enumerate(tool_results_list):
@@ -3020,6 +3145,13 @@ async def llama_stream(request: Request):
                                         logger.info(f"⚠️ TOOL {i+1} OUTPUT: PARTIAL SUCCESS - {function_name} | {execution_time:.2f}s | {len(str(result))} chars")
                                     else:
                                         logger.info(f"✅ TOOL {i+1} OUTPUT: SUCCESS!! - {function_name} | {execution_time:.2f}s | {len(str(result))} chars")
+                                        
+                                        # Content quality check for file creation tools
+                                        if function_name == "sandboxed_executor" and isinstance(result, dict):
+                                            if result.get("success") and "filename" in result.get("result", {}):
+                                                result_str = str(result)
+                                                if any(indicator in result_str.lower() for indicator in ["details...", "content...", "more info...", "placeholder"]):
+                                                    logger.warning(f"🔍 CONTENT QUALITY WARNING: {function_name} - Possible truncated content detected in file creation")
                                 else:
                                     logger.info(f"❌ TOOL {i+1} OUTPUT: ERROR - {function_name} | {execution_time:.2f}s | No output received")
                                 tools_results_list.append(f"Tool: {function_name}\nResult: {result}\n\n")
@@ -3102,8 +3234,27 @@ async def llama_stream(request: Request):
                         tools_results_list.append(f"Tool: get_the_secret_tool\nResult: {result}\n\n")
                         
                 except Exception as e:
+                    import traceback
                     logger.error(f"❌ Tool calling exception: {e}")
                     logger.error(f"Exception type: {type(e).__name__}")
+                    logger.error(f"Exception details: {str(e)}")
+                    logger.error(f"Full traceback: {traceback.format_exc()}")
+                    
+                    # Debug the response data that caused the error
+                    try:
+                        if 'response_data' in locals():
+                            logger.error(f"🔍 DEBUG ERROR CONTEXT: response_data keys = {list(response_data.keys()) if response_data else 'None'}")
+                            if 'message' in response_data:
+                                logger.error(f"🔍 DEBUG ERROR CONTEXT: message keys = {list(response_data['message'].keys())}")
+                                if 'tool_calls' in response_data['message']:
+                                    tool_calls_debug = response_data['message']['tool_calls']
+                                    logger.error(f"🔍 DEBUG ERROR CONTEXT: tool_calls = {tool_calls_debug}")
+                                    logger.error(f"🔍 DEBUG ERROR CONTEXT: tool_calls type = {type(tool_calls_debug)}")
+                                    if tool_calls_debug:
+                                        logger.error(f"🔍 DEBUG ERROR CONTEXT: first tool_call = {tool_calls_debug[0] if len(tool_calls_debug) > 0 else 'Empty'}")
+                    except Exception as debug_error:
+                        logger.error(f"🔍 DEBUG ERROR: Failed to debug context: {debug_error}")
+                    
                     # Fallback: just get current time
                     result = await tool_manager.get_the_secret_tool()
                     tools_results_list.append(f"Tool: get_the_secret_tool\nResult: {result}\n\n")
@@ -3378,19 +3529,28 @@ END OF CONTEXT
                                 # Extract filename from intercepted parameters - DEFAULT TO HTML
                                 attachments = intercepted_email_params.get('attachments', 'report.html')
                                 logger.info(f"🔄 STEP 1A: Raw attachments = '{attachments}'")
-                                if ',' in attachments:
-                                    filename = attachments.split(',')[0].strip()  # Take first file
-                                    logger.info(f"🔄 STEP 1B: Multiple attachments detected, using first: '{filename}'")
+                                
+                                # Handle both list and string attachment formats
+                                if isinstance(attachments, list):
+                                    filename = attachments[0] if attachments else 'report.html'
+                                    logger.info(f"🔄 STEP 1B: List format attachments, using first: '{filename}'")
+                                elif isinstance(attachments, str):
+                                    if ',' in attachments:
+                                        filename = attachments.split(',')[0].strip()  # Take first file
+                                        logger.info(f"🔄 STEP 1C: Multiple attachments detected, using first: '{filename}'")
+                                    else:
+                                        filename = attachments.strip()
+                                        logger.info(f"🔄 STEP 1D: Single attachment: '{filename}'")
                                 else:
-                                    filename = attachments.strip()
-                                    logger.info(f"🔄 STEP 1C: Single attachment: '{filename}'")
+                                    filename = 'report.html'  # Fallback
+                                    logger.info(f"🔄 STEP 1E: Unknown attachment format, using fallback: '{filename}'")
                                 
                                 # Determine if PDF conversion is needed based on file extension
                                 convert_to_pdf = filename.lower().endswith('.pdf')
-                                logger.info(f"🔄 STEP 1D: File extension check - convert_to_pdf: {convert_to_pdf}")
+                                logger.info(f"🔄 STEP 1F: File extension check - convert_to_pdf: {convert_to_pdf}")
                                 
                                 # Keep original filename - don't force PDF extension
-                                logger.info(f"🔄 STEP 1E: Using original filename: '{filename}'")
+                                logger.info(f"🔄 STEP 1G: Using original filename: '{filename}'")
                                 
                                 logger.info(f"🔄 STEP 2: About to create file with Primary LLM content")
                                 
@@ -3407,8 +3567,41 @@ END OF CONTEXT
                                     "convert_to_pdf": False
                                 })
                                 
-                                # For email attachment, convert to HTML (unless user explicitly wanted PDF)
-                                if convert_to_pdf:
+                                # Check if user requested a specific file type that should be preserved
+                                original_ext = filename.lower().split('.')[-1] if '.' in filename else ''
+                                preserve_original_format = original_ext in ['py', 'js', 'java', 'cpp', 'c', 'h', 'sql', 'sh', 'yaml', 'yml', 'json', 'xml', 'csv', 'txt']
+                                
+                                # CRITICAL FIX: Check if ANY file already exists from tool calling phase - REGARDLESS of extension
+                                file_already_exists = False
+                                existing_file_path = None
+                                
+                                # Get sandbox tool instance from user_tools
+                                sandbox_tool = None
+                                if hasattr(tool_manager, 'user_tools') and tool_manager.user_tools:
+                                    for tool in tool_manager.user_tools:
+                                        if tool.name == "sandboxed_executor":
+                                            sandbox_tool = tool
+                                            break
+                                
+                                if sandbox_tool and hasattr(sandbox_tool, 'sandbox_path'):
+                                    workspace_path = sandbox_tool.sandbox_path
+                                    full_path = workspace_path / filename
+                                    
+                                    if full_path.exists():
+                                        file_already_exists = True
+                                        existing_file_path = full_path
+                                        existing_size = full_path.stat().st_size
+                                        logger.info(f"🔒 EXISTING FILE DETECTED: {full_path} exists ({existing_size} bytes) - will preserve")
+                                    else:
+                                        logger.info(f"🔍 FILE CHECK: {full_path} does not exist - will create new")
+                                else:
+                                    logger.warning(f"⚠️ Could not get sandbox tool instance for workspace path check")
+                                
+                                if file_already_exists:
+                                    # File already exists - ALWAYS preserve, regardless of extension or format
+                                    logger.info(f"🔒 PRESERVING EXISTING FILE: {existing_file_path} already exists from tool calling phase")
+                                    file_result = {"filename": filename, "preserved": True, "size_bytes": existing_size}
+                                elif convert_to_pdf:
                                     logger.info(f"📄 Creating PDF file for email: {filename}")
                                     file_result = await tool_manager.safe_function_call("sandboxed_executor", {
                                         "action": "create_file",
@@ -3416,8 +3609,18 @@ END OF CONTEXT
                                         "content": complete_llm_response.strip(),
                                         "convert_to_pdf": True
                                     })
+                                elif preserve_original_format:
+                                    # User requested a specific code/data file type - create it with LLM content
+                                    logger.info(f"📄 Creating preserved format file: {filename} (extension: {original_ext})")
+                                    file_result = await tool_manager.safe_function_call("sandboxed_executor", {
+                                        "action": "create_file",
+                                        "filename": filename,
+                                        "content": complete_llm_response.strip(),
+                                        "convert_to_pdf": False
+                                    })
+                                    # Keep original filename - don't change it
                                 else:
-                                    # Create HTML version for email attachment
+                                    # Create HTML version for email attachment (default behavior for reports)
                                     html_filename = f"{base_filename}.html"
                                     logger.info(f"📄 Creating HTML file for email: {html_filename}")
                                     file_result = await tool_manager.safe_function_call("sandboxed_executor", {
@@ -3450,6 +3653,7 @@ END OF CONTEXT
                                               file_result_dict.get("filename") and 
                                               (file_result_dict.get("pdf_generated") == True or 
                                                file_result_dict.get("html_generated") == True or
+                                               file_result_dict.get("preserved") == True or
                                                file_result_dict.get("size_bytes", 0) > 0)) or "successfully created" in str(file_result).lower()
                                 logger.info(f"🔄 STEP 3A: File success check result: {file_success}")
                                 
@@ -3458,6 +3662,12 @@ END OF CONTEXT
                                     # Update email params with the correct filename for attachment
                                     updated_email_params = intercepted_email_params.copy()
                                     updated_email_params['attachments'] = filename
+                                    
+                                    # Ensure body is not empty - add fallback if missing
+                                    if not updated_email_params.get('body') or updated_email_params.get('body').strip() == '':
+                                        updated_email_params['body'] = f"Please find the attached file: {filename.split('/')[-1]}"
+                                        logger.info(f"🔄 STEP 4: Added fallback email body")
+                                    
                                     logger.info(f"🔄 STEP 4: About to send email with updated attachment: {filename}")
                                     logger.info(f"🔄 STEP 4: Email params: {updated_email_params}")
                                     email_result = await tool_manager.safe_function_call("secure_email_sender", updated_email_params)
@@ -4064,7 +4274,7 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
             # Mirror/capture native streaming response
             native_request_data = {
                 "prompt": user_prompt,
-                "model": ServerConfig.DEFAULT_TOOL_CALLING_MODEL,
+                "model": ServerConfig.DEFAULT_MODEL,  # Use PRIMARY model, not tool calling model
                 "toolsInUse": True,
                 "prompt_context": "",
                 "searchWebInUse": False,
@@ -4608,6 +4818,105 @@ except ImportError as e:
 # ==============================================================================
 # MAIN APPLICATION RUNNER
 # ==============================================================================
+
+
+# LLM Abstraction Layer Endpoints
+@app.get("/llm/config")
+async def get_llm_config():
+    """Get current LLM provider configuration"""
+    try:
+        if not llm_manager._initialized:
+            await llm_manager.initialize()
+            
+        provider_info = llm_manager.get_provider_info()
+        health = await llm_manager.health_check()
+        
+        return {
+            "status": "success",
+            "providers": provider_info.get("providers", {}),
+            "health": health,
+            "initialized": provider_info.get("initialized", False),
+            "factory_info": provider_info.get("factory_info", {})
+        }
+    except Exception as e:
+        logger.error(f"Failed to get LLM config: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.get("/llm/health")
+async def get_llm_health():
+    """Get LLM provider health status"""
+    try:
+        if not llm_manager._initialized:
+            await llm_manager.initialize()
+            
+        health = await llm_manager.health_check()
+        return {
+            "status": "success",
+            "health": health,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get LLM health: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/llm/test/stream")
+async def test_llm_stream(request: dict):
+    """Test LLM abstraction layer streaming"""
+    try:
+        if not llm_manager._initialized:
+            await llm_manager.initialize()
+            
+        prompt = request.get("prompt", "Hello, world!")
+        
+        async def generate():
+            try:
+                async for chunk in llm_manager.generate_stream(prompt):
+                    yield f"data: {json.dumps({'response': chunk})}\n\n"
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                logger.error(f"Streaming error: {e}")
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        
+        return StreamingResponse(generate(), media_type="text/plain")
+        
+    except Exception as e:
+        logger.error(f"Failed to stream with LLM abstraction: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/llm/test/tools")
+async def test_llm_tools(request: dict):
+    """Test LLM abstraction layer tool calling"""
+    try:
+        if not llm_manager._initialized:
+            await llm_manager.initialize()
+            
+        prompt = request.get("prompt", "What's the weather like?")
+        tools = request.get("tools", [
+            {
+                "name": "get_weather",
+                "description": "Get current weather information",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The city and state, e.g. San Francisco, CA"
+                        }
+                    },
+                    "required": ["location"]
+                }
+            }
+        ])
+        
+        result = await llm_manager.generate_tools(prompt, tools)
+        return {
+            "status": "success",
+            "result": result
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to call tools with LLM abstraction: {e}")
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     logger.info(f"Starting complete server on {ServerConfig.HOST}:{ServerConfig.PORT}")

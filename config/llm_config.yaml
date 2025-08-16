@@ -1,0 +1,78 @@
+debug:
+  log_requests: false
+  log_timing: true
+  mock_providers: false
+llm:
+  fallback:
+    auto_switch: true
+    enabled: true
+    order:
+    - ollama
+    - openai
+  primary:
+    config:
+      api_key: null
+      base_url: http://127.0.0.1:11434
+      max_tokens: 4096
+      model: qwen3:8b
+      stream: true
+      temperature: 0.7
+      timeout: 600
+    type: ollama
+  providers:
+    ollama:
+      health_check_url: http://127.0.0.1:11434/api/tags
+      retry_attempts: 3
+      retry_delay: 2
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      base_url: https://api.openai.com/v1
+      models:
+        primary: gpt-4-turbo-preview
+        tool_calling: gpt-4-1106-preview
+      organization: null
+      retry_attempts: 3
+      retry_delay: 1
+    qwen:
+      api_key: ${QWEN_API_KEY}
+      base_url: https://dashscope.aliyuncs.com/api/v1
+      models:
+        primary: qwen-plus
+        tool_calling: qwen-plus
+      retry_attempts: 3
+      retry_delay: 1
+  tool_calling:
+    config:
+      api_key: null
+      base_url: http://127.0.0.1:11434
+      max_tokens: 4096
+      model: qwen3:8b
+      stream: false
+      temperature: 0.7
+      timeout: 600
+    type: ollama
+performance:
+  connection_pool_size: 10
+  max_concurrent_requests: 5
+  request_timeout: 600
+  streaming_chunk_size: 1024
+platform:
+  config_dir:
+    linux: ${HOME}/.config/agentic_rag
+    macos: ${HOME}/.config/agentic_rag
+    windows: ${APPDATA}/agentic_rag
+  log_dir:
+    linux: ${HOME}/.local/share/agentic_rag/logs
+    macos: ${HOME}/.local/share/agentic_rag/logs
+    windows: ${LOCALAPPDATA}/agentic_rag/logs
+  temp_dir:
+    linux: /tmp/agentic_rag
+    macos: ${TMPDIR}/agentic_rag
+    windows: ${TEMP}/agentic_rag
+security:
+  api_key_encryption: false
+  audit_logging: true
+  rate_limiting:
+    burst_limit: 10
+    enabled: true
+    requests_per_minute: 60
