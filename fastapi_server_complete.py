@@ -1981,6 +1981,30 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
                 "pattern": "information_request"
             }
     
+    # 🚨 CRITICAL META-TASK DETECTION FIX 🚨
+    # If this is a meta-task (title/tag generation), skip pattern matching entirely
+    # These tasks should complete without triggering POST-LLM AUTO-EXECUTION
+    meta_task_indicators = [
+        "generate 1-3 broad tags categorizing the main themes",
+        "generate a concise title with emoji",
+        "generate a concise, 3-5 word title with an emoji",
+        "generate tags",
+        "categorizing the main themes of the chat history",
+        "title with emoji",
+        "broad tags categorizing",
+        "3-5 word title with an emoji",
+        "concise title with an emoji"
+    ]
+    
+    if any(meta_indicator in user_prompt_lower for meta_indicator in meta_task_indicators):
+        logger.info("🚫 META-TASK DETECTED: Skipping verifier pattern matching for title/tag generation")
+        return {
+            "complete": True,
+            "reason": "Meta-task (title/tag generation) completed successfully",
+            "missing_tools": [],
+            "pattern": "meta_task"
+        }
+    
     # Check if any pattern matches
     for pattern_name, pattern in task_patterns.items():
         if any(trigger in user_prompt_lower for trigger in pattern["triggers"]):
