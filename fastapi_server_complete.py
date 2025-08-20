@@ -2870,6 +2870,10 @@ async def llama_stream(request: Request):
             tools_results_list = []  # Use list for O(1) append vs O(n²) string concatenation
             tools_called = []  # Track all tools that were called
             
+            # 🔧 VARIABLE SCOPE FIX: Initialize variables at function scope
+            is_meta_task = False  # Default value to prevent UnboundLocalError
+            tools_results = ""    # Default value to prevent UnboundLocalError
+            
             # 🎯 EMAIL INTERCEPTION STATE  
             email_intercepted = False
             intercepted_email_params = {}
@@ -2903,7 +2907,7 @@ async def llama_stream(request: Request):
                 try:
                     tools_model = data.get('tools_calling_model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL).strip()
                     # Tool calling model preparation
-                    logger.info(f"Tool calling: {tools_model} with {len(data.get('tools', []))} tools")
+                    logger.info(f"Tool calling: {tools_model} (tools enabled: {data.get('tools', False)})")
                     
                     # Call the tool calling model to get JSON function calls
                     # 🎯 NEW APPROACH: Let tool calling model orchestrate ALL tools, intercept email calls
