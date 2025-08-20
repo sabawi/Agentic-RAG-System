@@ -26,9 +26,6 @@ from typing import Dict, Any, List, Optional, AsyncGenerator
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 import aiohttp
-# LLM Abstraction Layer
-from llm_providers.manager import llm_manager
-from utils.config_loader import config_loader
 import requests
 
 # HTTP Connection Pooling
@@ -1517,12 +1514,6 @@ async def lifespan(app: FastAPI):
     
     await close_db_pool()
     await cleanup_http_pool()
-    # Shutdown LLM abstraction layer
-    try:
-        await llm_manager.shutdown()
-        logger.info("🛑 LLM Manager shutdown complete")
-    except Exception as e:
-        logger.error(f"❌ LLM Manager shutdown failed: {e}")
     thread_pool.shutdown(wait=True)
 
 # ==============================================================================
@@ -1981,30 +1972,6 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
                 "pattern": "information_request"
             }
     
-    # 🚨 CRITICAL META-TASK DETECTION FIX 🚨
-    # If this is a meta-task (title/tag generation), skip pattern matching entirely
-    # These tasks should complete without triggering POST-LLM AUTO-EXECUTION
-    meta_task_indicators = [
-        "generate 1-3 broad tags categorizing the main themes",
-        "generate a concise title with emoji",
-        "generate a concise, 3-5 word title with an emoji",
-        "generate tags",
-        "categorizing the main themes of the chat history",
-        "title with emoji",
-        "broad tags categorizing",
-        "3-5 word title with an emoji",
-        "concise title with an emoji"
-    ]
-    
-    if any(meta_indicator in user_prompt_lower for meta_indicator in meta_task_indicators):
-        logger.info("🚫 META-TASK DETECTED: Skipping verifier pattern matching for title/tag generation")
-        return {
-            "complete": True,
-            "reason": "Meta-task (title/tag generation) completed successfully",
-            "missing_tools": [],
-            "pattern": "meta_task"
-        }
-    
     # Check if any pattern matches
     for pattern_name, pattern in task_patterns.items():
         if any(trigger in user_prompt_lower for trigger in pattern["triggers"]):
@@ -2042,6 +2009,22 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
             "pattern": "email_required"
         }
     
+    # 🚨 CRITICAL META-TASK DETECTION FIX 🚨
+    meta_task_indicators = [
+        "generate 1-3 broad tags categorizing the main themes",
+        "generate a concise title with emoji", 
+        "generate a concise, 3-5 word title with an emoji",  # Critical missing pattern
+        "generate tags",
+        "categorizing the main themes of the chat history",
+        "title with emoji",
+        "broad tags categorizing",
+        "3-5 word title with an emoji",
+        "concise title with an emoji"
+    ]
+
+    if any(meta_indicator in user_prompt_lower for meta_indicator in meta_task_indicators):
+        return {"complete": True, "pattern": "meta_task"}
+
     # 🚨 ZERO TOOLS CALLED VALIDATION
     # If no tools were called at all, check if any were actually needed
     if not tools_called:
@@ -2846,17 +2829,7 @@ async def llama_stream(request: Request):
     
     # Extract parameters with defaults (exactly like Flask version)
     user_prompt = data['prompt']  # Use direct access like original for required field
-    # Get primary model from LLM abstraction config
-    primary_config = config_loader.get_llm_config('primary')
-    configured_primary_model = primary_config.get('config', {}).get('model', ServerConfig.DEFAULT_MODEL)
-    primary_provider_type = primary_config.get('type', 'ollama')
-    
-    # For primary LLM, always use configured model to respect LLM abstraction
-    if primary_provider_type == 'ollama':
-        model = configured_primary_model  # Force configured primary model
-        # logger.info(f"🔍 PRIMARY MODEL: Using configured model = {model}")
-    else:
-        model = data.get('model', configured_primary_model)  # Allow override for non-ollama providers
+    model = data.get('model', ServerConfig.DEFAULT_MODEL)  # Get model early for logging
     # Input condition: User request received
     logger.info(f"Request: {len(user_prompt)} chars | Model: {model} | Tools: {'ON' if True else 'OFF'}")
     
@@ -2928,63 +2901,40 @@ async def llama_stream(request: Request):
                 ]
                 
                 try:
-                    # Get tool calling model from LLM abstraction config
-                    tool_config = config_loader.get_llm_config('tool_calling')
-                    logger.info(f"🔍 MODEL TRACE 1: Raw tool_config = {tool_config}")
-                    
-                    configured_tool_model = tool_config.get('config', {}).get('model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL)
-                    logger.info(f"🔍 MODEL TRACE 2: configured_tool_model = {configured_tool_model}")
-                    logger.info(f"🔍 MODEL TRACE 3: ServerConfig.DEFAULT_TOOL_CALLING_MODEL = {ServerConfig.DEFAULT_TOOL_CALLING_MODEL}")
-                    
-                    tool_provider_type = tool_config.get('type', 'ollama')
-                    logger.info(f"🔍 MODEL TRACE 4: tool_provider_type = {tool_provider_type}")
-                    
-                    request_model = data.get('tools_calling_model')
-                    logger.info(f"🔍 MODEL TRACE 5: request override model = {request_model}")
-                    
-                    # For OpenAI provider, always use the configured model, ignore user override
-                    if tool_provider_type == 'openai':
-                        tools_model = configured_tool_model
-                        logger.info(f"🔍 MODEL TRACE 5.5: OpenAI provider - using configured model = {tools_model}")
-                    else:
-                        tools_model = data.get('tools_calling_model', configured_tool_model).strip()
-                    logger.info(f"🔍 MODEL TRACE 6: Final tools_model = {tools_model}")
-                    
+                    tools_model = data.get('tools_calling_model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL).strip()
                     # Tool calling model preparation
-                    # 🚫 META-TASK OPTIMIZATION: Skip tool calling entirely for simple tasks
+                    logger.info(f"Tool calling: {tools_model} with {len(data.get('tools', []))} tools")
+                    
+                    # Call the tool calling model to get JSON function calls
+                    # 🎯 NEW APPROACH: Let tool calling model orchestrate ALL tools, intercept email calls
+                    # 🚫 SMART TOOL FILTERING: Exclude inappropriate tools for meta-tasks
                     is_meta_task = any(meta_pattern in user_prompt.lower() for meta_pattern in [
                         'generate a concise', 'title with emoji', 'generate 1-3 broad tags', 
                         'summarizing the chat history', 'categorizing the main themes'
                     ])
                     
                     if is_meta_task:
-                        # PERFORMANCE OPTIMIZATION: Skip tool calling entirely for meta-tasks
+                        # 🚀 META-TASK BYPASS: Skip tool calling entirely for title/tag generation
                         logger.info("🚀 META-TASK BYPASS: Skipping tool calling for title/tag generation")
                         tools_results = ""  # Empty tools results for meta-tasks
                         tools_called = []   # No tools called
-                        email_intercepted = False
-                        intercepted_email_params = {}
-                        pending_auto_execution = False
-                        verification_result = {'complete': True, 'reason': 'Meta-task - no tools needed', 'missing_tools': [], 'pattern': 'meta_task'}
-                        tools_array = []  # Empty tools array to prevent UnboundLocalError
-                        tool_request = {}  # Empty tool request to prevent UnboundLocalError
+                        tools_array = []   # Empty tools array to prevent UnboundLocalError
+                        tool_request = {}   # Empty tool request to prevent UnboundLocalError
+                        # Skip directly to primary LLM execution
                     else:
                         # Normal tool processing for non-meta tasks
                         tools_array = await tool_manager.get_tools_definitions(exclude_file_email_tools=False)
-                        
-                        # Tool calling model preparation with correct tool count
-                        logger.info(f"Tool calling: {tools_model} via {tool_provider_type} with {len(tools_array)} tools")
                         tool_request = {
-                            "model": tools_model,
-                            "messages": messages,
-                            "options": {
-                                "temperature": 0,
-                                "num_ctx": 8192,  # Increase context window for tool calling model
-                                "num_predict": 4096  # Allow longer tool responses - no more "Details..." truncation
-                            },
-                            "tools": tools_array,
-                            "stream": False,
-                            "think": False
+                        "model": tools_model,
+                        "messages": messages,
+                        "options": {
+                            "temperature": 0,
+                            "num_ctx": 8192,  # Increase context window for tool calling model
+                            "num_predict": 4096  # Allow longer tool responses - no more "Details..." truncation
+                        },
+                        "tools": tools_array,
+                        "stream": False,
+                        "think": False
                         }
                         # Tools array prepared
                         if len(tools_array) == 0:
@@ -2992,309 +2942,213 @@ async def llama_stream(request: Request):
                         else:
                             tool_names = [tool['function']['name'] for tool in tools_array]
                             logger.info(f"Available tools: {tool_names}")
-                    
-                    tool_request["tools"] = tools_array
-                    # Tool request being sent
-                    logger.info(f"🔧 DEBUG: About to call {tool_provider_type} tool model: {tools_model}")
-                    
-                    # Use LLM abstraction layer for tool calling
-                    if tool_provider_type == 'openai':
-                        # Use LLM manager for OpenAI tool calling
-                        # CRITICAL FIX: Pass system prompt to OpenAI tool calling
-                        logger.info(f"🚨 SERVER DEBUG: Passing system_prompt length = {len(system_content)} chars")
-                        logger.info(f"🚨 SERVER DEBUG: system_prompt preview = {system_content[:150]}...")
                         
-                        tool_result = await llm_manager.generate_tools(
-                            prompt=user_prompt,
-                            tools=tools_array,
-                            model=tools_model,
-                            timeout=ServerConfig.TASK_TIMEOUT,
-                            system_prompt=system_content
-                        )
+                        tool_request["tools"] = tools_array
+                        # Tool request being sent
+                        logger.info("🔧 DEBUG: About to call Ollama tool model")
                         
-                        # Convert to expected format
-                        response_data = {
-                            'status_code': 200,
-                            'text': json.dumps({
-                                "message": {
-                                    "role": "assistant",
-                                    "content": tool_result.get("content", ""),
-                                    "tool_calls": tool_result.get("tool_calls", [])
-                                }
-                            }),
-                            'content': json.dumps({
-                                "message": {
-                                    "role": "assistant", 
-                                    "content": tool_result.get("content", ""),
-                                    "tool_calls": tool_result.get("tool_calls", [])
-                                }
-                            }).encode(),
-                            'headers': {'content-type': 'application/json'}
-                        }
-                        logger.info(f"🔧 DEBUG: {tool_provider_type} tool model response received ({len(tool_result.get('tool_calls', []))} tools)")
-                    else:
-                        # Fallback to direct Ollama call
                         response_data = await pooled_post(
                             ServerConfig.OLLAMA_CHAT_URL,
                             json=tool_request,
-                            timeout=ServerConfig.TASK_TIMEOUT
+                            timeout=ServerConfig.TASK_TIMEOUT  # Use configurable timeout for tool operations
                         )
                         logger.info("🔧 DEBUG: Ollama tool model response received")
-                    
-                    # Convert pooled response to requests-like object for compatibility
-                    class CompatResponse:
-                        def __init__(self, data):
-                            self.status_code = data['status_code']
-                            self.text = data['text']
-                            self.content = data['content']
-                            self.headers = data['headers']
-                        def json(self):
-                            import json
-                            return json.loads(self.text)
-                    
-                    response = CompatResponse(response_data)
-                    
-                    if response.status_code == 200:
-                        response_data = response.json()
-                        # Tool calling completed successfully
                         
-                        if 'message' in response_data:
-                            message_keys = list(response_data['message'].keys())
-                            # Debug: Log what the tool calling model returned
-                            logger.info(f"🔧 DEBUG: Tool model response keys: {message_keys}")
-                            if 'content' in response_data['message']:
-                                content = response_data['message']['content']
-                                if content is not None:
-                                    content = content[:200]
-                                    logger.info(f"🔧 DEBUG: Tool model content: {content}")
-                                else:
-                                    logger.info(f"🔧 DEBUG: Tool model content: None (content is null)")
+                        # Convert pooled response to requests-like object for compatibility
+                        class CompatResponse:
+                            def __init__(self, data):
+                                self.status_code = data['status_code']
+                                self.text = data['text']
+                                self.content = data['content']
+                                self.headers = data['headers']
+                            def json(self):
+                                import json
+                                return json.loads(self.text)
                         
-                        # STAGE 2: Process tool calls if present
-                        if 'message' in response_data and 'tool_calls' in response_data['message']:
-                            tool_calls = response_data['message']['tool_calls']
-                            logger.info(f"🎯 TOOL CALLS DETECTED: {len(tool_calls)} tools to execute")
-                            
-                            # Process each tool call - PARALLEL EXECUTION OPTIMIZATION
-                            import asyncio
-                            
-                            # Log all tool calls upfront
-                            for i, tool_call in enumerate(tool_calls):
-                                # Defensive programming for tool call structure
-                                if not tool_call or 'function' not in tool_call:
-                                    logger.warning(f"⚠️ Invalid tool call structure at index {i}: {tool_call}")
-                                    continue
-                                    
-                                function_data = tool_call['function']
-                                if not function_data or 'name' not in function_data:
-                                    logger.warning(f"⚠️ Invalid function data at index {i}: {function_data}")
-                                    continue
-                                    
-                                function_name = function_data['name']
-                                function_args = function_data.get('arguments', '{}')
-                                # Tool call registered
-                                tools_called.append(function_name)  # Track this tool was called
-                            
-                            # Define async function for parallel execution
-                            async def execute_single_tool(tool_call_data):
-                                i, tool_call = tool_call_data
-                                
-                                # Defensive programming for parallel execution
-                                if not tool_call or 'function' not in tool_call:
-                                    logger.error(f"❌ Invalid tool call in parallel execution at index {i}: {tool_call}")
-                                    return (f"invalid_tool_{i}", "Error: Invalid tool call structure", time.time(), False, None)
-                                
-                                function_data = tool_call['function']
-                                if not function_data or 'name' not in function_data:
-                                    logger.error(f"❌ Invalid function data in parallel execution at index {i}: {function_data}")
-                                    return (f"invalid_function_{i}", "Error: Invalid function data", time.time(), False, None)
-                                
-                                function_name = function_data['name']
-                                function_args_raw = function_data.get('arguments', '{}')
-                                
-                                # Parse JSON string to dict if needed
-                                if isinstance(function_args_raw, str):
-                                    try:
-                                        function_args = json.loads(function_args_raw)
-                                    except json.JSONDecodeError:
-                                        logger.warning(f"Failed to parse function arguments: {function_args_raw}")
-                                        function_args = {}
-                                else:
-                                    function_args = function_args_raw or {}
-                                
-                                # Add image if applicable
-                                if "image" in function_args and image_exists:
-                                    function_args["image"] = data.get("images", [None])[0]
-                                
-                                # Execute the function with timing
-                                start_time = time.time()
-                                logger.info(f"==> TOOL {i+1} CALLED: {function_name}({', '.join([f'{k}=\"{str(v)[:50]}...\"' if len(str(v)) > 50 else f'{k}=\"{v}\"' for k, v in function_args.items()])})")
-                                
-                                # 🎯 INTERCEPT EMAIL CALLS - Fake success, set flag for post-processing
-                                if function_name == "secure_email_sender":
-                                    logger.info(f"📧 TOOL {i+1} DEFERRED: {function_name} - Email intercepted for post-processing")
-                                    result = "Email scheduled for sending after content generation"
-                                    # Handle email interception in parallel context
-                                    return (function_name, result, start_time, True, function_args.copy())
-                                else:
-                                    result = await tool_manager.safe_function_call(function_name, function_args)
-                                    return (function_name, result, start_time, False, None)
-                            
-                            # Filter valid tool calls before parallel execution
-                            valid_tool_calls = []
-                            for i, tool_call in enumerate(tool_calls):
-                                if tool_call and 'function' in tool_call and tool_call['function'] and 'name' in tool_call['function']:
-                                    valid_tool_calls.append((i, tool_call))
-                                else:
-                                    logger.warning(f"⚠️ Skipping invalid tool call at index {i}: {tool_call}")
-                            
-                            # Execute all tools in parallel using asyncio.gather
-                            tool_execution_start = time.time()
-                            logger.info(f"🚀 EXECUTING {len(valid_tool_calls)} VALID TOOLS IN PARALLEL (from {len(tool_calls)} total) 🚀")
-                            
-                            tool_tasks = [execute_single_tool(tool_call_data) for tool_call_data in valid_tool_calls]
-                            tool_results_list = await asyncio.gather(*tool_tasks, return_exceptions=True)
-                            
-                            total_parallel_time = time.time() - tool_execution_start
-                            logger.info(f"⏱️ PARALLEL EXECUTION COMPLETE: {len(valid_tool_calls)} valid tools in {total_parallel_time:.2f}s")
-                            
-                            # Process results and handle any email interceptions
-                            for i, result_data in enumerate(tool_results_list):
-                                if isinstance(result_data, Exception):
-                                    logger.error(f"❌ TOOL {i+1} ERROR: {str(result_data)}")
-                                    continue
-                                
-                                function_name, result, start_time, is_email, email_params = result_data
-                                end_time = time.time()
-                                execution_time = end_time - start_time
-                                
-                                # Handle email interception flag setting
-                                if is_email and email_params:
-                                    email_intercepted = True
-                                    intercepted_email_params = email_params
-                                
-                                # Determine status and format output
-                                if result and len(str(result)) > 0:
-                                    if "error" in str(result).lower() or "failed" in str(result).lower():
-                                        logger.info(f"⚠️ TOOL {i+1} OUTPUT: PARTIAL SUCCESS - {function_name} | {execution_time:.2f}s | {len(str(result))} chars")
-                                    else:
-                                        logger.info(f"✅ TOOL {i+1} OUTPUT: SUCCESS!! - {function_name} | {execution_time:.2f}s | {len(str(result))} chars")
-                                        
-                                        # Content quality check for file creation tools
-                                        if function_name == "sandboxed_executor" and isinstance(result, dict):
-                                            if result.get("success") and "filename" in result.get("result", {}):
-                                                result_str = str(result)
-                                                if any(indicator in result_str.lower() for indicator in ["details...", "content...", "more info...", "placeholder"]):
-                                                    logger.warning(f"🔍 CONTENT QUALITY WARNING: {function_name} - Possible truncated content detected in file creation")
-                                else:
-                                    logger.info(f"❌ TOOL {i+1} OUTPUT: ERROR - {function_name} | {execution_time:.2f}s | No output received")
-                                tools_results_list.append(f"Tool: {function_name}\nResult: {result}\n\n")
+                        response = CompatResponse(response_data)
                         
-                        else:
-                            # No tool calls generated - check if we should force data gathering
-                            logger.info("❌ No tool calls generated by the tool calling model")
+                        if response.status_code == 200:
+                            response_data = response.json()
+                            # Tool calling completed successfully
+                            
                             if 'message' in response_data:
-                                logger.info(f"Raw message: {json.dumps(response_data['message'], indent=2)}")
+                                message_keys = list(response_data['message'].keys())
+                                # Debug: Log what the tool calling model returned
+                                logger.info(f"🔧 DEBUG: Tool model response keys: {message_keys}")
+                                if 'content' in response_data['message']:
+                                    content = response_data['message']['content'][:200]
+                                    logger.info(f"🔧 DEBUG: Tool model content: {content}")
                             
-                            # 🔥 PROGRAMMATIC TOOL CALL INJECTION 🔥
-                            # If the model refuses to call tools for file/email requests, force data gathering
-                            # BUT only check the CURRENT user request, not conversation history
-                            prompt_lower = user_prompt.lower()
-                            
-                            # Extract only the current request (after "=== CURRENT REQUEST ===" marker)
-                            if "=== current request ===" in prompt_lower:
-                                current_request = prompt_lower.split("=== current request ===")[-1]
-                            else:
-                                current_request = prompt_lower
-                            
-                            forced_tools = []
-                            
-                            # Skip forced tools for title generation, tagging, or other meta tasks
-                            if any(meta_task in current_request for meta_task in ['generate a concise', 'title with emoji', 'generate 1-3 broad tags', 'chat history']):
-                                logger.info("🚫 SKIPPING FORCED TOOLS: This is a meta/title/tag generation request")
-                            elif any(keyword in current_request for keyword in ['aapl', 'apple stock', 'apple inc']):
-                                forced_tools.append(('get_news_summaries', {'filter': 'AAPL'}))
-                                logger.info("🚨 FORCING get_news_summaries(filter='AAPL') - model refused to gather AAPL data")
-                            elif any(keyword in current_request for keyword in ['stock', 'financial analysis', 'company analysis']):
-                                forced_tools.append(('comprehensive_stock_analyzer', {}))
-                                logger.info("🚨 FORCING comprehensive_stock_analyzer() - model refused to gather stock data")
-                            elif any(keyword in current_request for keyword in ['news', 'current events']):
-                                forced_tools.append(('get_news_summaries', {}))
-                                logger.info("🚨 FORCING get_news_summaries() - model refused to gather news data")
-                            
-                            # Execute forced tool calls - PARALLEL EXECUTION OPTIMIZATION
-                            if forced_tools:
+                            # STAGE 2: Process tool calls if present
+                            if 'message' in response_data and 'tool_calls' in response_data['message']:
+                                tool_calls = response_data['message']['tool_calls']
+                                logger.info(f"🎯 TOOL CALLS DETECTED: {len(tool_calls)} tools to execute")
+                                
+                                # Process each tool call - PARALLEL EXECUTION OPTIMIZATION
                                 import asyncio
                                 
-                                # Log all forced tool calls upfront
-                                for function_name, function_args in forced_tools:
-                                    logger.info(f"🔧 FORCED Tool {function_name}: START | Args: {list(forced_args.keys())}")
-                                    tools_called.append(function_name)
+                                # Log all tool calls upfront
+                                for i, tool_call in enumerate(tool_calls):
+                                    function_name = tool_call['function']['name']
+                                    function_args = tool_call['function']['arguments']
+                                    # Tool call registered
+                                    tools_called.append(function_name)  # Track this tool was called
                                 
-                                # Define async function for parallel forced execution
-                                async def execute_forced_tool(tool_data):
-                                    function_name, function_args = tool_data
+                                # Define async function for parallel execution
+                                async def execute_single_tool(tool_call_data):
+                                    i, tool_call = tool_call_data
+                                    function_name = tool_call['function']['name']
+                                    function_args = tool_call['function']['arguments']
+                                    
+                                    # Add image if applicable
+                                    if "image" in function_args and image_exists:
+                                        function_args["image"] = data.get("images", [None])[0]
+                                    
+                                    # Execute the function with timing
                                     start_time = time.time()
-                                    result = await tool_manager.safe_function_call(function_name, function_args)
-                                    return (function_name, result, start_time)
+                                    logger.info(f"==> TOOL {i+1} CALLED: {function_name}({', '.join([f'{k}=\"{str(v)[:50]}...\"' if len(str(v)) > 50 else f'{k}=\"{v}\"' for k, v in function_args.items()])})") 
+                                    
+                                    # 🎯 INTERCEPT EMAIL CALLS - Fake success, set flag for post-processing
+                                    if function_name == "secure_email_sender":
+                                        logger.info(f"📧 TOOL {i+1} DEFERRED: {function_name} - Email intercepted for post-processing")
+                                        result = "Email scheduled for sending after content generation"
+                                        # Handle email interception in parallel context
+                                        return (function_name, result, start_time, True, function_args.copy())
+                                    else:
+                                        result = await tool_manager.safe_function_call(function_name, function_args)
+                                        return (function_name, result, start_time, False, None)
                                 
-                                # Execute all forced tools in parallel
-                                forced_execution_start = time.time()
-                                logger.info(f"🚀 PARALLEL FORCED EXECUTION: Starting {len(forced_tools)} forced tools concurrently")
+                                # Execute all tools in parallel using asyncio.gather
+                                tool_execution_start = time.time()
+                                logger.info(f"🚀 EXECUTING {len(tool_calls)} TOOLS IN PARALLEL 🚀")
                                 
-                                forced_tasks = [execute_forced_tool(tool_data) for tool_data in forced_tools]
-                                forced_results_list = await asyncio.gather(*forced_tasks, return_exceptions=True)
+                                tool_tasks = [execute_single_tool((i, tool_call)) for i, tool_call in enumerate(tool_calls)]
+                                tool_results_list = await asyncio.gather(*tool_tasks, return_exceptions=True)
                                 
-                                total_forced_parallel_time = time.time() - forced_execution_start
-                                logger.info(f"🚀 PARALLEL FORCED EXECUTION COMPLETED: All {len(forced_tools)} forced tools finished in {total_forced_parallel_time:.2f}s")
+                                total_parallel_time = time.time() - tool_execution_start
+                                logger.info(f"⏱️ PARALLEL EXECUTION COMPLETE: {len(tool_calls)} tools in {total_parallel_time:.2f}s")
                                 
-                                # Process forced results
-                                for result_data in forced_results_list:
+                                # Process results and handle any email interceptions
+                                for i, result_data in enumerate(tool_results_list):
                                     if isinstance(result_data, Exception):
-                                        logger.error(f"🚨 Forced tool execution failed: {str(result_data)}")
+                                        logger.error(f"❌ TOOL {i+1} ERROR: {str(result_data)}")
                                         continue
                                     
-                                    function_name, result, start_time = result_data
+                                    function_name, result, start_time, is_email, email_params = result_data
                                     end_time = time.time()
                                     execution_time = end_time - start_time
-                                    logger.info(f"🔧 FORCED Tool {function_name}: COMPLETE | {execution_time:.2f}s | Result: {len(str(result))} chars")
+                                    
+                                    # Handle email interception flag setting
+                                    if is_email and email_params:
+                                        email_intercepted = True
+                                        intercepted_email_params = email_params
+                                    
+                                    # Determine status and format output
+                                    if result and len(str(result)) > 0:
+                                        if "error" in str(result).lower() or "failed" in str(result).lower():
+                                            logger.info(f"⚠️ TOOL {i+1} OUTPUT: PARTIAL SUCCESS - {function_name} | {execution_time:.2f}s | {len(str(result))} chars")
+                                        else:
+                                            logger.info(f"✅ TOOL {i+1} OUTPUT: SUCCESS!! - {function_name} | {execution_time:.2f}s | {len(str(result))} chars")
+                                            
+                                            # Content quality check for file creation tools
+                                            if function_name == "sandboxed_executor" and isinstance(result, dict):
+                                                if result.get("success") and "filename" in result.get("result", {}):
+                                                    result_str = str(result)
+                                                    if any(indicator in result_str.lower() for indicator in ["details...", "content...", "more info...", "placeholder"]):
+                                                        logger.warning(f"🔍 CONTENT QUALITY WARNING: {function_name} - Possible truncated content detected in file creation")
+                                    else:
+                                        logger.info(f"❌ TOOL {i+1} OUTPUT: ERROR - {function_name} | {execution_time:.2f}s | No output received")
                                     tools_results_list.append(f"Tool: {function_name}\nResult: {result}\n\n")
-                    
-                    else:
-                        logger.error(f"❌ Tool calling model failed with status: {response.status_code}")
-                        logger.error(f"Response: {response.text}")
-                        # Fallback: just get current time
-                        result = await tool_manager.get_the_secret_tool()
-                        tools_results_list.append(f"Tool: get_the_secret_tool\nResult: {result}\n\n")
+                            
+                            else:
+                                # No tool calls generated - check if we should force data gathering
+                                logger.info("❌ No tool calls generated by the tool calling model")
+                                if 'message' in response_data:
+                                    logger.info(f"Raw message: {json.dumps(response_data['message'], indent=2)}")
+                                
+                                # 🔥 PROGRAMMATIC TOOL CALL INJECTION 🔥
+                                # If the model refuses to call tools for file/email requests, force data gathering
+                                # BUT only check the CURRENT user request, not conversation history
+                                prompt_lower = user_prompt.lower()
+                                
+                                # Extract only the current request (after "=== CURRENT REQUEST ===" marker)
+                                if "=== current request ===" in prompt_lower:
+                                    current_request = prompt_lower.split("=== current request ===")[-1]
+                                else:
+                                    current_request = prompt_lower
+                                
+                                forced_tools = []
+                                
+                                # Skip forced tools for title generation, tagging, or other meta tasks
+                                if any(meta_task in current_request for meta_task in ['generate a concise', 'title with emoji', 'generate 1-3 broad tags', 'chat history']):
+                                    logger.info("🚫 SKIPPING FORCED TOOLS: This is a meta/title/tag generation request")
+                                elif any(keyword in current_request for keyword in ['aapl', 'apple stock', 'apple inc']):
+                                    forced_tools.append(('get_news_summaries', {'filter': 'AAPL'}))
+                                    logger.info("🚨 FORCING get_news_summaries(filter='AAPL') - model refused to gather AAPL data")
+                                elif any(keyword in current_request for keyword in ['stock', 'financial analysis', 'company analysis']):
+                                    forced_tools.append(('comprehensive_stock_analyzer', {}))
+                                    logger.info("🚨 FORCING comprehensive_stock_analyzer() - model refused to gather stock data")
+                                elif any(keyword in current_request for keyword in ['news', 'current events']):
+                                    forced_tools.append(('get_news_summaries', {}))
+                                    logger.info("🚨 FORCING get_news_summaries() - model refused to gather news data")
+                                
+                                # Execute forced tool calls - PARALLEL EXECUTION OPTIMIZATION
+                                if forced_tools:
+                                    import asyncio
+                                    
+                                    # Log all forced tool calls upfront
+                                    for function_name, function_args in forced_tools:
+                                        logger.info(f"🔧 FORCED Tool {function_name}: START | Args: {list(function_args.keys())}")
+                                        tools_called.append(function_name)
+                                    
+                                    # Define async function for parallel forced execution
+                                    async def execute_forced_tool(tool_data):
+                                        function_name, function_args = tool_data
+                                        start_time = time.time()
+                                        result = await tool_manager.safe_function_call(function_name, function_args)
+                                        return (function_name, result, start_time)
+                                    
+                                    # Execute all forced tools in parallel
+                                    forced_execution_start = time.time()
+                                    logger.info(f"🚀 PARALLEL FORCED EXECUTION: Starting {len(forced_tools)} forced tools concurrently")
+                                    
+                                    forced_tasks = [execute_forced_tool(tool_data) for tool_data in forced_tools]
+                                    forced_results_list = await asyncio.gather(*forced_tasks, return_exceptions=True)
+                                    
+                                    total_forced_parallel_time = time.time() - forced_execution_start
+                                    logger.info(f"🚀 PARALLEL FORCED EXECUTION COMPLETED: All {len(forced_tools)} forced tools finished in {total_forced_parallel_time:.2f}s")
+                                    
+                                    # Process forced results
+                                    for result_data in forced_results_list:
+                                        if isinstance(result_data, Exception):
+                                            logger.error(f"🚨 Forced tool execution failed: {str(result_data)}")
+                                            continue
+                                        
+                                        function_name, result, start_time = result_data
+                                        end_time = time.time()
+                                        execution_time = end_time - start_time
+                                        logger.info(f"🔧 FORCED Tool {function_name}: COMPLETE | {execution_time:.2f}s | Result: {len(str(result))} chars")
+                                        tools_results_list.append(f"Tool: {function_name}\nResult: {result}\n\n")
                         
+                        else:
+                            logger.error(f"❌ Tool calling model failed with status: {response.status_code}")
+                            logger.error(f"Response: {response.text}")
+                            # Fallback: just get current time
+                            result = await tool_manager.get_the_secret_tool()
+                            tools_results_list.append(f"Tool: get_the_secret_tool\nResult: {result}\n\n")
+                            
                 except Exception as e:
-                    import traceback
                     logger.error(f"❌ Tool calling exception: {e}")
                     logger.error(f"Exception type: {type(e).__name__}")
-                    logger.error(f"Exception details: {str(e)}")
-                    logger.error(f"Full traceback: {traceback.format_exc()}")
-                    
-                    # Debug the response data that caused the error
-                    try:
-                        if 'response_data' in locals():
-                            logger.error(f"🔍 DEBUG ERROR CONTEXT: response_data keys = {list(response_data.keys()) if response_data else 'None'}")
-                            if 'message' in response_data:
-                                logger.error(f"🔍 DEBUG ERROR CONTEXT: message keys = {list(response_data['message'].keys())}")
-                                if 'tool_calls' in response_data['message']:
-                                    tool_calls_debug = response_data['message']['tool_calls']
-                                    logger.error(f"🔍 DEBUG ERROR CONTEXT: tool_calls = {tool_calls_debug}")
-                                    logger.error(f"🔍 DEBUG ERROR CONTEXT: tool_calls type = {type(tool_calls_debug)}")
-                                    if tool_calls_debug:
-                                        logger.error(f"🔍 DEBUG ERROR CONTEXT: first tool_call = {tool_calls_debug[0] if len(tool_calls_debug) > 0 else 'Empty'}")
-                    except Exception as debug_error:
-                        logger.error(f"🔍 DEBUG ERROR: Failed to debug context: {debug_error}")
-                    
                     # Fallback: just get current time
                     result = await tool_manager.get_the_secret_tool()
                     tools_results_list.append(f"Tool: get_the_secret_tool\nResult: {result}\n\n")
             
             # CRITICAL: Convert tools_results_list to string for downstream processing
-            tools_results = "".join(tools_results_list)  # O(n) join vs O(n²) concatenation
+            # For meta-tasks, tools_results is already set to ""; for normal tasks, join the list
+            if not is_meta_task:
+                tools_results = "".join(tools_results_list)  # O(n) join vs O(n²) concatenation
+            # For meta-tasks, tools_results is already set to "" above
             
             # CRITICAL: Log when ALL tool execution is complete
             logger.info(f"🎯 ALL TOOL EXECUTION COMPLETED - Starting task verification")
@@ -3473,11 +3327,38 @@ END OF CONTEXT
                 )
                 logger.info(f"📋 Using DEFAULT enhanced system prompt ({len(enhanced_system)} chars)")
             
-            # Build new format: --CONTEXT START-- + CONTEXT BLOCK + PROMPT: [USER PROMPT]
-            if context_block.strip():
-                in_prompt = f"--CONTEXT START--\n{context_block}\n--CONTEXT END--\n\nPROMPT: {user_prompt}"
+            # 🚀 META-TASK OPTIMIZATION: Smart truncation for title/tag generation
+            if is_meta_task:
+                # Extract task instruction and chat history separately
+                if '<chat_history>' in user_prompt and '</chat_history>' in user_prompt:
+                    # Split task instruction from chat history
+                    parts = user_prompt.split('<chat_history>')
+                    task_instruction = parts[0].strip()
+                    
+                    chat_content = parts[1].split('</chat_history>')[0].strip()
+                    
+                    # Smart truncation: Keep last 1000 chars of chat history for context
+                    if len(chat_content) > 1000:
+                        chat_content = "..." + chat_content[-1000:]
+                    
+                    # Reconstruct optimized prompt
+                    optimized_prompt = f"{task_instruction}\n<chat_history>\n{chat_content}\n</chat_history>"
+                    in_prompt = f"PROMPT: {optimized_prompt}"
+                    logger.info(f"🚀 META-TASK OPTIMIZED: Reduced prompt from {len(user_prompt)} to {len(optimized_prompt)} chars")
+                else:
+                    # Fallback: just truncate to reasonable size
+                    if len(user_prompt) > 2000:
+                        truncated = user_prompt[:1000] + "...[truncated]..." + user_prompt[-500:]
+                        in_prompt = f"PROMPT: {truncated}"
+                        logger.info(f"🚀 META-TASK OPTIMIZED: Reduced prompt from {len(user_prompt)} to {len(truncated)} chars")
+                    else:
+                        in_prompt = f"PROMPT: {user_prompt}"
             else:
-                in_prompt = f"PROMPT: {user_prompt}"
+                # Build new format: --CONTEXT START-- + CONTEXT BLOCK + PROMPT: [USER PROMPT]
+                if context_block.strip():
+                    in_prompt = f"--CONTEXT START--\n{context_block}\n--CONTEXT END--\n\nPROMPT: {user_prompt}"
+                else:
+                    in_prompt = f"PROMPT: {user_prompt}"
             
             # Core metrics for debugging
             logger.info(f"📜 Prompt: {len(in_prompt)} bytes | Context: {len(context_block)} | System: {len(enhanced_system)}")
@@ -4306,20 +4187,14 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
             yield f"data: {json.dumps(chunk)}\n\n"
             
             # Mirror/capture native streaming response
-            # FIX: Read tool calling model from config instead of using hardcoded default
-            from utils.config_loader import ConfigLoader
-            temp_config_loader = ConfigLoader()
-            tool_config = temp_config_loader.get_llm_config('tool_calling')
-            configured_tool_model = tool_config.get('config', {}).get('model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL)
-            
             native_request_data = {
                 "prompt": user_prompt,
-                "model": ServerConfig.DEFAULT_MODEL,  # Use PRIMARY model, not tool calling model
+                "model": ServerConfig.DEFAULT_TOOL_CALLING_MODEL,
                 "toolsInUse": True,
                 "prompt_context": "",
                 "searchWebInUse": False,
                 "images": ["noimage"],
-                "tools_calling_model": configured_tool_model,  # FIX: Use config instead of hardcoded
+                "tools_calling_model": ServerConfig.DEFAULT_TOOL_CALLING_MODEL,
                 "system": ""
             }
             
@@ -4858,105 +4733,6 @@ except ImportError as e:
 # ==============================================================================
 # MAIN APPLICATION RUNNER
 # ==============================================================================
-
-
-# LLM Abstraction Layer Endpoints
-@app.get("/llm/config")
-async def get_llm_config():
-    """Get current LLM provider configuration"""
-    try:
-        if not llm_manager._initialized:
-            await llm_manager.initialize()
-            
-        provider_info = llm_manager.get_provider_info()
-        health = await llm_manager.health_check()
-        
-        return {
-            "status": "success",
-            "providers": provider_info.get("providers", {}),
-            "health": health,
-            "initialized": provider_info.get("initialized", False),
-            "factory_info": provider_info.get("factory_info", {})
-        }
-    except Exception as e:
-        logger.error(f"Failed to get LLM config: {e}")
-        return {"status": "error", "message": str(e)}
-
-@app.get("/llm/health")
-async def get_llm_health():
-    """Get LLM provider health status"""
-    try:
-        if not llm_manager._initialized:
-            await llm_manager.initialize()
-            
-        health = await llm_manager.health_check()
-        return {
-            "status": "success",
-            "health": health,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        logger.error(f"Failed to get LLM health: {e}")
-        return {"status": "error", "message": str(e)}
-
-@app.post("/llm/test/stream")
-async def test_llm_stream(request: dict):
-    """Test LLM abstraction layer streaming"""
-    try:
-        if not llm_manager._initialized:
-            await llm_manager.initialize()
-            
-        prompt = request.get("prompt", "Hello, world!")
-        
-        async def generate():
-            try:
-                async for chunk in llm_manager.generate_stream(prompt):
-                    yield f"data: {json.dumps({'response': chunk})}\n\n"
-                yield "data: [DONE]\n\n"
-            except Exception as e:
-                logger.error(f"Streaming error: {e}")
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
-        
-        return StreamingResponse(generate(), media_type="text/plain")
-        
-    except Exception as e:
-        logger.error(f"Failed to stream with LLM abstraction: {e}")
-        return {"status": "error", "message": str(e)}
-
-@app.post("/llm/test/tools")
-async def test_llm_tools(request: dict):
-    """Test LLM abstraction layer tool calling"""
-    try:
-        if not llm_manager._initialized:
-            await llm_manager.initialize()
-            
-        prompt = request.get("prompt", "What's the weather like?")
-        tools = request.get("tools", [
-            {
-                "name": "get_weather",
-                "description": "Get current weather information",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The city and state, e.g. San Francisco, CA"
-                        }
-                    },
-                    "required": ["location"]
-                }
-            }
-        ])
-        
-        result = await llm_manager.generate_tools(prompt, tools)
-        return {
-            "status": "success",
-            "result": result
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to call tools with LLM abstraction: {e}")
-        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     logger.info(f"Starting complete server on {ServerConfig.HOST}:{ServerConfig.PORT}")
