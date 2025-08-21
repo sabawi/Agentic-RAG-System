@@ -177,10 +177,33 @@ OUTLOOK_SENDER_EMAIL=your-agent@outlook.com
 OUTLOOK_APP_PASSWORD=your-outlook-app-password
 ```
 
+### LLM Configuration (config/llm_config.yaml)
+
+**⚠️ IMPORTANT LIMITATION v0.8**: OpenAI models can only be used for tool calling, NOT as primary LLM.
+
+The system has an architectural limitation where:
+- **Tool Calling**: Supports both Ollama and OpenAI models ✅
+- **Primary LLM**: Only supports Ollama models ❌ (hardcoded execution path)
+
+**Supported Configuration**:
+```yaml
+llm:
+  primary:
+    type: ollama          # ✅ REQUIRED: Must be 'ollama'
+    config:
+      model: llama3.2:3b  # Any local Ollama model
+  tool_calling:
+    type: openai          # ✅ SUPPORTED: Can be 'openai' or 'ollama'
+    config:
+      model: gpt-4o-mini  # OpenAI model for superior tool calling
+```
+
+**Why this limitation exists**: The primary LLM execution path (line 3493 in fastapi_server_complete.py) is hardcoded to use `ServerConfig.OLLAMA_URL`, while tool calling properly uses the LLM Manager abstraction that supports multiple providers.
+
 ### Ollama Models
 Ensure these models are installed:
 ```bash
-ollama pull llama3.2:3b      # Tool calling model
+ollama pull llama3.2:3b      # Tool calling model  
 ollama pull qwen3:8b         # Primary LLM
 ollama pull llama3.1:8b      # Alternative model
 ```

@@ -33,9 +33,9 @@ class HTTPPoolManager:
             'enable_cleanup_closed': True
         }
         
-        # Request timeout configuration
+        # Request timeout configuration  
         self.timeout_config = aiohttp.ClientTimeout(
-            total=30,  # Total request timeout
+            total=None,  # Allow per-request timeout override - fixed for long LLM requests
             connect=5,  # Connection timeout
             sock_read=10  # Socket read timeout
         )

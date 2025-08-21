@@ -108,8 +108,16 @@ class LLMProvider(ABC):
         return self.config.get('timeout', 300)
     
     def get_max_tokens(self) -> int:
-        """Get maximum tokens setting"""
+        """Get maximum tokens setting (DEPRECATED: Use get_context_window_size and get_num_predict)"""
         return self.config.get('max_tokens', 4096)
+    
+    def get_context_window_size(self) -> int:
+        """Get context window size (Ollama num_ctx parameter)"""
+        return self.config.get('context_window_size', 8192)
+    
+    def get_num_predict(self) -> int:
+        """Get maximum output tokens (Ollama num_predict parameter)"""
+        return self.config.get('num_predict', 16384)
     
     def get_temperature(self) -> float:
         """Get temperature setting"""

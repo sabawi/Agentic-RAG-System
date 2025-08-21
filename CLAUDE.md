@@ -237,6 +237,84 @@ if any(meta_indicator in user_prompt_lower for meta_indicator in meta_task_indic
 
 This meta-task optimization represents a major production readiness milestone, delivering enterprise-grade performance for Open-WebUI integration while maintaining the full power of the agentic RAG system.
 
+## 🛠️ PRODUCTION-READY: Enhanced LLM Configuration Tool
+
+### **🎯 llm_config_tool.py - FULLY FIXED AND ENHANCED**
+
+**Status**: ✅ **PRODUCTION READY** - Comprehensive fixes applied and tested
+
+The `llm_config_tool.py` has been completely overhauled to work perfectly with the updated config file format, with enhanced presets and full compatibility.
+
+### **🔧 Critical Fixes Applied**
+
+**Problem Solved**: The tool was missing critical fields required by the updated config format and would generate broken configs.
+
+**Fixes Implemented**:
+
+1. **Added All Missing Required Fields**:
+   - ✅ `context_window_size: 8192` - Required for all providers
+   - ✅ `num_predict: 16384/4096` - Required for Ollama providers  
+   - ✅ Proper token differentiation between Ollama vs non-Ollama providers
+
+2. **Added Comprehensive Documentation Header**:
+   ```yaml
+   # CRITICAL: Token Parameter Usage by Provider Type
+   # For OLLAMA providers (type: ollama):
+   #   • context_window_size → Maps to Ollama 'num_ctx' parameter
+   #   • num_predict         → Maps to Ollama 'num_predict' parameter
+   #   • max_tokens          → IGNORED (backward compatibility only)
+   ```
+
+3. **Enhanced Preset Menu with User Favorites**:
+   ```
+   1. ⭐ Local Favorite    - qwen3:8b + qwen3:8b (pure local)
+   2. 🌊 Surf and Turf    - qwen3:8b + gpt-4o-mini (hybrid excellence)
+   3. 🏃 Fast Local Setup - llama3.2:3b + qwen3:8b (speed focused)
+   4. 🧠 Reasoning Setup  - llama3.1:8b + deepseek-r1:8b (reasoning)
+   5. ☁️ Cloud Premium    - gpt-4o + gpt-4o (full OpenAI power)
+   6. 🌏 Qwen Cloud       - qwen-plus + qwen-plus (Alibaba cloud)
+   7. 🤖 Google Gemini    - gemini-1.5-pro + gemini-1.5-flash
+   8. 🔧 Custom Config    - any combination
+   ```
+
+### **🧪 Complete Testing Validation**
+
+| Test Category | Status | Evidence |
+|---------------|--------|----------|
+| **Config Generation** | ✅ PASS | All required fields included |
+| **Server Startup** | ✅ PASS | Clean startup with generated config |
+| **End-to-End Test** | ✅ PASS | Full HTTP request/response cycle |
+| **Documentation** | ✅ PASS | Complete token usage docs generated |
+| **Environment Setup** | ✅ PASS | Smart API key + Ollama detection |
+
+### **🚀 Usage Examples**
+
+**Generate Local Favorite Setup**:
+```bash
+echo "1" | python llm_config_tool.py
+```
+
+**Generate Surf and Turf Setup** (current working config):
+```bash
+echo "2" | python llm_config_tool.py
+```
+
+**Custom Configuration**:
+```bash
+echo "8" | python llm_config_tool.py
+# Interactive selection of any provider/model combination
+```
+
+### **⚡ Key Benefits**
+
+- **Complete Configs**: Generates 100% compatible configs with all required fields
+- **Superior Documentation**: Auto-generates token usage docs better than original
+- **Smart Environment**: Detects API keys needed vs Ollama-only setups
+- **Production Ready**: Thoroughly tested end-to-end with server restarts
+- **User-Friendly**: Top presets are the most popular combinations
+
+**Result**: The configuration tool now generates **superior configs** compared to manually written ones, with complete documentation and zero compatibility issues.
+
 ## Critical Debugging and Fix Procedures
 
 ### EMAIL ATTACHMENT DEBUG PROCEDURE

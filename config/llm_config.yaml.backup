@@ -1,0 +1,63 @@
+debug:
+  log_requests: false
+  log_timing: true
+  mock_providers: false
+llm:
+  fallback:
+    auto_switch: true
+    enabled: true
+    order:
+    - ollama
+    - openai
+    - qwen
+    - gemini
+  primary:
+    type: ollama
+    config:
+      model: llama3.2:3b
+      timeout: 600
+      max_tokens: 4096
+      base_url: http://127.0.0.1:11434
+      api_key: null
+      temperature: 0.7
+      stream: true
+  tool_calling:
+    type: ollama
+    config:
+      model: qwen3:8b
+      timeout: 300
+      max_tokens: 4096
+      base_url: http://127.0.0.1:11434
+      api_key: null
+      temperature: 0.7
+      stream: false
+  providers:
+    ollama:
+      health_check_url: http://127.0.0.1:11434/api/tags
+      retry_attempts: 3
+      retry_delay: 2
+performance:
+  connection_pool_size: 10
+  max_concurrent_requests: 5
+  request_timeout: 600
+  streaming_chunk_size: 1024
+platform:
+  config_dir:
+    linux: ${HOME}/.config/agentic_rag
+    macos: ${HOME}/.config/agentic_rag
+    windows: ${APPDATA}/agentic_rag
+  log_dir:
+    linux: ${HOME}/.local/share/agentic_rag/logs
+    macos: ${HOME}/.local/share/agentic_rag/logs
+    windows: ${LOCALAPPDATA}/agentic_rag/logs
+  temp_dir:
+    linux: /tmp/agentic_rag
+    macos: ${TMPDIR}/agentic_rag
+    windows: ${TEMP}/agentic_rag
+security:
+  api_key_encryption: false
+  audit_logging: true
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    burst_limit: 10

@@ -52,11 +52,12 @@ class OllamaProvider(LLMProvider):
             "stream": True,
             "options": {
                 "temperature": kwargs.get('temperature', self.get_temperature()),
-                "num_predict": kwargs.get('max_tokens', self.get_max_tokens())
+                "num_ctx": kwargs.get('context_window_size', self.get_context_window_size()),
+                "num_predict": kwargs.get('num_predict', self.get_num_predict())
             }
         }
         
-        logger.info(f"🦙 Ollama streaming request: model={model}, prompt_len={len(prompt)}")
+        logger.info(f"🦙 Ollama streaming request: model={model}, prompt_len={len(prompt)}, num_ctx={payload['options']['num_ctx']}, num_predict={payload['options']['num_predict']}")
         
         try:
             async with session.post(
@@ -118,11 +119,12 @@ class OllamaProvider(LLMProvider):
             "stream": False,
             "options": {
                 "temperature": kwargs.get('temperature', 0.1),  # Lower for tool calling
-                "num_predict": kwargs.get('max_tokens', 2048)
+                "num_ctx": kwargs.get('context_window_size', self.get_context_window_size()),
+                "num_predict": kwargs.get('num_predict', self.get_num_predict())
             }
         }
         
-        logger.info(f"🔧 Ollama tool request: model={model}, tools={len(tools)}")
+        logger.info(f"🔧 Ollama tool request: model={model}, tools={len(tools)}, num_ctx={payload['options']['num_ctx']}, num_predict={payload['options']['num_predict']}")
         
         try:
             async with session.post(

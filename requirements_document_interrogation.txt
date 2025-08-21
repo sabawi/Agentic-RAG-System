@@ -11,8 +11,9 @@ python-docx>=0.8.11
 openpyxl>=3.0.9
 beautifulsoup4>=4.9.3
 
-# OCR for images (optional but recommended)
-pytesseract>=0.3.8
+# OCR for images - Multi-engine support
+easyocr>=1.7.0  # Primary OCR engine (recommended)
+pytesseract>=0.3.8  # Fallback OCR engine
 pillow>=8.3.0
 
 # File system monitoring

@@ -221,6 +221,8 @@ curl -X POST "http://localhost:5000/v1/chat/completions" \
 
 **Security Note**: The OpenAI compatibility layer uses zero-trust security - all parameters except the user message are ignored, ensuring consistent agentic behavior.
 
+**⚠️ Important Limitation v0.8**: OpenAI models can only be used for tool calling, NOT as primary LLM. The OpenAI endpoints route primary LLM requests to the configured Ollama primary model due to architectural limitations.
+
 ---
 
 ## Document Processing System

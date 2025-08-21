@@ -32,6 +32,10 @@ import requests
 from http_pool_manager import http_pool, init_http_pool, cleanup_http_pool
 from http_helpers import pooled_get, pooled_post, requests_compatible_get, requests_compatible_post
 
+# Configuration Management
+from utils.config_loader import config_loader
+from llm_providers.manager import llm_manager
+
 # Phase 2B: Advanced Response Streaming & Buffer Optimization
 try:
     from phase2b_rollback_controller import (
@@ -120,8 +124,8 @@ class ServerConfig:
     # Ollama configuration
     OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434/api/generate')
     OLLAMA_CHAT_URL = os.getenv('OLLAMA_CHAT_URL', 'http://127.0.0.1:11434/api/chat')
-    DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'llama3.2:3b')
-    DEFAULT_TOOL_CALLING_MODEL = os.getenv('DEFAULT_TOOL_CALLING_MODEL', 'qwen3:8b')
+    DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', config_loader.get_llm_config('primary')['config']['model'])
+    DEFAULT_TOOL_CALLING_MODEL = os.getenv('DEFAULT_TOOL_CALLING_MODEL', config_loader.get_llm_config('tool_calling')['config']['model'])
     
     # OpenAI Compatibility Layer Configuration
     USE_DIRECT_FUNCTION_CALLS = os.getenv('USE_DIRECT_FUNCTION_CALLS', 'true').lower() == 'true'
@@ -2907,7 +2911,7 @@ async def llama_stream(request: Request):
                 try:
                     tools_model = data.get('tools_calling_model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL).strip()
                     # Tool calling model preparation
-                    logger.info(f"Tool calling: {tools_model} (tools enabled: {data.get('tools', False)})")
+                    logger.info(f"Tool calling: {tools_model} (tools enabled: {tools_in_use})")
                     
                     # Call the tool calling model to get JSON function calls
                     # 🎯 NEW APPROACH: Let tool calling model orchestrate ALL tools, intercept email calls
@@ -2928,18 +2932,6 @@ async def llama_stream(request: Request):
                     else:
                         # Normal tool processing for non-meta tasks
                         tools_array = await tool_manager.get_tools_definitions(exclude_file_email_tools=False)
-                        tool_request = {
-                        "model": tools_model,
-                        "messages": messages,
-                        "options": {
-                            "temperature": 0,
-                            "num_ctx": 8192,  # Increase context window for tool calling model
-                            "num_predict": 4096  # Allow longer tool responses - no more "Details..." truncation
-                        },
-                        "tools": tools_array,
-                        "stream": False,
-                        "think": False
-                        }
                         # Tools array prepared
                         if len(tools_array) == 0:
                             logger.error("❌ Tools array is empty! This will cause timeout.")
@@ -2947,45 +2939,36 @@ async def llama_stream(request: Request):
                             tool_names = [tool['function']['name'] for tool in tools_array]
                             logger.info(f"Available tools: {tool_names}")
                         
-                        tool_request["tools"] = tools_array
-                        # Tool request being sent
-                        logger.info("🔧 DEBUG: About to call Ollama tool model")
+                        # Use LLM Manager for provider-agnostic tool calling
+                        logger.info("🔧 DEBUG: About to call LLM Manager for tool calling")
                         
-                        response_data = await pooled_post(
-                            ServerConfig.OLLAMA_CHAT_URL,
-                            json=tool_request,
-                            timeout=ServerConfig.TASK_TIMEOUT  # Use configurable timeout for tool operations
+                        # Convert messages to prompt for LLM Manager
+                        user_message = messages[-1]['content'] if messages else data.get('prompt', '')
+                        system_prompt = load_tool_model_system_prompt()
+                        
+                        response_data = await llm_manager.generate_tools(
+                            prompt=user_message,
+                            tools=tools_array,
+                            model=tools_model,
+                            system_prompt=system_prompt,
+                            temperature=0,
+                            max_tokens=4096
                         )
-                        logger.info("🔧 DEBUG: Ollama tool model response received")
+                        logger.info("🔧 DEBUG: LLM Manager tool calling response received")
                         
-                        # Convert pooled response to requests-like object for compatibility
-                        class CompatResponse:
-                            def __init__(self, data):
-                                self.status_code = data['status_code']
-                                self.text = data['text']
-                                self.content = data['content']
-                                self.headers = data['headers']
-                            def json(self):
-                                import json
-                                return json.loads(self.text)
+                        # LLM Manager returns direct dictionary - no HTTP response wrapping needed
+                        # response_data is already the parsed response from LLM Manager
                         
-                        response = CompatResponse(response_data)
-                        
-                        if response.status_code == 200:
-                            response_data = response.json()
+                        if response_data:  # Success case - LLM Manager returned data
                             # Tool calling completed successfully
                             
-                            if 'message' in response_data:
-                                message_keys = list(response_data['message'].keys())
-                                # Debug: Log what the tool calling model returned
-                                logger.info(f"🔧 DEBUG: Tool model response keys: {message_keys}")
-                                if 'content' in response_data['message']:
-                                    content = response_data['message']['content'][:200]
-                                    logger.info(f"🔧 DEBUG: Tool model content: {content}")
+                            # Debug: Log what the LLM Manager returned
+                            response_keys = list(response_data.keys())
+                            logger.info(f"🔧 DEBUG: LLM Manager response keys: {response_keys}")
                             
-                            # STAGE 2: Process tool calls if present
-                            if 'message' in response_data and 'tool_calls' in response_data['message']:
-                                tool_calls = response_data['message']['tool_calls']
+                            # STAGE 2: Process tool calls if present - LLM Manager format
+                            if 'tool_calls' in response_data and response_data['tool_calls']:
+                                tool_calls = response_data['tool_calls']
                                 logger.info(f"🎯 TOOL CALLS DETECTED: {len(tool_calls)} tools to execute")
                                 
                                 # Process each tool call - PARALLEL EXECUTION OPTIMIZATION
@@ -2995,6 +2978,15 @@ async def llama_stream(request: Request):
                                 for i, tool_call in enumerate(tool_calls):
                                     function_name = tool_call['function']['name']
                                     function_args = tool_call['function']['arguments']
+                                    
+                                    # Parse JSON string arguments to dictionary if needed
+                                    if isinstance(function_args, str):
+                                        try:
+                                            function_args = json.loads(function_args)
+                                        except json.JSONDecodeError:
+                                            logger.error(f"❌ Invalid JSON in function arguments for {function_name}: {function_args}")
+                                            function_args = {}
+                                    
                                     # Tool call registered
                                     tools_called.append(function_name)  # Track this tool was called
                                 
@@ -3003,6 +2995,14 @@ async def llama_stream(request: Request):
                                     i, tool_call = tool_call_data
                                     function_name = tool_call['function']['name']
                                     function_args = tool_call['function']['arguments']
+                                    
+                                    # Parse JSON string arguments to dictionary if needed
+                                    if isinstance(function_args, str):
+                                        try:
+                                            function_args = json.loads(function_args)
+                                        except json.JSONDecodeError:
+                                            logger.error(f"❌ Invalid JSON in function arguments for {function_name}: {function_args}")
+                                            function_args = {}
                                     
                                     # Add image if applicable
                                     if "image" in function_args and image_exists:
@@ -3067,8 +3067,7 @@ async def llama_stream(request: Request):
                             else:
                                 # No tool calls generated - check if we should force data gathering
                                 logger.info("❌ No tool calls generated by the tool calling model")
-                                if 'message' in response_data:
-                                    logger.info(f"Raw message: {json.dumps(response_data['message'], indent=2)}")
+                                logger.info(f"Raw LLM Manager response: {json.dumps(response_data, indent=2)}")
                                 
                                 # 🔥 PROGRAMMATIC TOOL CALL INJECTION 🔥
                                 # If the model refuses to call tools for file/email requests, force data gathering
@@ -3135,8 +3134,8 @@ async def llama_stream(request: Request):
                                         tools_results_list.append(f"Tool: {function_name}\nResult: {result}\n\n")
                         
                         else:
-                            logger.error(f"❌ Tool calling model failed with status: {response.status_code}")
-                            logger.error(f"Response: {response.text}")
+                            logger.error(f"❌ Tool calling model failed - no response data returned")
+                            logger.error(f"LLM Manager response: {response_data}")
                             # Fallback: just get current time
                             result = await tool_manager.get_the_secret_tool()
                             tools_results_list.append(f"Tool: get_the_secret_tool\nResult: {result}\n\n")
@@ -4193,7 +4192,7 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
             # Mirror/capture native streaming response
             native_request_data = {
                 "prompt": user_prompt,
-                "model": ServerConfig.DEFAULT_TOOL_CALLING_MODEL,
+                "model": ServerConfig.DEFAULT_MODEL,
                 "toolsInUse": True,
                 "prompt_context": "",
                 "searchWebInUse": False,
@@ -4497,7 +4496,7 @@ try:
             data = await request.json()
             question = data.get('question', '')
             k = data.get('k', 5)
-            model = data.get('model', 'qwen3:8b')
+            model = data.get('model', config_loader.get_tool_calling_model())
             
             if not question.strip():
                 return {"success": False, "error": "question is required"}

@@ -2,6 +2,9 @@
 """
 Model Switcher - Quick Configuration Tool for Testing
 Allows easy switching between pre-configured LLM models for tool calling and primary LLM.
+
+⚠️ IMPORTANT v0.8 LIMITATION: OpenAI models can ONLY be used for tool calling, NOT as primary LLM.
+All presets below respect this architectural limitation by using Ollama for primary LLM.
 """
 
 import yaml
@@ -53,15 +56,15 @@ MODEL_PRESETS = {
         }
     },
     "4": {
-        "name": "gpt-4-1106-preview + qwen3:8b (Original GPT-4)",
+        "name": "gpt-4o + llama3.2:3b (OpenAI Tools + Local Primary)",
         "tool_calling": {
             "type": "openai", 
-            "model": "gpt-4-1106-preview",
-            "temperature": 0.1
+            "model": "gpt-4o",
+            "temperature": 0.3
         },
         "primary": {
             "type": "ollama",
-            "model": "qwen3:8b",
+            "model": "llama3.2:3b",
             "temperature": 0.7
         }
     },
@@ -157,18 +160,18 @@ def apply_preset(config, preset_key):
     config['llm']['primary']['config']['temperature'] = primary_config['temperature']
     
     # Update primary provider-specific settings
-    if primary_config['type'] == 'openai':
-        config['llm']['primary']['config']['base_url'] = "https://api.openai.com/v1"
-        config['llm']['primary']['config']['api_key'] = "${OPENAI_API_KEY}"
-        config['llm']['primary']['config']['timeout'] = 300
-        config['llm']['primary']['config']['max_tokens'] = 4096
-        config['llm']['primary']['config']['stream'] = True
-    else:  # ollama
-        config['llm']['primary']['config']['base_url'] = "http://127.0.0.1:11434"
-        config['llm']['primary']['config']['api_key'] = None
-        config['llm']['primary']['config']['timeout'] = 600
-        config['llm']['primary']['config']['max_tokens'] = 4096
-        config['llm']['primary']['config']['stream'] = True
+    # ⚠️ LIMITATION v0.8: Primary LLM must be Ollama (hardcoded execution path)
+    if primary_config['type'] != 'ollama':
+        print(f"❌ ERROR: Primary LLM type '{primary_config['type']}' not supported in v0.8")
+        print("   Primary LLM must be 'ollama' due to architectural limitation")
+        return False
+    
+    # Configure Ollama primary settings
+    config['llm']['primary']['config']['base_url'] = "http://127.0.0.1:11434"
+    config['llm']['primary']['config']['api_key'] = None
+    config['llm']['primary']['config']['timeout'] = 600
+    config['llm']['primary']['config']['max_tokens'] = 4096
+    config['llm']['primary']['config']['stream'] = True
     
     print(f"\n✅ Applied preset: {preset['name']}")
     return True
