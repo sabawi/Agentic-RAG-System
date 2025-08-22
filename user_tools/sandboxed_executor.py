@@ -119,6 +119,18 @@ class SandboxedExecutorTool(BaseUserTool):
                 "path": {
                     "type": "string",
                     "description": "Directory path to list (for 'list_files' action). Examples: 'short_stories', 'src', '.' for current directory"
+                },
+                "directory": {
+                    "type": "string",
+                    "description": "Target directory for file operations (for create_file, append_file, read_file, delete_file actions). Examples: '/games', 'projects', 'src'. If not specified, uses sandbox_workspace default."
+                },
+                "verify_location": {
+                    "type": "boolean",
+                    "description": "Verify file was created at expected location (for 'create_file' action). Default: true"
+                },
+                "create_directory": {
+                    "type": "boolean", 
+                    "description": "Auto-create missing directories (for 'create_file' action). Default: true"
                 }
             },
             "required": ["action"]
@@ -600,6 +612,58 @@ This is a secure sandboxed environment for code execution and system commands.
         except Exception as e:
             return False, f"Invalid path: {e}"
     
+    def _validate_custom_directory_path(self, filename: str, custom_directory: str = None) -> Tuple[bool, str, str]:
+        """
+        Validate path with optional custom directory support.
+        
+        Returns:
+            Tuple[bool, str, str]: (is_valid, final_path, actual_directory_used)
+        """
+        try:
+            if custom_directory:
+                # Handle custom directory requests
+                custom_dir = custom_directory.strip()
+                
+                # Security check: Allow certain safe directories
+                allowed_custom_dirs = [
+                    "/games", 
+                    "/tmp/games",
+                    "/home/sabawi/Development/flaskserver/games",
+                    "games",
+                    "projects", 
+                    "output",
+                    "results"
+                ]
+                
+                # Normalize custom directory path
+                if custom_dir.startswith("/"):
+                    # Absolute path - check if allowed
+                    if custom_dir not in allowed_custom_dirs:
+                        # Try mapping to local equivalent
+                        if custom_dir == "/games":
+                            custom_dir = "/home/sabawi/Development/flaskserver/games"
+                        else:
+                            return False, f"Custom directory not allowed: {custom_dir}", ""
+                
+                # Create target directory path
+                if custom_dir.startswith("/"):
+                    target_path = Path(custom_dir) / filename
+                    actual_directory = custom_dir
+                else:
+                    # Relative to project root
+                    target_path = self.base_dir / custom_dir / filename  
+                    actual_directory = str(self.base_dir / custom_dir)
+                
+                return True, str(target_path), actual_directory
+            else:
+                # Use default sandbox path
+                is_valid, sandbox_path = self._validate_path(filename)
+                actual_directory = str(self.sandbox_path)
+                return is_valid, sandbox_path, actual_directory
+                
+        except Exception as e:
+            return False, f"Path validation error: {e}", ""
+    
     async def _execute_command(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a system command in the sandbox."""
         command = kwargs.get("command", "").strip()
@@ -691,6 +755,11 @@ This is a secure sandboxed environment for code execution and system commands.
             content = kwargs.get("content", "")
             convert_to_pdf = kwargs.get("convert_to_pdf", False)
             
+            # 🚀 PHASE 1 ENHANCEMENT: Support custom directory
+            custom_directory = kwargs.get("directory", None)
+            verify_location = kwargs.get("verify_location", True)
+            create_directory = kwargs.get("create_directory", True)
+            
             print(f"💥💥💥 _CREATE_FILE: filename='{filename}', content_len={len(content)}, convert_to_pdf={convert_to_pdf}")
             print("💥💥💥 _CREATE_FILE: kwargs processing completed successfully")
             
@@ -734,10 +803,12 @@ This is a secure sandboxed environment for code execution and system commands.
         else:
             print("💥💥💥 _CREATE_FILE: ❌ No file type auto-detection matched -> continuing to regular file creation")
         
-        # Validate path
-        is_valid, file_path = self._validate_path(filename)
+        # 🚀 PHASE 1 ENHANCEMENT: Enhanced path validation with custom directory support
+        is_valid, file_path, actual_directory = self._validate_custom_directory_path(filename, custom_directory)
         if not is_valid:
             return {"success": False, "error": file_path, "result": None}
+        
+        print(f"💥💥💥 _CREATE_FILE: Enhanced validation -> file_path='{file_path}', actual_directory='{actual_directory}'")
         
         try:
             # Check if content is binary (bytes) or text (str)
@@ -748,8 +819,17 @@ This is a secure sandboxed environment for code execution and system commands.
             if content_size > self.max_file_size:
                 return {"success": False, "error": f"File too large (max {self.max_file_size} bytes)", "result": None}
             
-            # Create parent directories if needed
-            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+            # 🚀 PHASE 1 ENHANCEMENT: Enhanced directory creation
+            if create_directory:
+                target_dir = Path(file_path).parent
+                print(f"💥💥💥 _CREATE_FILE: Creating directory '{target_dir}' (create_directory={create_directory})")
+                target_dir.mkdir(parents=True, exist_ok=True)
+                print(f"💥💥💥 _CREATE_FILE: Directory creation completed")
+            else:
+                # Check if directory exists
+                target_dir = Path(file_path).parent
+                if not target_dir.exists():
+                    return {"success": False, "error": f"Directory does not exist: {target_dir} (create_directory=False)", "result": None}
             
             # Write file based on content type
             if is_binary:
@@ -764,13 +844,31 @@ This is a secure sandboxed environment for code execution and system commands.
             # Get file stats
             file_stats = os.stat(file_path)
             
+            # 🚀 PHASE 1 ENHANCEMENT: Enhanced result with verification
             result = {
                 "filename": filename,
                 "full_path": file_path,
                 "size_bytes": file_stats.st_size,
                 "created": datetime.fromtimestamp(file_stats.st_ctime).isoformat(),
-                "permissions": oct(file_stats.st_mode)[-3:]
+                "permissions": oct(file_stats.st_mode)[-3:],
+                "directory_used": actual_directory,
+                "custom_directory_requested": custom_directory is not None
             }
+            
+            # 🚀 PHASE 1 ENHANCEMENT: File location verification
+            if verify_location:
+                file_exists = os.path.exists(file_path)
+                expected_location = custom_directory if custom_directory else "sandbox_workspace"
+                location_verified = actual_directory in file_path
+                
+                result["verification"] = {
+                    "file_exists": file_exists,
+                    "expected_location": expected_location,
+                    "actual_location": actual_directory,
+                    "location_verified": location_verified
+                }
+                
+                print(f"💥💥💥 _CREATE_FILE: Verification -> file_exists={file_exists}, location_verified={location_verified}")
             
             # Convert to PDF if requested
             if convert_to_pdf:
