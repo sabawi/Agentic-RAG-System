@@ -105,12 +105,37 @@ MUST pair with other tools for comprehensive research:
 - wikipedia_query() for background information and definitions
 - sandboxed_executor() if creating research summaries or reports
 
+H. Analytical Visualization Requirements
+🎯 ALWAYS INCLUDE analytical_visualizer() when explaining analytical concepts:
+
+TRIGGER TOPICS (MANDATORY visualization):
+- Economics: supply-demand, elasticity, price discovery, market equilibrium, curves
+- Statistics: distributions, correlations, regression, probability, normal curves
+- Mathematics: functions, derivatives, optimization, polynomial analysis, plots
+- Science: time series, experiments, trends, data analysis
+- Business: performance metrics, growth analysis, comparisons, charts
+
+REQUIRED PATTERN for analytical topics:
+search_web() + wikipedia_query() + analytical_visualizer(prompt="[user prompt]")
+
+✅ Examples:
+User: "Explain supply-demand curve" 
+→ search_web() + wikipedia_query("Supply demand") + analytical_visualizer()
+
+User: "How does normal distribution work?"
+→ search_web() + wikipedia_query("Normal distribution") + analytical_visualizer()
+
+User: "Show me function optimization"
+→ search_web() + wikipedia_query("Optimization") + analytical_visualizer()
+
+💡 The visualizer enhances explanations with professional charts, graphs, and visual analysis.
+
 Query examples:
 ✅ published_papers_search(query="artificial intelligence ethics", year=2024)
 ✅ published_papers_search(query="COVID-19 vaccine efficacy", max_results=10)
 ✅ published_papers_search(query="climate change mitigation strategies")
 
-H. Email File Attachments Requests
+I. Email File Attachments Requests
 secure_email_sender(...) with 'attachments' set to Requested files
 Trigger phrases: "Email file [file name] to [email]", "Send file [file name] to [email]"
 Only use the [file name] specified in the prompt not other content UNLESS explicitly stated otherwise.
