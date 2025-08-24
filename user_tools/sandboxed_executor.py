@@ -1547,9 +1547,12 @@ if __name__ == "__main__":
     def _format_content_for_template(self, content: str) -> str:
         """Format content for use with shared HTML template"""
         import re
+        import html
         
-        # Convert markdown-like elements to HTML
-        body = content
+        # FIRST: Escape HTML entities to prevent injection and display issues
+        body = html.escape(content, quote=True)
+        
+        # THEN: Convert markdown-like elements to HTML (now working on escaped content)
         
         # Convert headers
         body = re.sub(r'^# (.+)$', r'<h1>\1</h1>', body, flags=re.MULTILINE)

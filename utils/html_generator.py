@@ -152,7 +152,9 @@ li { margin-bottom: 6px; }
 </html>"""
 
     def _clean_html_content(self, html: str) -> str:
-        """Remove <pre><code> wrappers and invalid nesting"""
+        """Remove <pre><code> wrappers and invalid nesting while preserving HTML entities"""
+        import html as html_module
+        
         soup = BeautifulSoup(html, 'html.parser')
 
         # Unwrap <pre> and <code>, preserve text or inner HTML
@@ -166,6 +168,14 @@ li { margin-bottom: 6px; }
             parent = tag.parent
             if parent.name == 'p':
                 parent.unwrap()
+
+        # CRITICAL FIX: Re-escape HTML entities in text content after BeautifulSoup processing
+        # BeautifulSoup automatically unescapes entities, so we need to escape them back
+        for element in soup.find_all(text=True):
+            if element.parent.name not in ['script', 'style']:  # Skip script/style tags
+                # Replace the text content with escaped version
+                escaped_text = html_module.escape(str(element), quote=True)
+                element.replace_with(escaped_text)
 
         return str(soup)
 
@@ -199,10 +209,11 @@ li { margin-bottom: 6px; }
             # Prepare timestamp
             timestamp = custom_timestamp or f"Report generated on {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}"
 
-            # Replace placeholders
-            html_document = template.replace("{{TITLE}}", title)
-            html_document = html_document.replace("{{HEADER_TITLE}}", header_title)
-            html_document = html_document.replace("{{HEADER_SUBTITLE}}", header_subtitle)
+            # Replace placeholders with properly escaped content
+            import html as html_module
+            html_document = template.replace("{{TITLE}}", html_module.escape(title, quote=True))
+            html_document = html_document.replace("{{HEADER_TITLE}}", html_module.escape(header_title, quote=True))
+            html_document = html_document.replace("{{HEADER_SUBTITLE}}", html_module.escape(header_subtitle, quote=True))
             html_document = html_document.replace("{{CONTENT}}", content)
             html_document = html_document.replace("{{DISCLAIMER}}", disclaimer)
             html_document = html_document.replace("{{TIMESTAMP}}", timestamp)
