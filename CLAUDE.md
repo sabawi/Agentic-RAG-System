@@ -1,5 +1,145 @@
 # Claude Code Agent Memory
 
+## 🚨 SUPREME LAW: MANDATORY DIRECTIVE COMPLIANCE GATE 🚨
+
+### **⚡ ABSOLUTE RULE - NO EXCEPTIONS WHATSOEVER ⚡**
+
+**BEFORE ANY FIX, FEATURE, OR CODE CHANGE - YOU MUST:**
+
+#### **🔒 STEP 1: COMPLETE DIRECTIVE REVIEW (MANDATORY)**
+**YOU MUST EXPLICITLY STATE:**
+```
+✅ DIRECTIVE COMPLIANCE VERIFICATION COMPLETE
+===================================================
+
+🚨 MULTI-TOOL CALLING PROTECTION:
+- [ ] Reviewed lines 287-385 in fastapi_server_complete.py (PROTECTED)
+- [ ] Will NOT modify tool descriptions
+- [ ] Will NOT touch user_tools/*.py files
+- [ ] Will NOT enable _disabled_stock_analyzer.py
+- [ ] Multi-tool calling capability will be preserved
+
+🧠 MEMORY SYSTEM INTEGRITY:
+- [ ] Changes will be ADDITIVE ONLY (no core server modifications)
+- [ ] Will NOT touch conversation_memory.py
+- [ ] Backward compatibility will be maintained
+- [ ] Memory integration points will be preserved
+
+🔒 CONFIGURATION MANAGEMENT:
+- [ ] Will NOT manually edit config/llm_config.yaml
+- [ ] Will use llm_config_tool.py for any configuration changes
+- [ ] Will validate config contains required parameters
+- [ ] Will test server startup with any configuration changes
+
+🏗️ ARCHITECTURE PRESERVATION:
+- [ ] Two-stage LLM processing will remain intact
+- [ ] Race condition architecture will be maintained
+- [ ] Email/file generation workflow will be preserved
+- [ ] All existing functionality will be preserved
+
+📋 I SWEAR TO UPHOLD THESE DIRECTIVES BEFORE PROCEEDING
+```
+
+#### **🔒 STEP 2: DECLARE COMPLIANCE OATH (MANDATORY)**
+**YOU MUST EXPLICITLY TYPE:**
+```
+🔥 COMPLIANCE OATH SWORN 🔥
+I hereby swear that I have reviewed ALL directives and will 
+adhere to them completely during this development session.
+Any violation will result in immediate task termination.
+```
+
+#### **🔒 STEP 3: RISK ASSESSMENT (MANDATORY)**
+**IDENTIFY AND DECLARE:**
+- What specific files will be modified
+- Which directives are at risk during this change
+- What validation will be performed
+- How compliance will be verified
+
+### **⚡ ENFORCEMENT MECHANISMS ⚡**
+
+#### **🚫 ABSOLUTE PROHIBITIONS:**
+- **NO CODE CHANGES** without completing Steps 1-3
+- **NO "I'LL BE CAREFUL"** - Full compliance required
+- **NO SHORTCUTS** - Every single checkbox must be verified
+- **NO ASSUMPTIONS** - Each directive must be explicitly acknowledged
+
+#### **💀 VIOLATION CONSEQUENCES:**
+1. **IMMEDIATE TASK TERMINATION** - All work stops instantly
+2. **FULL SYSTEM REVERT** - All changes rolled back
+3. **COMPLIANCE RE-CERTIFICATION** - Must restart entire process
+4. **ENHANCED MONITORING** - Additional validation required
+
+#### **🎯 COMPLIANCE VERIFICATION:**
+After ANY change, you must run:
+```bash
+# Syntax validation
+python -m py_compile fastapi_server_complete.py
+
+# Server restart test  
+./stop_complete.sh && ./start_complete.sh
+
+# Multi-tool calling verification
+curl -X POST http://localhost:5000/llama3_1b/stream -H "Content-Type: application/json" -d '{"prompt": "test multiple tools", "tools": true}'
+
+# Configuration validation
+grep -E "context_window_size|num_predict" config/llm_config.yaml
+```
+
+### **🔥 THIS IS THE SUPREME LAW - NO EXCEPTIONS! 🔥**
+
+**ANY ATTEMPT TO BYPASS THIS GATE IS A CRITICAL SYSTEM VIOLATION**
+
+### **🤖 AUTOMATIC ENFORCEMENT TRIGGERS 🤖**
+
+The following keywords in ANY request will trigger **MANDATORY COMPLIANCE GATE**:
+
+#### **🔍 AUTO-TRIGGER KEYWORDS:**
+- "fix", "bug", "error", "issue", "problem"
+- "feature", "add", "implement", "create", "build"
+- "modify", "change", "update", "edit", "alter"
+- "improve", "enhance", "optimize", "refactor"
+- "debug", "troubleshoot", "resolve", "solve"
+- "configure", "config", "setup", "install"
+
+#### **⚡ INSTANT COMPLIANCE REQUIREMENT:**
+**IF ANY TRIGGER KEYWORD IS DETECTED, YOU MUST IMMEDIATELY:**
+1. **STOP ALL WORK** - Do not proceed with any changes
+2. **COMPLETE THE COMPLIANCE GATE** - All 3 steps mandatory
+3. **DECLARE COMPLIANCE** - Explicit verification required
+4. **THEN AND ONLY THEN** - Begin the requested work
+
+#### **🚫 ZERO TOLERANCE POLICY:**
+- **NO QUICK FIXES** - All changes require full compliance
+- **NO EMERGENCY BYPASSES** - Even critical fixes must comply  
+- **NO GRANDFATHERING** - Every session starts with fresh compliance
+- **NO DELEGATION** - Cannot skip compliance for "simple" changes
+
+### **📋 COMPLIANCE GATE STATUS TRACKER**
+
+**FOR EACH DEVELOPMENT SESSION, TRACK:**
+```
+🔒 COMPLIANCE GATE STATUS: [LOCKED/UNLOCKED]
+📅 Session Date: [DATE]
+🎯 Requested Work: [DESCRIPTION]
+✅ Step 1 Complete: [YES/NO]
+✅ Step 2 Complete: [YES/NO] 
+✅ Step 3 Complete: [YES/NO]
+🔓 Gate Unlocked At: [TIME]
+⚠️  Violations: [COUNT]
+```
+
+### **🔥 REMEMBER: THIS IS NOT OPTIONAL! 🔥**
+
+**This compliance gate is:**
+- **MANDATORY** for every development task
+- **NON-NEGOTIABLE** regardless of urgency
+- **AUTOMATIC** based on keyword detection
+- **COMPREHENSIVE** covering all directives
+- **ENFORCED** with immediate consequences
+
+**VIOLATION = IMMEDIATE TASK TERMINATION**
+
 ## 🚨 CRITICAL MULTI-TOOL CALLING PROTECTION 🚨
 
 **NEVER MODIFY TOOL DESCRIPTIONS WITHOUT EXPLICIT AUTHORIZATION**
