@@ -386,7 +386,13 @@ This procedure prevented a 2-day debugging cycle and ensures robust system opera
    - [ ] Email/file generation workflow preserved
    - [ ] All existing functionality works
 
-4. **🧪 Testing Requirements:**
+4. **🔒 Configuration Management:**
+   - [ ] Did NOT manually edit config/llm_config.yaml
+   - [ ] Used llm_config_tool.py for any configuration changes
+   - [ ] Config contains required parameters (context_window_size, num_predict)
+   - [ ] Server starts cleanly with new configuration
+
+5. **🧪 Testing Requirements:**
    - [ ] Syntax validation performed (`python -m py_compile`)
    - [ ] End-to-end testing completed
    - [ ] No theoretical fixes - real validation done
@@ -791,3 +797,84 @@ This performance breakthrough maintains the core Agentic-RAG architecture while 
 **Key Pattern Recognition**: Look for "generate a concise", "title with emoji", "categorizing the main themes" to trigger meta-task optimizations.
 
 This optimization demonstrates how systematic debugging, targeted fixes, and thorough testing can deliver dramatic performance improvements while preserving system functionality.
+
+## 🚨 MANDATORY CONFIGURATION MANAGEMENT DIRECTIVES
+
+### **🔒 CRITICAL RULE: NO MANUAL CONFIG EDITS**
+
+**ABSOLUTE PROHIBITION**: Manual editing of configuration files is **STRICTLY FORBIDDEN** unless for temporary testing with immediate restoration.
+
+#### **✅ REQUIRED PROCESS:**
+1. **ALWAYS use llm_config_tool.py** for configuration changes
+2. **VALIDATE generated config** contains required parameters
+3. **TEST server startup** with new configuration  
+4. **COMMIT only tool-generated configs** to prevent parameter loss
+
+#### **🚨 REQUIRED PARAMETERS VALIDATION:**
+Every LLM configuration **MUST contain** these critical parameters:
+
+**For Ollama Providers:**
+```yaml
+context_window_size: 8192    # CRITICAL: Input context limit
+num_predict: 16384          # CRITICAL: Output token limit  
+max_tokens: 8192            # Backward compatibility
+```
+
+**For OpenAI/Cloud Providers:**
+```yaml
+context_window_size: 8192    # CRITICAL: Context management
+max_tokens: 4096            # CRITICAL: Output limit
+```
+
+#### **🛡️ PREVENTION SAFEGUARDS:**
+
+1. **Pre-Commit Validation**:
+   - Check config contains `context_window_size`
+   - Check config contains `num_predict` (for Ollama)
+   - Verify no manual edits without tool regeneration
+
+2. **Server Startup Validation**:
+   - Log missing critical parameters
+   - Fail startup if context limits missing
+   - Alert when using incomplete configurations
+
+3. **Development Workflow**:
+   ```bash
+   # ✅ CORRECT: Use the tool
+   python llm_config_tool.py
+   ./stop_complete.sh && ./start_complete.sh
+   
+   # ❌ FORBIDDEN: Manual editing
+   vim config/llm_config.yaml  # NEVER DO THIS
+   ```
+
+#### **🚨 EMERGENCY OVERRIDE PROCEDURE:**
+**ONLY for temporary testing:**
+1. Make manual changes for testing
+2. **IMMEDIATELY document the temporary nature**
+3. **RESTORE using tool** before any commits
+4. **NEVER commit manual modifications**
+
+#### **💀 CONSEQUENCES OF VIOLATION:**
+- **Context Overflow**: 18KB+ inputs to 4KB-limited models
+- **Infinite Loops**: Models stuck processing oversized context
+- **System Instability**: Unpredictable behavior and crashes
+- **Production Downtime**: Server failures in critical workflows
+
+#### **🎯 ROOT CAUSE PREVENTION:**
+The August 25 infinite loop was caused by:
+1. Manual config editing without using the fixed tool
+2. Missing `context_window_size: 8192` parameter
+3. Missing `num_predict: 16384` parameter  
+4. No validation process to catch parameter loss
+
+**THIS MUST NEVER HAPPEN AGAIN.**
+
+### **📋 CONFIGURATION COMPLIANCE CHECKLIST:**
+- [ ] Used llm_config_tool.py (not manual editing)
+- [ ] Config contains all required parameters
+- [ ] Server starts without errors
+- [ ] Context limits properly enforced
+- [ ] No ad-hoc manual modifications committed
+
+**FAILURE TO FOLLOW THESE DIRECTIVES IS A CRITICAL SYSTEM VIOLATION.**
