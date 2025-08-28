@@ -117,6 +117,7 @@ class OllamaProvider(LLMProvider):
             "messages": [{"role": "user", "content": prompt}],
             "tools": formatted_tools,
             "stream": False,
+            "think": False,
             "options": {
                 "temperature": kwargs.get('temperature', 0.1),  # Lower for tool calling
                 "num_ctx": kwargs.get('context_window_size', self.get_context_window_size()),

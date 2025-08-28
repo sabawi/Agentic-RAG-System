@@ -59,6 +59,10 @@ llm:
       api_key: ${OPENAI_API_KEY}
       base_url: https://api.openai.com/v1
   providers:
+    ollama:
+      health_check_url: http://127.0.0.1:11434/api/tags
+      retry_attempts: 3
+      retry_delay: 2
     openai:
       api_key: ${OPENAI_API_KEY}
       base_url: https://api.openai.com/v1
@@ -68,10 +72,6 @@ llm:
       models:
         primary: gpt-4o
         tool_calling: gpt-4o
-    ollama:
-      health_check_url: http://127.0.0.1:11434/api/tags
-      retry_attempts: 3
-      retry_delay: 2
 performance:
   connection_pool_size: 10
   max_concurrent_requests: 5
@@ -97,3 +97,15 @@ security:
     enabled: true
     requests_per_minute: 60
     burst_limit: 10
+arbitrator:
+  enabled: true
+  type: openai
+  config:
+    model: gpt-4o-mini
+    timeout: 60
+    context_window_size: 4096
+    temperature: 0.1
+    max_tokens: 1024
+    stream: false
+    api_key: ${OPENAI_API_KEY}
+    base_url: https://api.openai.com/v1

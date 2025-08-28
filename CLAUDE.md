@@ -377,6 +377,71 @@ if any(meta_indicator in user_prompt_lower for meta_indicator in meta_task_indic
 
 This meta-task optimization represents a major production readiness milestone, delivering enterprise-grade performance for Open-WebUI integration while maintaining the full power of the agentic RAG system.
 
+## 🧠 NEW ARCHITECTURE: Arbitrator System for Task Validation
+
+### **🎯 ARBITRATOR SYSTEM - HALLUCINATION ELIMINATION**
+
+**Status**: ✅ **ARCHITECTURE DOCUMENTED** - Ready for implementation
+
+The Arbitrator System is a breakthrough architecture that eliminates hallucinated results from failed tool executions by introducing intelligent task validation and retry logic between tool execution and primary LLM response generation.
+
+### **🚨 Problem Solved**
+
+**Original Issue**: When tools failed (like the quantum story word count), the system fabricated plausible but completely false results:
+- **Reported**: quantum (15), entanglement (12), lab (9) - **ALL FABRICATED**
+- **Actual**: quantum (6), entanglement (1), lab (8) - **REAL COUNTS**
+
+### **✅ Solution Architecture**
+
+**Enhanced Flow**:
+```
+User Request → Tool Execution → Arbitrator Validation → Retry Failed Tools → Accurate Results
+```
+
+**Key Components**:
+- **Arbitrator LLM**: Intelligent task validation using configurable LLM provider
+- **Circuit Breaker**: Prevents infinite loops, manages resource usage
+- **Retry Logic**: Individual tool re-execution with intelligent feedback
+- **Integration Bridges**: Seamless compatibility with existing 2-stage LLM system
+
+### **🔧 Architecture Highlights**
+
+**✅ Project Directive Compliant**:
+- **Additive Only**: Zero modifications to existing core system
+- **Configuration Managed**: Uses llm_config_tool.py, no manual config edits
+- **Backward Compatible**: Identical behavior when disabled
+- **Architecture Preserving**: Maintains two-stage LLM processing
+
+**✅ Universal Generalization**:
+- Works with all existing tool types (API, filesystem, execution, communication)
+- Handles simple single-tool to complex 10+ tool workflows
+- Fixes common failure patterns: parameter errors, missing dependencies, syntax issues
+- Scales from basic calculations to comprehensive research pipelines
+
+**✅ Robust Safety**:
+- Circuit breakers prevent resource exhaustion
+- Pattern detection catches infinite loops and contradictions
+- Graceful degradation for impossible tasks
+- Comprehensive logging for stability monitoring
+
+### **🎯 Implementation Status**
+
+**Current Phase**: Architecture documented, ready for agile implementation
+**Next Steps**: 
+1. Phase 1: Core infrastructure with configuration compliance
+2. Phase 2: Enhanced validation with comprehensive error handling
+3. Phase 3: Optimization and production monitoring
+
+**Documentation**: See `docs/ARBITRATOR_ARCHITECTURE.md` for complete technical specifications
+
+### **💡 Expected Impact**
+
+**Before**: 30+ second delays with fabricated results for failed tasks
+**After**: Accurate results with intelligent error recovery and retry logic
+**Benefit**: Transforms system from "execute and hope" to "execute, validate, and perfect"
+
+This architecture represents a major advancement in agentic system reliability, eliminating the core issue of hallucinated results while maintaining full compatibility with existing functionality.
+
 ## 🛠️ PRODUCTION-READY: Enhanced LLM Configuration Tool
 
 ### **🎯 llm_config_tool.py - FULLY FIXED AND ENHANCED**

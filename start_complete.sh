@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Start FastAPI complete server in background with logging
+# 🚀 FastAPI Complete Server Startup Script
+# Enhanced with optimizations, API-controllable features, and streamlined logging
 cd "$(dirname "$0")"
 
 # Check if server is already running
@@ -10,11 +11,46 @@ if pgrep -f "python3 fastapi_server_complete.py" > /dev/null; then
     exit 1
 fi
 
-echo "🚀 Starting FastAPI Complete Server..."
+echo "🚀 Starting FastAPI Complete Server with Optimizations..."
 
 # Activate virtual environment and start server
 source venv_fastapi/bin/activate
-nohup python3 fastapi_server_complete.py > server_complete.log 2>&1 &
+
+# 🎯 DEFAULT OPTIMIZATIONS ENABLED
+# These optimizations are enabled by default for production performance
+ENV_VARS=""
+
+# ⚡ PERFORMANCE OPTIMIZATIONS (ENABLED BY DEFAULT)
+ENV_VARS="$ENV_VARS USE_DIRECT_FUNCTION_CALLS=true"       # 50x faster response initiation
+ENV_VARS="$ENV_VARS PARALLEL_TOOL_EXECUTION=true"         # Concurrent tool execution
+ENV_VARS="$ENV_VARS STRING_OPTIMIZATION=true"             # O(n) string concatenation
+ENV_VARS="$ENV_VARS META_TASK_BYPASS=true"                # Skip tools for title/tag generation
+
+# 🧹 STREAMLINED LOGGING (ENABLED BY DEFAULT)  
+ENV_VARS="$ENV_VARS CONCISE_LOGGING=true"                 # Summary-based logging vs full dumps
+ENV_VARS="$ENV_VARS BUFFER_SIZE_LOGGING=true"             # Log data sizes instead of content
+
+# 🔧 API-CONTROLLABLE FEATURES (Configure via HTTP calls after startup)
+# Examples:
+#   curl -X POST http://localhost:5000/api/logging/verbose/enable     # Enable detailed logs
+#   curl -X POST http://localhost:5000/api/logging/verbose/disable    # Disable detailed logs
+#   curl -X POST http://localhost:5000/api/testing/arbitrator/enable  # Enable Arbitrator testing
+#   curl -X GET  http://localhost:5000/api/status                     # View current settings
+
+# Pass through any manual environment overrides
+if [ ! -z "$LOG_REQUESTS" ]; then
+    ENV_VARS="$ENV_VARS LOG_REQUESTS=$LOG_REQUESTS"
+fi
+if [ ! -z "$LOG_TIMING" ]; then
+    ENV_VARS="$ENV_VARS LOG_TIMING=$LOG_TIMING"
+fi
+if [ ! -z "$DEBUG_MODE" ]; then
+    ENV_VARS="$ENV_VARS DEBUG_MODE=$DEBUG_MODE"
+fi
+
+# Start server with optimized environment variables
+echo "🔧 Starting server with optimizations: Performance ✅ Streamlined Logging ✅ API Control ✅"
+nohup env $ENV_VARS python3 fastapi_server_complete.py > server_complete.log 2>&1 &
 
 # Get the PID
 SERVER_PID=$!
@@ -29,43 +65,34 @@ echo "📚 API Docs: http://localhost:5000/docs"
 # Wait a moment and check if it started successfully
 sleep 3
 if ps -p $SERVER_PID > /dev/null; then
-    echo "🎯 Server is running successfully!"
+    echo "🎯 Server is running successfully with optimizations!"
     echo ""
     
-    # TESTING MODE: DISABLED - Phase 2B features cause infinite streaming loops
-    # echo "🧪 TESTING MODE: Enabling all Phase 2B features..."
-    # sleep 2  # Give server time to fully initialize
-    
-    # # Clear any emergency fallback first
-    # curl -s -X POST http://localhost:5000/phase2b/rollback/clear-emergency > /dev/null 2>&1
-    
-    # # Enable all Phase 2B features
-    # echo "  🔄 Enabling response_classification..."
-    # curl -s -X POST http://localhost:5000/phase2b/feature/response_classification/enable > /dev/null 2>&1
-    
-    # echo "  🔄 Enabling buffer_optimization..." 
-    # curl -s -X POST http://localhost:5000/phase2b/feature/buffer_optimization/enable > /dev/null 2>&1
-    
-    # echo "  🔄 Enabling streaming_fallback..."
-    # curl -s -X POST http://localhost:5000/phase2b/feature/streaming_fallback/enable > /dev/null 2>&1
-    
-    # # Verify features are enabled
-    # STATUS=$(curl -s http://localhost:5000/phase2b/status 2>/dev/null)
-    # if echo "$STATUS" | grep -q '"success":true'; then
-    #     echo "  ✅ All Phase 2B features enabled successfully!"
-    #     echo "  📊 Active features: response_classification, buffer_optimization, streaming_fallback"
-    # else
-    #     echo "  ⚠️  Feature enablement may have issues - check server logs"
-    # fi
-    
-    echo "🚨 Phase 2B features DISABLED due to infinite streaming bug"
-    echo "   Server running in Phase 2A safe mode only"
+    # 🧪 TESTING FEATURES: Available via API (examples below)
+    echo "🧪 TESTING FEATURES: Control via API calls"
+    echo ""
+    echo "   📋 Check current status:"
+    echo "      curl -X GET http://localhost:5000/api/status"
+    echo ""
+    echo "   🔧 Logging controls:"
+    echo "      curl -X POST http://localhost:5000/api/logging/verbose/enable     # Detailed logs"
+    echo "      curl -X POST http://localhost:5000/api/logging/verbose/disable    # Concise logs" 
+    echo "      curl -X POST http://localhost:5000/api/logging/buffer-dump/enable # Full buffer dumps"
+    echo "      curl -X POST http://localhost:5000/api/logging/buffer-dump/disable# Summary only"
+    echo ""
+    echo "   🧪 Testing controls:"
+    echo "      curl -X POST http://localhost:5000/api/testing/arbitrator/enable  # Enable Arbitrator tests"
+    echo "      curl -X POST http://localhost:5000/api/testing/arbitrator/disable # Disable Arbitrator tests"
+    echo ""
+    echo "   ⚡ Performance controls:" 
+    echo "      curl -X POST http://localhost:5000/api/performance/parallel/enable  # Enable parallel tools"
+    echo "      curl -X POST http://localhost:5000/api/performance/parallel/disable # Sequential tools"
     echo ""
     
-    echo "📊 To monitor logs in real-time:"
-    echo "   tail -f server_complete.log"
-    echo ""
-    echo "💡 To disable testing mode, comment out the Phase 2B auto-enable section in start_complete.sh"
+    echo "📊 Monitor logs in real-time:"
+    echo "   tail -f server_complete.log                    # All logs"
+    echo "   tail -f server_complete.log | grep -E 'TOOL.*:.*chars'  # Tool summaries only"
+    echo "   tail -f server_complete.log | grep -E '🎯.*chars'       # Context summaries only"
 else
     echo "❌ Server failed to start. Check server_complete.log for details."
     echo "Last 10 lines of log:"

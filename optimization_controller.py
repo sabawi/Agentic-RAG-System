@@ -7,7 +7,9 @@ Provides safe, gradual rollout of optimization features
 import hashlib
 import json
 import logging
+import os
 import time
+import yaml
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
@@ -41,10 +43,20 @@ class OptimizationController:
     """
     
     def __init__(self):
+        # Load configuration from file
+        config = self._load_config()
+        
         # Feature flags
-        self.enable_optimization = False  # Master toggle
-        self.rollout_percentage = 0.0     # 0-100% gradual rollout
-        self.status = OptimizationStatus.DISABLED
+        self.enable_optimization = config.get('enabled', False)  # Master toggle
+        self.rollout_percentage = config.get('rollout_percentage', 0.0)     # 0-100% gradual rollout
+        
+        # Set status based on configuration
+        if not self.enable_optimization:
+            self.status = OptimizationStatus.DISABLED
+        elif self.rollout_percentage == 100.0:
+            self.status = OptimizationStatus.ENABLED
+        else:
+            self.status = OptimizationStatus.TESTING
         
         # Whitelisting
         self.tool_type_whitelist: Set[str] = set()  # Empty = all tools allowed
@@ -60,9 +72,12 @@ class OptimizationController:
         self.health_check_window = 100   # Check last 100 operations
         
         # Logging configuration
-        self.detailed_logging = True
+        self.detailed_logging = config.get('detailed_logging', True)
         
-        logger.info("🎛️ OptimizationController initialized - Status: DISABLED")
+        status_msg = f"🎛️ OptimizationController initialized - Status: {self.status.value.upper()}"
+        if self.enable_optimization:
+            status_msg += f" ({self.rollout_percentage}% rollout)"
+        logger.info(status_msg)
     
     def should_optimize(self, user_id: Optional[str] = None, tool_types: Optional[List[str]] = None) -> bool:
         """
@@ -285,6 +300,26 @@ class OptimizationController:
             },
             "recent_performance": self.performance_history[-10:] if self.performance_history else []
         }
+
+    def _load_config(self) -> Dict[str, Any]:
+        """Load optimization configuration from config file"""
+        config_path = os.path.join('config', 'llm_config.yaml')
+        
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    full_config = yaml.safe_load(f)
+                    optimization_config = full_config.get('optimization', {})
+                    # Always log config loading (detailed_logging not yet initialized)
+                    logger.info(f"🔧 Loaded optimization config: enabled={optimization_config.get('enabled', False)}, "
+                              f"rollout={optimization_config.get('rollout_percentage', 0.0)}%")
+                    return optimization_config
+            else:
+                logger.warning(f"⚠️ Config file not found: {config_path}, using defaults")
+                return {}
+        except Exception as e:
+            logger.error(f"❌ Failed to load optimization config: {e}, using defaults")
+            return {}
 
 
 # Global instance for the FastAPI application

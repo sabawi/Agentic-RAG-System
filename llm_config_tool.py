@@ -351,6 +351,12 @@ class LLMConfigTool:
         print("8. 🔧 Custom Configuration")
         print("   Choose your own combinations")
         print()
+        print("9. ⚡ Optimization Settings")
+        print("   Configure performance optimizations")
+        print()
+        print("10. 🧠 Arbitrator Settings")
+        print("    Configure task validation and retry logic")
+        print()
     
     def apply_quick_config(self, choice):
         """Apply a quick configuration preset"""
@@ -395,7 +401,7 @@ class LLMConfigTool:
         
         while True:
             try:
-                choice = input("Select configuration (1-8): ").strip()
+                choice = input("Select configuration (1-10): ").strip()
                 
                 if choice in ['1', '2', '3', '4', '5', '6', '7']:
                     config = self.apply_quick_config(choice)
@@ -418,8 +424,16 @@ class LLMConfigTool:
                     self.save_config(config)
                     self.display_environment_setup_custom(primary_provider, tool_provider)
                     return
+                elif choice == '9':
+                    # Optimization settings
+                    self.configure_optimization()
+                    return
+                elif choice == '10':
+                    # Arbitrator settings
+                    self.configure_arbitrator()
+                    return
                 else:
-                    print("Please enter 1, 2, 3, 4, 5, 6, 7, or 8")
+                    print("Please enter 1, 2, 3, 4, 5, 6, 7, 8, 9, or 10")
                     
             except (ValueError, KeyboardInterrupt):
                 print("\nExiting...")
@@ -485,6 +499,314 @@ class LLMConfigTool:
         print("\n🚀 Restart your server to apply changes:")
         print("./stop_complete.sh && ./start_complete.sh")
         print("\n✅ Configuration complete!")
+
+    def configure_optimization(self):
+        """Interactive optimization settings configuration"""
+        print("\n⚡ OPTIMIZATION SETTINGS CONFIGURATION")
+        print("=" * 50)
+        print()
+        print("🎯 About Optimization System:")
+        print("• A/B testing and gradual rollout system for performance improvements")
+        print("• Automatic rollback if error rates exceed 20% or success rates fall below 80%")
+        print("• Safe for production use with comprehensive monitoring")
+        print("• Currently implements context compression and smart summarization")
+        print()
+        
+        # Load current config
+        current_config = self.load_current_config()
+        current_opt = current_config.get('optimization', {})
+        
+        current_enabled = current_opt.get('enabled', False)
+        current_rollout = current_opt.get('rollout_percentage', 100.0)
+        current_logging = current_opt.get('detailed_logging', True)
+        
+        print(f"📊 Current Settings:")
+        print(f"• Enabled: {'✅ YES' if current_enabled else '❌ NO'}")
+        print(f"• Rollout: {current_rollout}%")
+        print(f"• Detailed Logging: {'✅ YES' if current_logging else '❌ NO'}")
+        print()
+        
+        while True:
+            try:
+                print("🔧 Configuration Options:")
+                print("1. ✅ Enable optimization (100% rollout)")
+                print("2. 🧪 Enable with gradual rollout (A/B testing)")
+                print("3. ❌ Disable optimization")
+                print("4. 📊 Configure detailed logging")
+                print("5. 🔙 Back to main menu")
+                print()
+                
+                choice = input("Select option (1-5): ").strip()
+                
+                if choice == '1':
+                    # Enable full optimization
+                    self.update_optimization_config(enabled=True, rollout_percentage=100.0)
+                    print("\n✅ Optimization ENABLED (100% rollout)")
+                    print("🚀 Performance improvements will apply to all requests")
+                    break
+                    
+                elif choice == '2':
+                    # Gradual rollout
+                    print("\n🧪 GRADUAL ROLLOUT CONFIGURATION")
+                    print("Enter rollout percentage (0-100):")
+                    print("• 0%: Disabled")
+                    print("• 25%: Apply to 25% of users (A/B testing)")
+                    print("• 50%: Apply to 50% of users")
+                    print("• 100%: Apply to all users")
+                    
+                    while True:
+                        try:
+                            rollout = float(input("Rollout percentage (0-100): ").strip())
+                            if 0 <= rollout <= 100:
+                                self.update_optimization_config(enabled=True, rollout_percentage=rollout)
+                                print(f"\n🧪 Optimization ENABLED ({rollout}% rollout)")
+                                if rollout < 100:
+                                    print("🎲 A/B testing mode - only some users will receive optimizations")
+                                break
+                            else:
+                                print("❌ Please enter a number between 0 and 100")
+                        except ValueError:
+                            print("❌ Please enter a valid number")
+                    break
+                    
+                elif choice == '3':
+                    # Disable optimization
+                    self.update_optimization_config(enabled=False, rollout_percentage=0.0)
+                    print("\n❌ Optimization DISABLED")
+                    print("🔧 System will use standard processing (safer, potentially slower)")
+                    break
+                    
+                elif choice == '4':
+                    # Configure logging
+                    print("\n📊 DETAILED LOGGING CONFIGURATION")
+                    print("Detailed logging includes:")
+                    print("• Optimization attempt tracking")
+                    print("• Success/failure rates")
+                    print("• Performance metrics")
+                    print("• A/B testing statistics")
+                    print()
+                    
+                    log_choice = input("Enable detailed logging? (y/n): ").strip().lower()
+                    detailed_logging = log_choice in ['y', 'yes', '1', 'true']
+                    
+                    self.update_optimization_config(detailed_logging=detailed_logging)
+                    print(f"\n📊 Detailed logging {'ENABLED' if detailed_logging else 'DISABLED'}")
+                    break
+                    
+                elif choice == '5':
+                    # Back to main menu
+                    return
+                    
+                else:
+                    print("❌ Please enter 1, 2, 3, 4, or 5")
+                    
+            except KeyboardInterrupt:
+                print("\n🔙 Returning to main menu...")
+                return
+        
+        print("\n🚀 Restart your server to apply optimization changes:")
+        print("./stop_complete.sh && ./start_complete.sh")
+        print("\n✅ Optimization configuration complete!")
+
+    def update_optimization_config(self, enabled=None, rollout_percentage=None, detailed_logging=None):
+        """Update optimization settings in the config file"""
+        config_path = os.path.join('config', 'llm_config.yaml')
+        
+        # Load current config
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        # Ensure optimization section exists
+        if 'optimization' not in config:
+            config['optimization'] = {}
+        
+        # Update only specified values
+        if enabled is not None:
+            config['optimization']['enabled'] = enabled
+        if rollout_percentage is not None:
+            config['optimization']['rollout_percentage'] = rollout_percentage
+        if detailed_logging is not None:
+            config['optimization']['detailed_logging'] = detailed_logging
+        
+        # Save updated config
+        with open(config_path, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    
+    def configure_arbitrator(self):
+        """Configure arbitrator settings for task validation and retry logic"""
+        print("\n🧠 Arbitrator System Configuration")
+        print("=" * 50)
+        print("The Arbitrator System provides intelligent task validation and retry logic")
+        print("to eliminate hallucinated results from failed tool executions.")
+        print()
+        
+        # Load current config
+        current_config = self.load_current_config()
+        current_arbitrator = current_config.get('arbitrator', {}) if current_config else {}
+        
+        # Display current status
+        current_enabled = current_arbitrator.get('enabled', False)
+        current_provider = current_arbitrator.get('type', 'openai')
+        current_model = current_arbitrator.get('config', {}).get('model', 'gpt-4o-mini')
+        
+        print(f"📋 Current Configuration:")
+        print(f"   Status: {'✅ Enabled' if current_enabled else '❌ Disabled'}")
+        if current_enabled:
+            print(f"   Provider: {current_provider}")
+            print(f"   Model: {current_model}")
+        print()
+        
+        # Configuration options
+        print("🔧 Configuration Options:")
+        print("1. Enable Arbitrator System")
+        print("2. Disable Arbitrator System") 
+        print("3. Configure Provider and Model")
+        print("4. Reset to Defaults")
+        print("5. Back to Main Menu")
+        print()
+        
+        while True:
+            try:
+                choice = input("Select option (1-5): ").strip()
+                
+                if choice == '1':
+                    # Enable arbitrator
+                    self.update_arbitrator_config(enabled=True)
+                    print("\n✅ Arbitrator System enabled successfully!")
+                    print("📝 The system will now validate and retry failed tool executions.")
+                    self.display_arbitrator_info()
+                    return
+                    
+                elif choice == '2':
+                    # Disable arbitrator
+                    self.update_arbitrator_config(enabled=False)
+                    print("\n❌ Arbitrator System disabled.")
+                    print("📝 System will operate identically to original behavior.")
+                    return
+                    
+                elif choice == '3':
+                    # Configure provider and model
+                    print("\n🔧 Provider Configuration")
+                    print("Available providers:")
+                    print("1. OpenAI (Recommended)")
+                    print("2. Qwen Cloud") 
+                    print("3. Google Gemini")
+                    
+                    provider_choice = input("Select provider (1-3): ").strip()
+                    provider_map = {
+                        '1': ('openai', 'gpt-4o-mini'),
+                        '2': ('qwen', 'qwen-plus'),
+                        '3': ('gemini', 'gemini-1.5-flash')
+                    }
+                    
+                    if provider_choice in provider_map:
+                        provider_type, default_model = provider_map[provider_choice]
+                        self.update_arbitrator_config(
+                            provider_type=provider_type,
+                            model=default_model
+                        )
+                        print(f"\n✅ Arbitrator configured to use {provider_type} with {default_model}")
+                    else:
+                        print("Invalid provider selection.")
+                    continue
+                    
+                elif choice == '4':
+                    # Reset to defaults
+                    self.update_arbitrator_config(
+                        enabled=False,
+                        provider_type='openai',
+                        model='gpt-4o-mini'
+                    )
+                    print("\n🔄 Arbitrator configuration reset to defaults (disabled).")
+                    return
+                    
+                elif choice == '5':
+                    # Back to main menu
+                    return
+                    
+                else:
+                    print("Please enter 1, 2, 3, 4, or 5")
+                    
+            except (ValueError, KeyboardInterrupt):
+                print("\nExiting...")
+                return
+    
+    def update_arbitrator_config(self, enabled=None, provider_type=None, model=None):
+        """Update arbitrator configuration in the config file"""
+        config_path = Path("config/llm_config.yaml")
+        
+        # Load current config
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            config = {}
+        
+        # Ensure arbitrator section exists
+        if 'arbitrator' not in config:
+            config['arbitrator'] = {
+                'enabled': False,
+                'type': 'openai',
+                'config': {
+                    'model': 'gpt-4o-mini',
+                    'timeout': 60,
+                    'context_window_size': 4096,
+                    'temperature': 0.1,
+                    'max_tokens': 1024,
+                    'stream': False,
+                    'api_key': '${OPENAI_API_KEY}',
+                    'base_url': 'https://api.openai.com/v1'
+                }
+            }
+        
+        # Update values if specified
+        if enabled is not None:
+            config['arbitrator']['enabled'] = enabled
+            
+        if provider_type is not None:
+            config['arbitrator']['type'] = provider_type
+            
+            # Update provider-specific config
+            if provider_type == 'openai':
+                config['arbitrator']['config'].update({
+                    'api_key': '${OPENAI_API_KEY}',
+                    'base_url': 'https://api.openai.com/v1'
+                })
+            elif provider_type == 'qwen':
+                config['arbitrator']['config'].update({
+                    'api_key': '${QWEN_API_KEY}',
+                    'base_url': 'https://dashscope.aliyuncs.com/api/v1'
+                })
+            elif provider_type == 'gemini':
+                config['arbitrator']['config'].update({
+                    'api_key': '${GOOGLE_API_KEY}',
+                    'base_url': 'https://generativelanguage.googleapis.com/v1'
+                })
+        
+        if model is not None:
+            config['arbitrator']['config']['model'] = model
+        
+        # Save updated config
+        with open(config_path, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    
+    def display_arbitrator_info(self):
+        """Display information about arbitrator system"""
+        print("\n📚 Arbitrator System Information:")
+        print("=" * 50)
+        print("🎯 Purpose: Eliminate hallucinated results from failed tool executions")
+        print("🔄 Function: Validates tool results and retries with intelligent feedback")
+        print("🛡️ Safety: Circuit breakers prevent infinite loops and resource waste")
+        print("⚡ Performance: Minimal overhead when disabled, intelligent retry when enabled")
+        print()
+        print("📖 Example: If a script fails with 'file not found', the arbitrator will:")
+        print("   1. Detect the specific error pattern") 
+        print("   2. Generate corrected parameters (fix file path)")
+        print("   3. Retry the tool execution with corrections")
+        print("   4. Return accurate results instead of fabricated ones")
+        print()
+        print("🔧 Configuration: Arbitrator uses separate LLM for validation decisions")
+        print("📊 Monitoring: Comprehensive logging tracks all validation attempts")
 
 if __name__ == "__main__":
     tool = LLMConfigTool()

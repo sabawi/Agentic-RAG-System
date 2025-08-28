@@ -18,6 +18,7 @@ class LLMManager:
         """Initialize LLM manager"""
         self.primary_provider: Optional[LLMProvider] = None
         self.tool_calling_provider: Optional[LLMProvider] = None
+        self.arbitrator_provider: Optional[LLMProvider] = None
         self.config = None
         self._initialized = False
         logger.info("🎛️ LLM Manager initialized")
@@ -43,6 +44,17 @@ class LLMManager:
                 'tool_calling',
                 tool_config
             )
+            
+            # Initialize arbitrator LLM provider if enabled
+            arbitrator_config = self.config.get('arbitrator', {})
+            if arbitrator_config.get('enabled', False):
+                logger.info("🧠 Arbitrator enabled - initializing arbitrator provider")
+                self.arbitrator_provider = await self._create_provider(
+                    'arbitrator',
+                    arbitrator_config
+                )
+            else:
+                logger.info("🧠 Arbitrator disabled - skipping arbitrator provider")
             
             self._initialized = True
             logger.info("✅ LLM Manager initialization complete")
@@ -185,6 +197,55 @@ class LLMManager:
                 # Fallback logic would go here
             raise
     
+    async def call_arbitrator(self, prompt: str, system_prompt: str, **kwargs) -> str:
+        """Call arbitrator LLM for task validation
+        
+        Args:
+            prompt: Task validation request (JSON format)
+            system_prompt: Arbitrator system prompt
+            **kwargs: Additional parameters
+            
+        Returns:
+            str: Arbitrator response (JSON format)
+        """
+        if not self._initialized:
+            await self.initialize()
+        
+        if not self.arbitrator_provider:
+            raise Exception("Arbitrator LLM provider not available - ensure arbitrator is enabled in configuration")
+        
+        try:
+            logger.info("🧠 Calling arbitrator LLM for task validation")
+            
+            # Prepare arbitrator-specific parameters
+            arbitrator_kwargs = {
+                'system_prompt': system_prompt,
+                'temperature': 0.1,  # Low temperature for consistent decisions
+                'max_tokens': 1024,  # Compact JSON responses
+                'stream': False,     # Structured output doesn't need streaming
+                **kwargs
+            }
+            
+            # Call arbitrator provider using streaming interface and collect full response
+            response_chunks = []
+            async for chunk in self.arbitrator_provider.generate_stream(
+                prompt,
+                self.arbitrator_provider.get_model(),
+                **arbitrator_kwargs
+            ):
+                response_chunks.append(chunk)
+            
+            result = "".join(response_chunks)
+            
+            logger.info(f"✅ Arbitrator LLM response received: {len(result)} chars")
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Arbitrator LLM failed: {e}")
+            # For arbitrator failures, we should fail fast rather than fallback
+            # This ensures system integrity and prevents silent failures
+            raise Exception(f"Arbitrator LLM call failed: {str(e)}")
+    
     async def health_check(self) -> Dict[str, bool]:
         """Check health of all providers
         
@@ -209,6 +270,13 @@ class LLMManager:
             except Exception as e:
                 logger.error(f"❌ Tool calling provider health check failed: {e}")
                 results['tool_calling'] = False
+        
+        if self.arbitrator_provider:
+            try:
+                results['arbitrator'] = await self.arbitrator_provider.health_check()
+            except Exception as e:
+                logger.error(f"❌ Arbitrator provider health check failed: {e}")
+                results['arbitrator'] = False
         
         return results
     

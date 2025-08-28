@@ -139,8 +139,7 @@ class SandboxedExecutorTool(BaseUserTool):
     async def execute(self, **kwargs) -> Dict[str, Any]:
         """Execute sandboxed system operations with workspace isolation."""
         try:
-            print("🚀🚀🚀 SANDBOXED EXECUTOR: Starting execute() method")
-            print(f"🚀🚀🚀 SANDBOXED EXECUTOR: kwargs = {kwargs}")
+            # 🧹 CLEANUP: Reduced debug logging
             
             # 📂 PHASE 1B: Handle workspace isolation context (BACKWARD COMPATIBLE)
             workspace_context = kwargs.pop('_workspace_context', None)
@@ -161,13 +160,13 @@ class SandboxedExecutorTool(BaseUserTool):
             action = kwargs.get("action", "").strip()
             filename = kwargs.get("filename", "").strip()
             
-            print(f"🚀🚀🚀 SANDBOXED EXECUTOR: action='{action}', filename='{filename}' | workspace='{working_dir}'")
+            # Action routing (essential info only when needed)
             
             if action == "create_file" and filename:
                 file_path = working_dir / filename
                 content_provided = kwargs.get("content", "")
                 has_content = bool(content_provided and content_provided.strip())
-                print(f"🚀🚀🚀 SANDBOXED EXECUTOR: create_file detected, has_content={has_content}")
+                # File creation logic
                 
                 # If no content provided but file exists with substantial content, skip everything
                 if not has_content and file_path.exists():
@@ -181,11 +180,9 @@ class SandboxedExecutorTool(BaseUserTool):
                         }
             
             # 🧠 SMART REPORT DETECTION: Auto-detect if this is a report creation scenario
-            print("🚀🚀🚀 SANDBOXED EXECUTOR: Calling _smart_report_detection")
+            # 🧠 SMART REPORT DETECTION: Auto-detect report creation scenarios  
             smart_report_result = await self._smart_report_detection(kwargs)
-            print(f"🚀🚀🚀 SANDBOXED EXECUTOR: Smart detection result: {smart_report_result}")
             if smart_report_result:
-                print("🚀🚀🚀 SANDBOXED EXECUTOR: RETURNING from smart detection (bypassing main logic)")
                 return smart_report_result
             
             action = kwargs.get("action", "").strip()
@@ -198,34 +195,21 @@ class SandboxedExecutorTool(BaseUserTool):
                 }
             
             # Route to appropriate handler
-            print(f"🚀🚀🚀 SANDBOXED EXECUTOR: Routing to action handler: {action}")
             if action == "execute":
-                print("🚀🚀🚀 SANDBOXED EXECUTOR: -> _execute_command")
                 return await self._execute_command(kwargs)
             elif action == "create_file":
-                print("🚀🚀🚀 SANDBOXED EXECUTOR: -> _create_file")
-                print(f"🚀🚀🚀 SANDBOXED EXECUTOR: About to call method: {self._create_file}")
-                print(f"🚀🚀🚀 SANDBOXED EXECUTOR: Method location: {self._create_file.__code__.co_filename}:{self._create_file.__code__.co_firstlineno}")
-                result = await self._create_file(kwargs)
-                print(f"🚀🚀🚀 SANDBOXED EXECUTOR: _create_file returned: {result}")
-                return result
+                return await self._create_file(kwargs)
             elif action == "append_file":
-                print("🚀🚀🚀 SANDBOXED EXECUTOR: -> _append_file")
                 return await self._append_file(kwargs)
             elif action == "read_file":
-                print("🚀🚀🚀 SANDBOXED EXECUTOR: -> _read_file")
                 return await self._read_file(kwargs)
             elif action == "list_files":
-                print("🚀🚀🚀 SANDBOXED EXECUTOR: -> _list_files")
                 return await self._list_files(kwargs)
             elif action == "delete_file":
-                print("🚀🚀🚀 SANDBOXED EXECUTOR: -> _delete_file")
                 return await self._delete_file(kwargs)
             elif action == "run_code":
-                print("🚀🚀🚀 SANDBOXED EXECUTOR: -> _run_code")
                 return await self._run_code(kwargs)
             else:
-                print(f"🚀🚀🚀 SANDBOXED EXECUTOR: UNKNOWN ACTION: {action}")
                 return {
                     "success": False,
                     "error": f"Unknown action: {action}",
@@ -667,6 +651,12 @@ This is a secure sandboxed environment for code execution and system commands.
     async def _execute_command(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a system command in the sandbox."""
         command = kwargs.get("command", "").strip()
+        args = kwargs.get("args", "").strip()
+        
+        # 🚨 CRITICAL FIX: Append args to command if provided
+        if args:
+            command = f"{command} {args}"
+            print(f"🔍 EXECUTE_COMMAND DEBUG: Combined command with args: '{command}'")
         
         if not command:
             return {"success": False, "error": "Command is required", "result": None}
@@ -698,6 +688,16 @@ This is a secure sandboxed environment for code execution and system commands.
                 stdout, stderr = process.communicate(timeout=self.max_execution_time)
                 execution_time = time.time() - start_time
                 return_code = process.returncode
+                
+                # 🚨 DEBUG: Trace exact return code issue
+                print(f"🔍 EXECUTE_COMMAND DEBUG: command='{command}'")
+                print(f"🔍 EXECUTE_COMMAND DEBUG: return_code={return_code}")
+                print(f"🔍 EXECUTE_COMMAND DEBUG: stdout_length={len(stdout)}")
+                print(f"🔍 EXECUTE_COMMAND DEBUG: stderr_length={len(stderr)}")
+                if stderr:
+                    print(f"🔍 EXECUTE_COMMAND DEBUG: stderr_content='{stderr[:200]}...'")
+                if stdout:
+                    print(f"🔍 EXECUTE_COMMAND DEBUG: stdout_sample='{stdout[:100]}...'")
                 
             except subprocess.TimeoutExpired:
                 process.kill()
@@ -837,9 +837,10 @@ This is a secure sandboxed environment for code execution and system commands.
                 with open(file_path, 'wb') as f:
                     f.write(content)
             else:
-                # Text content
+                # Text content - fix escaped newlines for code files
+                processed_content = self._fix_escaped_newlines_in_code(content, filename)
                 with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
+                    f.write(processed_content)
             
             # Get file stats
             file_stats = os.stat(file_path)
@@ -2017,3 +2018,61 @@ if __name__ == "__main__":
             
         except Exception as e:
             return {"success": False, "error": f"File creation error: {str(e)}", "result": None}
+
+    def _fix_escaped_newlines_in_code(self, content: str, filename: str) -> str:
+        """
+        🐛 CRITICAL FIX: Convert escaped newlines to real newlines for code files
+        
+        This fixes the issue where LLM generates Python code with literal \n strings
+        instead of actual newlines, causing syntax errors.
+        """
+        try:
+            # Only process code files
+            code_extensions = ['.py', '.js', '.sh', '.c', '.cpp', '.java', '.rs', '.php', '.rb', '.go']
+            file_ext = filename.lower()
+            
+            if not any(file_ext.endswith(ext) for ext in code_extensions):
+                return content  # Not a code file, return as-is
+            
+            print(f"🐛 NEWLINE FIX: Processing {filename} for escaped newlines")
+            print(f"🐛 NEWLINE FIX: Original content length: {len(content)}")
+            print(f"🐛 NEWLINE FIX: Contains \\n literals: {'\\n' in content}")
+            print(f"🐛 NEWLINE FIX: Contains real newlines: {chr(10) in content}")
+            
+            # Check if the content has escaped newlines but no real newlines
+            # This indicates the content came from JSON with escaped newlines
+            has_escaped_newlines = '\\n' in content
+            has_real_newlines = '\n' in content
+            
+            # Only process if we have escaped newlines and few real newlines
+            # (allowing for some real newlines that might exist)
+            real_newline_count = content.count('\n')
+            escaped_newline_count = content.count('\\n')
+            
+            if has_escaped_newlines and escaped_newline_count > real_newline_count:
+                print(f"🐛 NEWLINE FIX: Converting {escaped_newline_count} escaped newlines to real newlines")
+                
+                # Convert escaped newlines and tabs to real ones
+                processed = content.replace('\\n', '\n').replace('\\t', '\t')
+                
+                # Also handle other common escape sequences that might appear in code
+                processed = processed.replace('\\r', '\r')
+                processed = processed.replace("\\'", "'")  # Single quotes
+                processed = processed.replace('\\"', '"')   # Double quotes
+                
+                print(f"🐛 NEWLINE FIX: Processed content length: {len(processed)}")
+                print(f"🐛 NEWLINE FIX: Real newlines after processing: {processed.count(chr(10))}")
+                
+                # Validate the result makes sense for a code file
+                if processed.count('\n') > 0:  # Should have real newlines now
+                    return processed
+                else:
+                    print(f"🐛 NEWLINE FIX: Warning - processed content has no newlines, keeping original")
+                    return content
+            else:
+                print(f"🐛 NEWLINE FIX: No conversion needed (escaped: {escaped_newline_count}, real: {real_newline_count})")
+                return content
+                
+        except Exception as e:
+            print(f"🐛 NEWLINE FIX: Error processing {filename}: {e}")
+            return content  # Return original content on error
