@@ -567,6 +567,64 @@ echo "8" | python llm_config_tool.py
 
 This procedure prevented a 2-day debugging cycle and ensures robust system operation.
 
+## 🚨 MANDATORY PRE-EXPERIMENT CHECKPOINT RULE 🚨
+
+**ABSOLUTE REQUIREMENT**: Before ANY risky experiment, major code modification, or architectural change:
+
+### **⚡ STEP 1: MANDATORY CHECKPOINT CREATION**
+```bash
+# REQUIRED: Create working state snapshot
+git add -A
+git commit -m "✅ CHECKPOINT: Working state before [experiment name]"
+```
+
+### **⚡ STEP 2: MANDATORY RULE REVIEW & APPROVAL**
+**I MUST EXPLICITLY PROMPT YOU FOR APPROVAL:**
+
+```
+🚨 CRITICAL DEVELOPMENT CHECKPOINT 🚨
+==================================
+
+EXPERIMENT: [Brief description of risky change]
+
+CHECKPOINT STATUS:
+✅ Working state committed: [commit hash]
+✅ All rules reviewed below
+
+MANDATORY COMPLIANCE REVIEW:
+✅ Multi-tool calling protection rules
+✅ Memory system integrity rules  
+✅ Configuration management rules
+✅ Architecture preservation rules
+✅ Testing requirements rules
+
+🔒 SEEKING EXPLICIT APPROVAL TO PROCEED
+Do you approve this risky experiment? (YES/NO)
+```
+
+### **⚡ STEP 3: EXPERIMENT FAILURE RECOVERY**
+```bash
+# ATOMIC ROLLBACK: Single command restores ALL files
+git reset --hard HEAD~1
+```
+
+### **⚡ WHAT CONSTITUTES "RISKY EXPERIMENTS":**
+- POST-LLM processing features
+- System prompt major changes (pre_tool_model_system_prompt.txt)
+- Multi-file architectural changes
+- New tool integrations or modifications
+- Performance optimizations affecting core logic
+- Any change that might break existing functionality
+
+### **💀 VIOLATION CONSEQUENCES:**
+- **NO EXCEPTIONS** - Every risky change requires checkpoint + approval
+- **IMMEDIATE TASK TERMINATION** if rules not followed
+- **ATOMIC ROLLBACK MANDATORY** if experiment fails
+
+**This rule prevents partial rollbacks and inconsistent system states.**
+
+---
+
 ## 🛡️ MANDATORY DIRECTIVE COMPLIANCE CHECK
 
 **CRITICAL REQUIREMENT**: After EVERY major code change, AUTOMATICALLY perform this verification:
