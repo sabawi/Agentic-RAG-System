@@ -12,7 +12,7 @@ async def test_content_mismatch_detection():
     validator = OptimizationValidator()
     
     # Simulate the exact failure case
-    user_prompt = "included in the context is my resume in text format. Read it and extract key fields to fill all the data you need to complete your task: Please do the following: 1) craft and nicely written cover letter to accompany it to Mr. John Wheeler (sabawi@gmail.com), director of Software Development and Research at Crontab Technologies, LLC in Cleveland, OH. ensure it gets his positive attention. 2) write a short introductory email to Mr. Wheeler and include a nicely formatted HTML version of the cover letter along with a pdf formatted resume. 3) email the introductory email and attchach a) cover letter (use html format) and b) the included resume (use html format) to Mr.Wheeler and cc sabawi@yahoo.com on it"
+    user_prompt = "included in the context is my resume in text format. Read it and extract key fields to fill all the data you need to complete your task: Please do the following: 1) craft and nicely written cover letter to accompany it to Mr. John Wheeler (john.wheeler@example.com), director of Software Development and Research at Crontab Technologies, LLC in Example City, State. ensure it gets his positive attention. 2) write a short introductory email to Mr. Wheeler and include a nicely formatted HTML version of the cover letter along with a pdf formatted resume. 3) email the introductory email and attchach a) cover letter (use html format) and b) the included resume (use html format) to Mr.Wheeler and cc user@example.com on it"
     
     # The failed optimization output
     failed_optimization = """# OPTIMIZED ANALYSIS
@@ -68,7 +68,7 @@ async def test_good_optimization():
 **User Request**: Create cover letter for Mr. John Wheeler at Crontab Technologies
 
 ## Email Composition
-Dear Mr. Wheeler,
+Hello Mr. Wheeler,
 
 I am writing to express my strong interest in the Software Development position at Crontab Technologies, LLC. With my experience in software development and research, I believe I would be a valuable addition to your team.
 
@@ -76,7 +76,7 @@ My background includes extensive work in software engineering, system design, an
 
 I would welcome the opportunity to discuss how my skills and experience can contribute to your team's continued success.
 
-Sincerely,
+Best regards,
 [Your Name]
 
 ## Next Steps

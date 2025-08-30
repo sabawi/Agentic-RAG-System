@@ -11,6 +11,20 @@ import importlib.util
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
+# 🔧 ROBUST PROJECT ROOT DISCOVERY - Works from any subdirectory
+def find_project_root():
+    """Find project root by looking for marker files/directories"""
+    markers = ['user_tools', 'sandbox_workspace', 'config', 'fastapi_server_complete.py']
+    current = Path(__file__).resolve().parent
+    for parent in [current] + list(current.parents):
+        if sum(1 for marker in markers if (parent / marker).exists()) >= 3:
+            return str(parent)
+    return os.getcwd()
+
+# Add project root to path for imports
+project_root = find_project_root()
+sys.path.insert(0, project_root)
+
 class ReorganizationValidator:
     def __init__(self, project_root: str):
         self.project_root = Path(project_root).resolve()

@@ -6,7 +6,20 @@ Comprehensive test suite for the Sandboxed System Executor Tool
 import sys
 import os
 import asyncio
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from pathlib import Path
+
+# 🔧 ROBUST PROJECT ROOT DISCOVERY - Works from any subdirectory
+def find_project_root():
+    """Find project root by looking for marker files/directories"""
+    markers = ['user_tools', 'sandbox_workspace', 'config', 'fastapi_server_complete.py']
+    current = Path(__file__).resolve().parent
+    for parent in [current] + list(current.parents):
+        if sum(1 for marker in markers if (parent / marker).exists()) >= 3:
+            return str(parent)
+    return os.getcwd()
+
+project_root = find_project_root()
+sys.path.insert(0, project_root)
 
 from user_tools.sandboxed_executor import SandboxedExecutorTool
 
