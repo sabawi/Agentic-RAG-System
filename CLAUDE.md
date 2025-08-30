@@ -1,8 +1,42 @@
 # Claude Code Agent Memory
 
-## 🚨 SUPREME LAW: MANDATORY DIRECTIVE COMPLIANCE GATE 🚨
+## 🚨 SUPREME LAW: MANDATORY SECURITY & COMPLIANCE GATE 🚨
 
 ### **⚡ ABSOLUTE RULE - NO EXCEPTIONS WHATSOEVER ⚡**
+
+## 🔒 SUPREME SECURITY LAW: MANDATORY PRE-COMMIT GATE 🔒
+
+**ABSOLUTE RULE - NO EXCEPTIONS WHATSOEVER**
+
+**BEFORE ANY `git add`, `git commit`, OR `git push` COMMAND:**
+
+### **⚡ STEP 1: MANDATORY SECURITY SCAN (CANNOT BE SKIPPED)**
+I MUST EXPLICITLY STATE:
+```
+🔒 SECURITY GATE VERIFICATION COMPLETE
+=====================================
+
+🚨 PERSONAL DATA SCAN:
+- [ ] Reviewed ALL staged files for personal information
+- [ ] NO names, emails, addresses, phone numbers found
+- [ ] NO resumes, cover letters, personal documents found
+- [ ] NO credentials, keys, tokens found
+- [ ] sandbox_workspace/ COMPLETELY IGNORED
+- [ ] Listed every file being committed with justification
+
+🔒 I SWEAR NO PERSONAL DATA WILL BE COMMITTED
+```
+
+### **⚡ STEP 2: EXPLICIT USER APPROVAL (MANDATORY)**
+I MUST ASK: **"SECURITY SCAN COMPLETE - APPROVE COMMIT? (YES/NO)"**
+
+### **💀 ENFORCEMENT: AUTOMATIC TASK TERMINATION**
+- If I attempt ANY git operation without completing Steps 1-2: **IMMEDIATE FAILURE**
+- If personal data found: **IMMEDIATE ROLLBACK** required
+- If user says NO: **STOP** all git operations
+- **NO EXCEPTIONS - NO BYPASSES - NO SHORTCUTS**
+
+---
 
 **BEFORE ANY FIX, FEATURE, OR CODE CHANGE - YOU MUST:**
 
