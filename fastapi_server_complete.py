@@ -4565,7 +4565,7 @@ Comprehensive stock analysis completed successfully.
                         break
                 
                 if email_tool_instance:
-                    attachment_path = f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
+                    attachment_path = os.path.join(os.getcwd(), "sandbox_workspace", filename)
                     logger.info(f"📧 Auto-sending email with attachment: {attachment_path}")
                     
                     if "get_news_summaries" in tools_results:
@@ -4594,14 +4594,14 @@ Comprehensive stock analysis completed successfully.
                             "to_email": recipient_email,
                             "subject": email_subject,
                             "body": f"Please find attached the latest {email_subject.lower()} with critical updates and detailed analysis.",
-                            "attachments": f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
+                            "attachments": os.path.join(os.getcwd(), "sandbox_workspace", filename)
                         })
                     else:
                         result = await email_tool({
                             "to_email": recipient_email, 
                             "subject": "Stock Analysis Report",
                             "body": "Please find attached the comprehensive stock analysis report with detailed financial insights.",
-                            "attachments": f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
+                            "attachments": os.path.join(os.getcwd(), "sandbox_workspace", filename)
                         })
                 
                 additional_results += f"Tool: {tool_name} (auto-executed)\nResult: {result}\n\n"
@@ -5012,7 +5012,7 @@ async def _generate_complete_html_email(complete_llm_response: str, html_email_r
         # Save HTML file to sandbox workspace
         timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
         html_filename = f"html_email_report_{timestamp}.html"
-        base_dir = "/home/sabawi/Development/flaskserver/sandbox_workspace"
+        base_dir = os.path.join(os.getcwd(), "sandbox_workspace")
         full_path = os.path.join(base_dir, html_filename)
         
         with open(full_path, 'w', encoding='utf-8') as f:
@@ -5069,7 +5069,7 @@ async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager
                 
                 # 🚨 CRITICAL: Check if file already exists with good content
                 import os
-                base_dir = "/home/sabawi/Development/flaskserver/sandbox_workspace"
+                base_dir = os.path.join(os.getcwd(), "sandbox_workspace")
                 full_file_path = os.path.join(base_dir, created_filename)
                 
                 if os.path.exists(full_file_path):
@@ -5206,7 +5206,7 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 import os
                 filename_pattern = r'"filename":\s*"([^"]+)"'
                 found_files = re.findall(filename_pattern, tools_results)
-                base_dir = "/home/sabawi/Development/flaskserver/sandbox_workspace"
+                base_dir = os.path.join(os.getcwd(), "sandbox_workspace")
                 
                 # Remove duplicates from found files
                 found_files = list(set(found_files))  # Remove duplicates

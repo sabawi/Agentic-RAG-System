@@ -98,8 +98,7 @@ class ReorganizationValidator:
         test_dirs = [
             "config",
             "user_tools", 
-            "sandbox_workspace",
-            "logs"
+            "sandbox_workspace"
         ]
         
         for dir_name in test_dirs:
@@ -168,7 +167,7 @@ class ReorganizationValidator:
             "user_tools.sandboxed_executor",
             "user_tools.secure_email_sender", 
             "user_tools.document_search",
-            "user_tools.web_search"
+            "user_tools.comprehensive_stock_analyzer"
         ]
         
         original_cwd = os.getcwd()

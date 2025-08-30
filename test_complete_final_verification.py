@@ -16,6 +16,17 @@ import json
 import os
 import time
 from datetime import datetime
+from pathlib import Path
+
+# 🔧 ROBUST PROJECT ROOT DISCOVERY - Works from any subdirectory
+def find_project_root():
+    """Find project root by looking for marker files/directories"""
+    markers = ['user_tools', 'sandbox_workspace', 'config', 'fastapi_server_complete.py']
+    current = Path(__file__).resolve().parent
+    for parent in [current] + list(current.parents):
+        if sum(1 for marker in markers if (parent / marker).exists()) >= 3:
+            return str(parent)
+    return os.getcwd()
 
 # Test configuration
 SERVER_URL = "http://localhost:5000"
@@ -148,7 +159,8 @@ Please attach the file 'final_test_report.pdf' to this email and use high priori
     # Test 3: Verify files were created
     print("\n📁 TEST 3: File System Verification")
     
-    sandbox_path = "/home/sabawi/Development/flaskserver/sandbox_workspace"
+    project_root = find_project_root()
+    sandbox_path = os.path.join(project_root, "sandbox_workspace")
     expected_file = os.path.join(sandbox_path, "final_test_report.pdf")
     
     if os.path.exists(expected_file):

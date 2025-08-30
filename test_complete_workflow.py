@@ -6,7 +6,20 @@ Test complete workflow: Stock analysis + Report creation + Email sending
 import asyncio
 import sys
 import os
-sys.path.append('/home/sabawi/Development/flaskserver')
+from pathlib import Path
+
+# 🔧 ROBUST PROJECT ROOT DISCOVERY - Works from any subdirectory
+def find_project_root():
+    """Find project root by looking for marker files/directories"""
+    markers = ['user_tools', 'sandbox_workspace', 'config', 'fastapi_server_complete.py']
+    current = Path(__file__).resolve().parent
+    for parent in [current] + list(current.parents):
+        if sum(1 for marker in markers if (parent / marker).exists()) >= 3:
+            return str(parent)
+    return os.getcwd()
+
+project_root = find_project_root()
+sys.path.insert(0, project_root)
 
 async def test_complete_workflow():
     print("🚀 Testing Complete Stock Analysis + Report + Email Workflow")
@@ -92,7 +105,7 @@ AI Investment Research Team""",
         print(f"❌ Email sending failed: {email_result['error']}")
         
         # Debug: Check if attachment file exists
-        full_report_path = f"/home/sabawi/Development/flaskserver/sandbox_workspace/{attachment_path}"
+        full_report_path = os.path.join(os.getcwd(), "sandbox_workspace", attachment_path)
         if os.path.exists(full_report_path):
             size = os.path.getsize(full_report_path)
             print(f"📊 Attachment file exists: {full_report_path} ({size} bytes)")

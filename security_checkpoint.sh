@@ -33,12 +33,32 @@ done
 
 # Check for sandbox_workspace commits (CRITICAL)
 if git diff --cached --name-only 2>/dev/null | grep -q "^sandbox_workspace/"; then
-    echo "🚨 CRITICAL VIOLATION: Attempting to commit sandbox_workspace content!"
-    echo "🔴 COMMIT BLOCKED - Personal data protection violation"
-    echo ""
-    echo "Files being committed from sandbox_workspace:"
-    git diff --cached --name-only | grep "^sandbox_workspace/" || true
-    exit 1
+    # Check if these are DELETIONS (removing files from git) or ADDITIONS (adding new files)
+    ADDING_SANDBOX_FILES=false
+    
+    while read -r file; do
+        if [[ "$file" == sandbox_workspace/* ]]; then
+            # Check if file is being added/modified (exists) vs deleted (doesn't exist)
+            if git diff --cached --diff-filter=A --name-only | grep -q "^$file$"; then
+                echo "🔴 SECURITY BREACH: Attempting to ADD sandbox file: $file"
+                ADDING_SANDBOX_FILES=true
+            elif git diff --cached --diff-filter=M --name-only | grep -q "^$file$"; then
+                echo "🔴 SECURITY BREACH: Attempting to MODIFY sandbox file: $file"
+                ADDING_SANDBOX_FILES=true
+            fi
+        fi
+    done < <(git diff --cached --name-only 2>/dev/null)
+    
+    if [[ "$ADDING_SANDBOX_FILES" == "true" ]]; then
+        echo "🚨 CRITICAL VIOLATION: Attempting to commit sandbox_workspace content!"
+        echo "🔴 COMMIT BLOCKED - Personal data protection violation"
+        echo ""
+        echo "🔒 ONLY DELETIONS allowed for sandbox_workspace cleanup"
+        exit 1
+    else
+        echo "✅ SECURITY EXCEPTION: Allowing sandbox_workspace file deletions for cleanup"
+        echo "🧹 Removing personal files from git history - this is safe"
+    fi
 fi
 
 # Check for credentials and sensitive data

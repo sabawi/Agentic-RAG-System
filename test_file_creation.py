@@ -6,9 +6,20 @@ Test the enhanced comprehensive stock analyzer with file creation
 import asyncio
 import sys
 import os
+from pathlib import Path
 
-# Add the project root to path
-sys.path.insert(0, '/home/sabawi/Development/flaskserver')
+# 🔧 ROBUST PROJECT ROOT DISCOVERY - Works from any subdirectory
+def find_project_root():
+    """Find project root by looking for marker files/directories"""
+    markers = ['user_tools', 'sandbox_workspace', 'config', 'fastapi_server_complete.py']
+    current = Path(__file__).resolve().parent
+    for parent in [current] + list(current.parents):
+        if sum(1 for marker in markers if (parent / marker).exists()) >= 3:
+            return str(parent)
+    return os.getcwd()
+
+project_root = find_project_root()
+sys.path.insert(0, project_root)
 
 from user_tools.comprehensive_stock_analyzer import ComprehensiveStockAnalyzerTool
 
