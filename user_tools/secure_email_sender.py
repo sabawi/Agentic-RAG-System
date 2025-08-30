@@ -9,10 +9,13 @@ import json
 import smtplib
 import ssl
 import re
+import logging
 from pathlib import Path
 from email.message import EmailMessage
 from typing import Dict, Any, List, Optional, Union
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 try:
     from .base_user_tool import BaseUserTool
@@ -184,7 +187,7 @@ class SecureEmailSenderTool(BaseUserTool):
         
         # Check sandbox workspace for relative paths with retry mechanism
         if not path.is_absolute():
-            sandbox_path = Path("/home/sabawi/Development/flaskserver/sandbox_workspace") / file_path
+            sandbox_path = Path.cwd() / "sandbox_workspace" / file_path
             
             # 🔧 ENHANCED: Advanced file creation waiting mechanism
             import time
@@ -253,7 +256,7 @@ class SecureEmailSenderTool(BaseUserTool):
     def _find_fuzzy_attachment_match(self, requested_file: str) -> Optional[Path]:
         """Find fuzzy matches for attachment files in sandbox workspace"""
         try:
-            sandbox_path = Path("/home/sabawi/Development/flaskserver/sandbox_workspace")
+            sandbox_path = Path.cwd() / "sandbox_workspace"
             if not sandbox_path.exists():
                 return None
             
@@ -288,7 +291,7 @@ class SecureEmailSenderTool(BaseUserTool):
                 if normalized_file == normalized_requested and file_suffix == requested_suffix:
                     candidates.append((file_path, 90))
                 
-                # "Resume.pdf" -> "resume_al_sabawi.pdf" (contains keyword)
+                # "Resume.pdf" -> "resume_john_doe.pdf" (contains keyword)
                 if requested_suffix == file_suffix:
                     if requested_stem in file_stem or file_stem.startswith(requested_stem):
                         candidates.append((file_path, 80))
@@ -355,7 +358,7 @@ class SecureEmailSenderTool(BaseUserTool):
     def _detect_recent_reports(self, max_age_minutes: int = 10) -> List[str]:
         """Detect recently created report files in sandbox workspace"""
         try:
-            sandbox_path = Path("/home/sabawi/Development/flaskserver/sandbox_workspace")
+            sandbox_path = Path.cwd() / "sandbox_workspace"
             if not sandbox_path.exists():
                 return []
             
@@ -440,7 +443,54 @@ class SecureEmailSenderTool(BaseUserTool):
         if "<html>" in body.lower() or "<body>" in body.lower():
             msg.set_content(body, subtype='html')
         else:
-            msg.set_content(body)
+            # 🔧 CRITICAL FIX: Clean up HTML tags and formatting in plain text email body
+            import re
+            clean_body = body
+            
+            # First, handle literal \n strings that should be actual newlines
+            clean_body = clean_body.replace('\\n', '\n')  # Convert literal \n to actual newlines
+            
+            # Convert common HTML tags to plain text equivalents
+            clean_body = re.sub(r'<br\s*/?>', '\n', clean_body)  # <br> -> newline
+            clean_body = re.sub(r'<br><br>', '\n\n', clean_body)  # <br><br> -> double newline
+            clean_body = re.sub(r'<p>', '\n', clean_body)  # <p> -> newline
+            clean_body = re.sub(r'</p>', '\n', clean_body)  # </p> -> newline
+            
+            # Remove any other HTML tags that might be left
+            clean_body = re.sub(r'<[^>]+>', '', clean_body)
+            
+            # Clean up multiple consecutive newlines
+            clean_body = re.sub(r'\n\s*\n\s*\n+', '\n\n', clean_body)
+            
+            # 🔧 FIX: Prevent quoted-printable encoding by keeping lines under 76 characters
+            # Split long lines to avoid quoted-printable encoding
+            lines = clean_body.split('\n')
+            formatted_lines = []
+            for line in lines:
+                if len(line) > 70:  # Keep some margin under 76 char limit
+                    # Split long lines at word boundaries
+                    words = line.split(' ')
+                    current_line = []
+                    current_length = 0
+                    
+                    for word in words:
+                        if current_length + len(word) + 1 <= 70:
+                            current_line.append(word)
+                            current_length += len(word) + 1
+                        else:
+                            if current_line:
+                                formatted_lines.append(' '.join(current_line))
+                            current_line = [word]
+                            current_length = len(word)
+                    
+                    if current_line:
+                        formatted_lines.append(' '.join(current_line))
+                else:
+                    formatted_lines.append(line)
+            
+            clean_body = '\n'.join(formatted_lines)
+            
+            msg.set_content(clean_body.strip())
         
         # Add attachments
         for file_path in attachments:
@@ -551,11 +601,23 @@ class SecureEmailSenderTool(BaseUserTool):
             except:
                 pass
             
-            # Send via sendmail/sSMTP
+            # Send via sendmail/sSMTP  
             with os.popen(f"{sendmail_path} -t -oi", "w") as p:
                 email_content = msg.as_string()
                 p.write(email_content)
                 print(f"📧 Sent {len(email_content)} bytes to {sendmail_path}")
+            
+            # 🧹 AUTO-CLEANUP: Remove successfully emailed generated files  
+            # Extract attachment paths from the message
+            attachment_paths = []
+            for part in msg.walk():
+                if part.get_filename():
+                    # This is a fallback cleanup - we don't have the original paths
+                    # but we can clean common generated file patterns
+                    filename = part.get_filename()
+                    attachment_paths.append(filename)
+            if attachment_paths:
+                self._cleanup_generated_files(attachment_paths)
             
             return True
             
@@ -865,13 +927,70 @@ class SecureEmailSenderTool(BaseUserTool):
             print(f"Failed to save email to file: {e}")
             return False
 
+    def _cleanup_generated_files(self, attachment_paths):
+        """
+        🧹 AUTO-CLEANUP: Remove successfully emailed generated files from sandbox workspace
+        
+        Only removes files that were generated in the sandbox workspace, not user source files.
+        This prevents file accumulation and ensures clean state for future requests.
+        """
+        try:
+            import os
+            sandbox_base = str(Path.cwd() / "sandbox_workspace")
+            files_cleaned = []
+            files_preserved = []
+            
+            for file_path in attachment_paths:
+                try:
+                    # Resolve the full path
+                    if os.path.isabs(file_path):
+                        full_path = file_path
+                    else:
+                        full_path = os.path.join(sandbox_base, file_path)
+                    
+                    # Only clean up files in the sandbox workspace (generated files)
+                    if full_path.startswith(sandbox_base) and os.path.exists(full_path):
+                        # Additional safety: Only remove common generated file types
+                        if any(full_path.lower().endswith(ext) for ext in [
+                            '.html', '.txt', '.md', '.csv', '.json', '.xml', '.log'
+                        ]):
+                            os.remove(full_path)
+                            files_cleaned.append(os.path.basename(full_path))
+                            print(f"🧹 AUTO-CLEANUP: Removed generated file: {os.path.basename(full_path)}")
+                        else:
+                            files_preserved.append(os.path.basename(full_path))
+                            print(f"🛡️ AUTO-CLEANUP: Preserved file (not a typical generated file): {os.path.basename(full_path)}")
+                    else:
+                        files_preserved.append(os.path.basename(file_path))
+                        print(f"🛡️ AUTO-CLEANUP: Preserved source file (outside sandbox): {os.path.basename(file_path)}")
+                        
+                except Exception as e:
+                    print(f"⚠️ AUTO-CLEANUP: Error processing {file_path}: {e}")
+                    files_preserved.append(os.path.basename(file_path))
+            
+            if files_cleaned:
+                print(f"🧹 AUTO-CLEANUP: Successfully removed {len(files_cleaned)} generated files: {', '.join(files_cleaned)}")
+            if files_preserved:
+                print(f"🛡️ AUTO-CLEANUP: Preserved {len(files_preserved)} files: {', '.join(files_preserved)}")
+                
+        except Exception as e:
+            print(f"⚠️ AUTO-CLEANUP: Error during cleanup: {e}")
+            # Don't fail email sending if cleanup fails
+
     async def execute(self, **kwargs) -> Dict[str, Any]:
         """Execute the email sending tool"""
         try:
             # Use kwargs directly as parameters
             parsed_args = kwargs
             
-            # Extract and validate required parameters
+            # 🎯 CHECK FOR HTML EMAIL FORMAT PARAMETERS
+            format_type = parsed_args.get("format", "").strip().lower()
+            source_type = parsed_args.get("source", "").strip().lower()
+            style_params = parsed_args.get("style", "").strip()
+            
+            # Continue with normal processing - no special HTML handling
+            
+            # Extract and validate required parameters (regular processing)
             to_email = parsed_args.get("to_email", "").strip()
             subject = parsed_args.get("subject", "").strip()
             body = parsed_args.get("body", "").strip()
@@ -953,6 +1072,17 @@ class SecureEmailSenderTool(BaseUserTool):
                 )
                 
                 if self._send_via_sendmail(msg):
+                    # 🔧 RECORD EMAIL SEND TIME for duplicate prevention
+                    try:
+                        from datetime import datetime
+                        with open("/tmp/last_email_sent.txt", "w") as f:
+                            f.write(datetime.now().isoformat())
+                    except:
+                        pass  # Don't fail email sending if timestamp recording fails
+                    
+                    # 🧹 AUTO-CLEANUP: Remove successfully emailed generated files
+                    self._cleanup_generated_files(attachment_paths)
+                    
                     recipients = [to_email] + cc_emails + bcc_emails
                     message = f"✅ Email sent successfully via sendmail to {len(recipients)} recipient(s)"
                     return {"success": True, "result": message, "error": None}
@@ -977,6 +1107,9 @@ class SecureEmailSenderTool(BaseUserTool):
                     )
                     
                     if self._send_via_sendmail(msg):
+                        # 🧹 AUTO-CLEANUP: Remove successfully emailed generated files
+                        self._cleanup_generated_files(attachment_paths)
+                        
                         recipients = [to_email] + cc_emails + bcc_emails
                         message = f"✅ Email sent successfully via sendmail (fallback) to {len(recipients)} recipient(s)"
                         return {"success": True, "result": message, "error": None}
@@ -989,6 +1122,17 @@ class SecureEmailSenderTool(BaseUserTool):
                 )
                 
                 if self._send_via_smtp(msg, provider_config):
+                    # 🔧 RECORD EMAIL SEND TIME for duplicate prevention
+                    try:
+                        from datetime import datetime
+                        with open("/tmp/last_email_sent.txt", "w") as f:
+                            f.write(datetime.now().isoformat())
+                    except:
+                        pass  # Don't fail email sending if timestamp recording fails
+                    
+                    # 🧹 AUTO-CLEANUP: Remove successfully emailed generated files
+                    self._cleanup_generated_files(attachment_paths)
+                        
                     recipients = [to_email] + cc_emails + bcc_emails
                     message = f"✅ Email sent successfully via {provider} to {len(recipients)} recipient(s)"
                     return {"success": True, "result": message, "error": None}

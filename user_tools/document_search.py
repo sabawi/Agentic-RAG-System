@@ -30,7 +30,7 @@ class DocumentSearchTool(BaseUserTool):
     
     @property 
     def description(self) -> str:
-        return """Search through indexed documents to find relevant information. This tool can search through PDF, Word, Excel, text, and other document types that have been previously indexed. Use this when you need to find information from local documents or when the user asks about content that might be in their document collection."""
+        return """Search through PRE-INDEXED document database to find relevant information. This tool searches a database of documents that have been previously indexed and stored. IMPORTANT: This tool CANNOT read individual files by path. Use 'sandboxed_executor' with 'read_file' action to read specific files like /path/to/file.pdf. Use document_search only when you need to find information across multiple documents in the indexed collection."""
     
     @property
     def parameters(self) -> dict:

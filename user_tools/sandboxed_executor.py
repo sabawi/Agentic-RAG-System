@@ -38,7 +38,7 @@ class SandboxedExecutorTool(BaseUserTool):
         super().__init__()
         
         # Sandbox configuration
-        self.base_dir = Path("/home/sabawi/Development/flaskserver")
+        self.base_dir = Path.cwd()
         self.sandbox_name = "sandbox_workspace"
         self.sandbox_path = self.base_dir / self.sandbox_name
         
@@ -79,7 +79,7 @@ class SandboxedExecutorTool(BaseUserTool):
     
     @property
     def description(self) -> str:
-        return "Execute system commands and run code files in a secure sandboxed environment with full diagnostic output capture for LLM analysis."
+        return "Execute system commands, read/write files, and run code in a secure sandboxed environment. Use 'read_file' action to read specific files by path (e.g., PDFs, documents). Use 'create_file' to generate new files. Use 'execute' for system commands. Full diagnostic output capture for LLM analysis."
     
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -612,7 +612,7 @@ This is a secure sandboxed environment for code execution and system commands.
                 allowed_custom_dirs = [
                     "/games", 
                     "/tmp/games",
-                    "/home/sabawi/Development/flaskserver/games",
+                    str(Path.cwd() / "games"),
                     "games",
                     "projects", 
                     "output",
@@ -625,7 +625,7 @@ This is a secure sandboxed environment for code execution and system commands.
                     if custom_dir not in allowed_custom_dirs:
                         # Try mapping to local equivalent
                         if custom_dir == "/games":
-                            custom_dir = "/home/sabawi/Development/flaskserver/games"
+                            custom_dir = str(Path.cwd() / "games")
                         else:
                             return False, f"Custom directory not allowed: {custom_dir}", ""
                 
@@ -1056,10 +1056,126 @@ This is a secure sandboxed environment for code execution and system commands.
         except Exception as e:
             return {"success": False, "error": f"File creation error: {str(e)}", "result": None}
     
+    def _apply_placeholder_fixes(self, content: str) -> str:
+        """Apply placeholder fixes to content (especially name replacement)"""
+        try:
+            if not content or '[' not in content and 'Your Name' not in content:
+                return content
+            
+            import re
+            
+            # Extract name from context dynamically or use generic placeholder
+            actual_name = self._extract_user_name_from_context(content)
+            
+            # Apply name placeholder replacements
+            filled_content = content
+            
+            # Handle various name placeholder patterns
+            filled_content = re.sub(r'\[YOUR NAME\]', actual_name, filled_content)
+            filled_content = re.sub(r'\[Your Full Name\]', actual_name, filled_content)
+            filled_content = re.sub(r'\[Your Name Here\]', actual_name, filled_content)
+            filled_content = re.sub(r'\[Sign Your Name\]', actual_name, filled_content)
+            filled_content = re.sub(r'\[Your Name\]', actual_name, filled_content)
+            filled_content = re.sub(r'\[NAME\]', actual_name, filled_content)
+            
+            # 🔧 CRITICAL FIX: Handle literal "Your Name" without brackets (most common!)
+            filled_content = re.sub(r'\bYour Name\b', actual_name, filled_content)
+            filled_content = re.sub(r'\byour name\b', actual_name, filled_content, flags=re.IGNORECASE)
+            
+            return filled_content
+            
+        except Exception as e:
+            print(f"⚠️ Placeholder replacement error: {e}")
+            return content
+    
+    def _extract_user_name_from_context(self, content):
+        """
+        Extract user name from available context, including resume files, or use generic placeholder
+        """
+        try:
+            import re
+            
+            # First, try to find name in resume files in sandbox
+            resume_name = self._extract_name_from_resume()
+            if resume_name and resume_name != "Your Name":
+                return resume_name
+            
+            # Try to extract name from content context (if document contains actual names)
+            # Look for patterns like "Dear Mr. Smith" or "From: John Doe"
+            name_patterns = [
+                r'Dear (?:Mr\.|Ms\.|Mrs\.|Dr\.)?\s+([A-Z][a-z]+ [A-Z][a-z]+)',
+                r'From:\s+([A-Z][a-z]+ [A-Z][a-z]+)',
+                r'Sincerely,\s+([A-Z][a-z]+ [A-Z][a-z]+)',
+                r'Best regards,\s+([A-Z][a-z]+ [A-Z][a-z]+)',
+            ]
+            
+            for pattern in name_patterns:
+                match = re.search(pattern, content)
+                if match:
+                    return match.group(1)
+            
+            # Return generic placeholder if no name found
+            return "[Your Name]"
+            
+        except Exception as e:
+            print(f"⚠️ Name extraction error: {e}")
+            return "[Your Name]"
+    
+    def _extract_name_from_resume(self):
+        """
+        Extract name from resume files in sandbox workspace
+        """
+        try:
+            import glob
+            
+            # Look for resume files
+            resume_patterns = [
+                self.sandbox_path / "*.pdf",
+                self.sandbox_path / "*resume*",
+                self.sandbox_path / "*cv*",
+            ]
+            
+            for pattern in resume_patterns:
+                files = glob.glob(str(pattern))
+                for file_path in files:
+                    if 'resume' in file_path.lower() or 'cv' in file_path.lower():
+                        # Try to extract name from filename first
+                        filename = Path(file_path).stem.lower()
+                        # Pattern like "resume_john_doe" or "john_doe_resume"
+                        if '_' in filename:
+                            parts = filename.split('_')
+                            name_parts = [p for p in parts if p not in ['resume', 'cv']]
+                            if len(name_parts) >= 2:
+                                return ' '.join(part.capitalize() for part in name_parts)
+                        
+                        # If it's a text file, try to extract name from content
+                        if file_path.endswith('.txt') or file_path.endswith('.md'):
+                            try:
+                                with open(file_path, 'r', encoding='utf-8') as f:
+                                    resume_content = f.read()
+                                    # Look for name at the beginning of resume
+                                    first_lines = resume_content.split('\n')[:5]
+                                    for line in first_lines:
+                                        line = line.strip()
+                                        # Name is often the first line, should be 2-4 words, all caps or title case
+                                        if re.match(r'^[A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?$', line):
+                                            return line
+                            except Exception:
+                                continue
+            
+            return None
+                        
+        except Exception as e:
+            print(f"⚠️ Resume name extraction error: {e}")
+            return None  # Return original content if replacement fails
+
     async def _create_real_html_file(self, filename: str, content: str) -> Dict[str, Any]:
         """Create a properly formatted HTML file from markdown or plain text content"""
         try:
             print(f"🔧 AUTO-HTML: Detected .html request, creating formatted HTML file")
+            
+            # 🔧 CRITICAL FIX: Apply placeholder fixes before creating file
+            content = self._apply_placeholder_fixes(content)
             
             # Validate path
             is_valid, file_path = self._validate_path(filename)
@@ -1217,9 +1333,36 @@ This is a secure sandboxed environment for code execution and system commands.
             if file_size > self.max_file_size:
                 return {"success": False, "error": f"File too large to read ({file_size} bytes)", "result": None}
             
-            # Read file
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            # Read file - handle both text and binary files  
+            file_extension = os.path.splitext(file_path)[1].lower()
+            
+            if file_extension in ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.tar', '.gz']:
+                # Binary files - attempt to extract text content
+                try:
+                    if file_extension == '.pdf':
+                        # Try to extract text from PDF
+                        try:
+                            import PyPDF2
+                            with open(file_path, 'rb') as pdf_file:
+                                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                                content = ""
+                                for page_num in range(len(pdf_reader.pages)):
+                                    page = pdf_reader.pages[page_num]
+                                    content += page.extract_text() + "\n"
+                                content = f"[PDF Content - {len(pdf_reader.pages)} pages]\n{content.strip()}"
+                        except ImportError:
+                            content = f"[PDF file detected but PyPDF2 not available for text extraction. File size: {file_size} bytes]"
+                        except Exception as pdf_error:
+                            content = f"[PDF text extraction failed: {str(pdf_error)}. File size: {file_size} bytes]"
+                    else:
+                        # Other binary files - just provide metadata
+                        content = f"[Binary file: {file_extension} format. File size: {file_size} bytes. Use appropriate tools for processing.]"
+                except Exception as binary_error:
+                    content = f"[Binary file processing error: {str(binary_error)}. File size: {file_size} bytes]"
+            else:
+                # Text files - read normally
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
             
             # Get file stats
             file_stats = os.stat(file_path)

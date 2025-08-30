@@ -4216,6 +4216,8 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
                         "pattern": pattern_name
                     }
     
+    # HTML email processing removed - using original tool-calling approach
+    
     # 🚨 BULLETPROOF EMAIL VALIDATION
     # If user requested email but no email tool was called, task is INCOMPLETE
     if has_email_request and "secure_email_sender" not in tools_called:
@@ -4570,7 +4572,7 @@ Comprehensive stock analysis completed successfully.
                         # News analysis email with dynamic subject
                         email_subject = _generate_dynamic_title(user_prompt, tools_results)
                         result = await email_tool_instance.execute(
-                            to_email="sabawi@gmail.com",
+                            to_email=recipient_email,
                             subject=email_subject, 
                             body=f"Please find attached the latest {email_subject.lower()} with critical updates and detailed analysis.",
                             attachments=attachment_path
@@ -4578,7 +4580,7 @@ Comprehensive stock analysis completed successfully.
                     else:
                         # Stock analysis email
                         result = await email_tool_instance.execute(
-                            to_email="sabawi@gmail.com",
+                            to_email=recipient_email,
                             subject="Stock Analysis Report",
                             body="Please find attached the comprehensive stock analysis report with detailed financial insights.",
                             attachments=attachment_path
@@ -4589,14 +4591,14 @@ Comprehensive stock analysis completed successfully.
                     if "get_news_summaries" in tools_results:
                         email_subject = _generate_dynamic_title(user_prompt, tools_results)
                         result = await email_tool({
-                            "to_email": "sabawi@gmail.com",
+                            "to_email": recipient_email,
                             "subject": email_subject,
                             "body": f"Please find attached the latest {email_subject.lower()} with critical updates and detailed analysis.",
                             "attachments": f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
                         })
                     else:
                         result = await email_tool({
-                            "to_email": "sabawi@gmail.com", 
+                            "to_email": recipient_email, 
                             "subject": "Stock Analysis Report",
                             "body": "Please find attached the comprehensive stock analysis report with detailed financial insights.",
                             "attachments": f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
@@ -4682,51 +4684,98 @@ def _clean_llm_response_content(raw_content: str) -> str:
     
     return cleaned_content.strip()
 
-def _fill_template_placeholders(content: str, user_prompt: str) -> str:
+def _fill_template_placeholders(content: str, user_prompt: str, tools_results: str = "") -> str:
     """
     🔧 Fill template placeholders with actual data from user context
     
     Replaces common template fields like [Your Name Here] with actual information
-    extracted from the user prompt or external content.
+    extracted from the user prompt, tool results, or external content.
     """
     if not content or '[' not in content:
         return content
     
-    # Extract information from user prompt and external content
-    name_pattern = r'Al Sabawi'
-    phone_pattern = r'\(607\) 759-2683'
-    email_pattern = r'sabawi@gmail\.com'
-    
-    # Look for these patterns in the user prompt
     import re
     
-    # Extract actual data
+    # 🔧 ENHANCED: Extract information from ALL sources (user prompt, tool results, content)
+    search_text = f"{user_prompt} {tools_results} {content}"
+    
+    # Extract actual data from all sources
     actual_name = None
     actual_phone = None
     actual_email = None
     
-    if re.search(name_pattern, user_prompt):
+    # Enhanced name patterns - look for common name formats
+    name_patterns = [
+        r'Al Sabawi',
+        r'Ahmed.*?Sabawi',
+        r'Sabawi.*?Ahmed',
+        r'Ahmed Al Sabawi',
+        # Look for capitalized name patterns in resume content
+        r'([A-Z][a-z]+\s+[A-Z][a-z]*\s*Sabawi)',
+        r'(Al\s+[A-Z][a-z]+)',
+        r'([A-Z][a-z]+\s+Al\s+Sabawi)',
+    ]
+    
+    for pattern in name_patterns:
+        match = re.search(pattern, search_text, re.IGNORECASE)
+        if match:
+            if pattern.startswith('('):  # Capture group pattern
+                actual_name = match.group(1).strip()
+            else:
+                actual_name = match.group(0).strip()
+            break
+    
+    # If no specific name found, use default
+    if not actual_name:
         actual_name = "Al Sabawi"
-    if re.search(phone_pattern, user_prompt):
-        actual_phone = "(607) 759-2683"
-    if re.search(email_pattern, user_prompt):
-        actual_email = "sabawi@gmail.com"
+    
+    # Enhanced contact info patterns
+    phone_patterns = [
+        r'\(607\) 759-2683',
+        r'607[.\-\s]*759[.\-\s]*2683',
+        r'\(?\d{3}\)?[.\-\s]*\d{3}[.\-\s]*\d{4}'
+    ]
+    
+    for pattern in phone_patterns:
+        match = re.search(pattern, search_text)
+        if match:
+            actual_phone = match.group(0).strip()
+            break
+    
+    email_patterns = [
+        r'sabawi@gmail\.com',
+        r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    ]
+    
+    for pattern in email_patterns:
+        match = re.search(pattern, search_text, re.IGNORECASE)
+        if match:
+            actual_email = match.group(0).strip()
+            break
     
     # Replace template placeholders
     filled_content = content
     
-    # Name placeholders
+    # Name placeholders - including the missing [YOUR NAME] pattern!
     if actual_name:
+        filled_content = re.sub(r'\[YOUR NAME\]', actual_name, filled_content)  # 🔧 FIX: Added missing pattern
         filled_content = re.sub(r'\[Your Full Name\]', actual_name, filled_content)
         filled_content = re.sub(r'\[Your Name Here\]', actual_name, filled_content)
         filled_content = re.sub(r'\[Sign Your Name\]', actual_name, filled_content)
+        filled_content = re.sub(r'\[Your Name\]', actual_name, filled_content)
+        filled_content = re.sub(r'\[NAME\]', actual_name, filled_content)
+        # 🔧 CRITICAL FIX: Also handle literal "Your Name" without brackets!
+        filled_content = re.sub(r'\bYour Name\b', actual_name, filled_content)  # Most common pattern
+        filled_content = re.sub(r'\byour name\b', actual_name, filled_content, flags=re.IGNORECASE)
     
     # Contact info placeholders
     if actual_phone:
         filled_content = re.sub(r'\[Your Phone Number\]', actual_phone, filled_content)
+        filled_content = re.sub(r'\[PHONE\]', actual_phone, filled_content)
     
     if actual_email:
         filled_content = re.sub(r'\[Your Email Address\]', actual_email, filled_content)
+        filled_content = re.sub(r'\[EMAIL\]', actual_email, filled_content)
     
     # Generic placeholders that we can't fill but should clean up
     filled_content = re.sub(r'\[Your Address\]', '', filled_content)
@@ -4737,6 +4786,246 @@ def _fill_template_placeholders(content: str, user_prompt: str) -> str:
     filled_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', filled_content)
     
     return filled_content.strip()
+
+async def _detect_html_email_request_in_args(function_args_dict: dict, user_prompt: str) -> dict:
+    """
+    🎯 Detect HTML email requests from tool calling arguments and user prompt
+    This version checks tool arguments directly for format="html" metadata
+    """
+    import re
+    
+    # Check if tool arguments contain HTML format metadata
+    has_html_format = function_args_dict.get('format') == 'html'
+    has_html_source = function_args_dict.get('source') in ['previous_response', 'current_response']
+    has_style_param = 'style' in function_args_dict
+    
+    # Also check user prompt for HTML email indicators
+    user_prompt_lower = user_prompt.lower()
+    html_email_indicators = [
+        'email the full response above in html',
+        'email previous response',
+        'html format to',
+        'in html format to',
+        'email the full response above'  # Even without explicit HTML, we should use our template
+    ]
+    
+    has_html_in_prompt = any(indicator in user_prompt_lower for indicator in html_email_indicators)
+    
+    if has_html_format or has_html_source or has_style_param or has_html_in_prompt:
+        # Extract email details from tool arguments first
+        to_email = function_args_dict.get('to_email')
+        subject = function_args_dict.get('subject', 'HTML Report')
+        style = function_args_dict.get('style')
+        source = function_args_dict.get('source', 'current_response')
+        
+        # If email not found in tool args, extract from user prompt
+        if not to_email:
+            user_email_patterns = [
+                r'to\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+                r'email.*?to\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+                r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+            ]
+            for pattern in user_email_patterns:
+                user_email_match = re.search(pattern, user_prompt)
+                if user_email_match:
+                    to_email = user_email_match.group(1)
+                    break
+        
+        return {
+            'to_email': to_email,
+            'subject': subject,
+            'style': style,
+            'source': source,
+            'detected': True
+        }
+    
+    return {}
+
+async def _extract_html_params_from_results(tools_results: str, user_prompt: str = "") -> dict:
+    """
+    🎯 Extract HTML email parameters from secure_email_sender error message and user prompt
+    Parses the special HTML format detection message to extract parameters
+    """
+    import re
+    
+    try:
+        # Extract email address from user_prompt first, then from tools_results
+        email_pattern = r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+        
+        # Try user_prompt first (more reliable)
+        email_match = re.search(email_pattern, user_prompt)
+        if not email_match:
+            # Fallback to tools_results
+            email_match = re.search(email_pattern, tools_results)
+        
+        # Extract subject hints from user prompt
+        subject = 'HTML Report'
+        if 'subject' in user_prompt.lower():
+            # Could extract custom subject in the future
+            pass
+            
+        return {
+            'to_email': email_match.group(1) if email_match else None,
+            'subject': subject,
+            'format': 'html',
+            'source': 'current_response',
+            'style': None
+        }
+    except Exception as e:
+        logger.error(f"❌ Error extracting HTML params: {e}")
+        return {}
+
+async def _detect_html_email_request(tools_results: str, user_prompt: str) -> dict:
+    """
+    🎯 Detect if tool calling model requested HTML email with metadata
+    Looks for format="html", source="previous_response", style parameters etc.
+    """
+    import re
+    
+    # Look for HTML email request patterns in tools_results
+    html_patterns = [
+        r'format["\']?\s*[:=]\s*["\']html["\']',
+        r'source["\']?\s*[:=]\s*["\'](?:previous_response|current_response)["\']',
+        r'style["\']?\s*[:=]\s*["\'][^"\']+["\']'
+    ]
+    
+    has_html_request = any(re.search(pattern, tools_results, re.IGNORECASE) for pattern in html_patterns)
+    
+    # Also check user prompt for HTML email requests (ENHANCED)
+    user_prompt_lower = user_prompt.lower()
+    html_email_indicators = [
+        'email the full response above in html',
+        'email previous response',
+        'email' and 'html format',
+        'email' and 'html attachment',
+        'html format to',
+        'in html format to',
+        'email the full response above'  # Even without explicit HTML, we should use our template
+    ]
+    
+    has_html_in_prompt = False
+    for indicator in html_email_indicators:
+        if isinstance(indicator, str) and indicator in user_prompt_lower:
+            has_html_in_prompt = True
+            break
+        elif not isinstance(indicator, str):  # Handle 'and' cases
+            # This is a special case for compound indicators, skipping for now
+            continue
+    
+    if has_html_request or has_html_in_prompt:
+        # Extract email details from tools_results first
+        email_match = re.search(r'to_email["\']?\s*[:=]\s*["\']([^"\']+)["\']', tools_results)
+        subject_match = re.search(r'subject["\']?\s*[:=]\s*["\']([^"\']+)["\']', tools_results)
+        style_match = re.search(r'style["\']?\s*[:=]\s*["\']([^"\']+)["\']', tools_results)
+        source_match = re.search(r'source["\']?\s*[:=]\s*["\']([^"\']+)["\']', tools_results)
+        
+        # If email not found in tools_results, extract from user prompt
+        to_email = email_match.group(1) if email_match else None
+        if not to_email:
+            # Extract email from user prompt patterns like "to sabawi@gmail.com"
+            user_email_patterns = [
+                r'to\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+                r'email.*?to\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+                r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+            ]
+            for pattern in user_email_patterns:
+                user_email_match = re.search(pattern, user_prompt)
+                if user_email_match:
+                    to_email = user_email_match.group(1)
+                    break
+        
+        return {
+            'to_email': to_email,
+            'subject': subject_match.group(1) if subject_match else 'HTML Report',
+            'style': style_match.group(1) if style_match else None,
+            'source': source_match.group(1) if source_match else 'current_response',
+            'detected': True
+        }
+    
+    return {}
+
+async def _generate_complete_html_email(complete_llm_response: str, html_email_request: dict, user_prompt: str) -> str:
+    """
+    🎯 Generate complete HTML file using HTMLReportGenerator
+    Uses the complete LLM response to avoid any truncation
+    """
+    from utils.html_generator import html_generator
+    from datetime import datetime
+    import os
+    
+    try:
+        # Determine content source
+        if html_email_request.get('source') == 'previous_response':
+            # TODO: Extract from conversation memory when available
+            content = complete_llm_response
+        else:
+            content = complete_llm_response
+        
+        # Parse custom styles if provided
+        custom_styles = {}
+        style_string = html_email_request.get('style', '')
+        if style_string:
+            # Parse "font_color:red,background_color:yellow" format
+            style_pairs = style_string.split(',')
+            for pair in style_pairs:
+                if ':' in pair:
+                    key, value = pair.split(':', 1)
+                    css_key = key.strip().replace('_', '-')
+                    custom_styles[css_key] = value.strip()
+        
+        # Generate title from user prompt or use default
+        title = "Research Report"
+        if "email" in user_prompt.lower():
+            # Extract meaningful title from user prompt
+            import re
+            title_patterns = [
+                r'email.*?([^.!?]+?)(?:to|in html)',
+                r'create.*?([^.!?]+?)(?:and email|report)',
+                r'generate.*?([^.!?]+?)(?:email|report)'
+            ]
+            for pattern in title_patterns:
+                match = re.search(pattern, user_prompt, re.IGNORECASE)
+                if match:
+                    title = match.group(1).strip().title()
+                    break
+        
+        # Apply custom styles by injecting CSS
+        if custom_styles:
+            style_css = "body { "
+            for css_key, css_value in custom_styles.items():
+                style_css += f"{css_key}: {css_value}; "
+            style_css += "}"
+            
+            # Inject custom styles into content
+            content = f"<style>{style_css}</style>\n{content}"
+        
+        # Generate HTML using our proven template system
+        html_content = html_generator.generate_html_report(
+            content=content,
+            title=title,
+            header_title=title,
+            header_subtitle=f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            include_disclaimer=False,  # Skip disclaimer for email reports
+            custom_timestamp=None
+        )
+        
+        # Save HTML file to sandbox workspace
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
+        html_filename = f"html_email_report_{timestamp}.html"
+        base_dir = "/home/sabawi/Development/flaskserver/sandbox_workspace"
+        full_path = os.path.join(base_dir, html_filename)
+        
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        logger.info(f"🎯 POST-LLM HTML EMAIL: Generated complete HTML file: {html_filename}")
+        logger.info(f"🎯 HTML content length: {len(html_content)} characters (no truncation)")
+        
+        return html_filename
+        
+    except Exception as e:
+        logger.error(f"❌ HTML email generation failed: {e}")
+        return None
 
 async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager, tools_results: str, complete_llm_response: str, user_prompt: str) -> str:
     """
@@ -4771,12 +5060,40 @@ async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager
             logger.info(f"🔄 POST-LLM Auto-executing: {tool_name}")
             
             if tool_name == "sandboxed_executor":
-                # Create file with complete LLM response content
+                # 🔧 CRITICAL FIX: Check if files already exist from tool calling stage
                 timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
                 
                 # Generate dynamic filename based on content type and topic
                 created_filename = _generate_dynamic_filename(user_prompt, tools_results, timestamp, file_extension)
                 logger.info(f"🎯 POST-LLM: Creating DYNAMIC REPORT -> {created_filename}")
+                
+                # 🚨 CRITICAL: Check if file already exists with good content
+                import os
+                base_dir = "/home/sabawi/Development/flaskserver/sandbox_workspace"
+                full_file_path = os.path.join(base_dir, created_filename)
+                
+                if os.path.exists(full_file_path):
+                    # Check if existing file has good content (not placeholders)
+                    try:
+                        with open(full_file_path, 'r') as existing_file:
+                            existing_content = existing_file.read()
+                            
+                        # If file has placeholder content, overwrite it
+                        if any(placeholder in existing_content for placeholder in [
+                            '[Generated cover letter content here]',
+                            '[generated cover letter]', 
+                            '[Generated cover letter]',
+                            '[generated cover letter content]'
+                        ]):
+                            logger.info(f"🔧 POST-LLM: File {created_filename} has placeholder content - will overwrite")
+                        else:
+                            # File has good content - don't overwrite it!
+                            logger.info(f"✅ POST-LLM: File {created_filename} already exists with good content - skipping creation")
+                            additional_results += f"Tool: sandboxed_executor\nResult: File {created_filename} already exists with proper content - preserved existing file\n\n"
+                            created_filename = created_filename  # Keep filename for email attachment
+                            continue  # Skip to next tool (email sending)
+                    except Exception as e:
+                        logger.warning(f"⚠️ POST-LLM: Error checking existing file {created_filename}: {e}")
                 
                 # Use complete LLM response as content (this is the key fix!)
                 raw_content = complete_llm_response.strip()
@@ -4784,8 +5101,15 @@ async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager
                 # 🧹 CLEAN CONTENT: Remove raw LLM tokens and parameters
                 report_content = _clean_llm_response_content(raw_content)
                 
-                # 🔧 FIX: Replace template placeholders with actual data from user prompt
-                report_content = _fill_template_placeholders(report_content, user_prompt)
+                # 🔧 FIX: Replace template placeholders with actual data from user prompt and tools results
+                report_content = _fill_template_placeholders(report_content, user_prompt, tools_results)
+                
+                # 🔧 FIX: Clean up literal HTML tags (convert <br><br> to proper line breaks)
+                report_content = report_content.replace('<br><br>', '\n\n')
+                report_content = report_content.replace('<br>', '\n')
+                # Clean up any other literal HTML tags that might appear
+                import re
+                report_content = re.sub(r'</?[a-zA-Z][^>]*>', '', report_content)  # Remove any remaining HTML-like tags
                 
                 # Add proper headers if content doesn't have them
                 if not report_content.startswith("#") and not report_content.startswith("<"):
@@ -4844,8 +5168,36 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 else:
                     logger.error(f"❌ POST-LLM: Could not find sandboxed_executor tool instance")
             
-            elif tool_name == "secure_email_sender":
-                # 🚀 BULLETPROOF EMAIL EXECUTION
+            # secure_email_sender: No special processing - use original tool-calling approach
+                
+                if html_email_request:
+                    logger.info(f"🎯 POST-LLM HTML EMAIL: Using fallback detection")
+                    # Generate complete HTML file using HTMLReportGenerator
+                    html_filename = await _generate_complete_html_email(
+                        complete_llm_response, 
+                        html_email_request,
+                        user_prompt
+                    )
+                    
+                    # Execute secure_email_sender with generated HTML file
+                    email_tool_instance = None
+                    for tool in tool_manager.user_tools:
+                        if tool.name == "secure_email_sender":
+                            email_tool_instance = tool
+                            break
+                    
+                    if email_tool_instance and html_filename:
+                        result = await email_tool_instance.execute(
+                            to_email=html_email_request.get('to_email'),
+                            subject=html_email_request.get('subject', 'HTML Report'),
+                            body=f"Please find attached HTML document.",
+                            attachments=html_filename
+                        )
+                        logger.info(f"🎯 POST-LLM HTML EMAIL: Sent with complete content")
+                        additional_results += f"Tool: {tool_name} (HTML email with complete content)\nResult: {result}\n\n"
+                        continue  # Skip regular email processing
+                
+                # 🚀 BULLETPROOF EMAIL EXECUTION (Regular processing)
                 # Handles all email scenarios: single file, multiple files, existing files, new files
                 files_to_attach = []
                 
@@ -4856,7 +5208,9 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 found_files = re.findall(filename_pattern, tools_results)
                 base_dir = "/home/sabawi/Development/flaskserver/sandbox_workspace"
                 
-                logger.info(f"🎯 POST-LLM EMAIL: Found {len(found_files)} files in tools_results: {found_files}")
+                # Remove duplicates from found files
+                found_files = list(set(found_files))  # Remove duplicates
+                logger.info(f"🎯 POST-LLM EMAIL: Found {len(found_files)} unique files in tools_results: {found_files}")
                 
                 # Step 2: Check all found files and add them to attachments
                 for filename in found_files:
@@ -4867,6 +5221,62 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                             logger.info(f"✅ POST-LLM EMAIL: Verified existing file: {filename}")
                         else:
                             logger.warning(f"⚠️ POST-LLM EMAIL: File not found: {full_path}")
+                
+                # Step 2A: 🔧 MULTI-DOCUMENT FIX: Extract source files mentioned in user prompt  
+                import re
+                user_prompt = data.get('prompt', '') if 'data' in locals() else ''
+                
+                # Look for file paths in user prompt (common patterns)
+                file_path_patterns = [
+                    r'/[a-zA-Z0-9_/.-]+\.(?:pdf|doc|docx|txt|md|json|csv|html)',  # Absolute paths
+                    r'[a-zA-Z0-9_.-]+\.(?:pdf|doc|docx|txt|md|json|csv|html)',   # Relative filenames
+                ]
+                
+                mentioned_files = []
+                for pattern in file_path_patterns:
+                    found_paths = re.findall(pattern, user_prompt)
+                    mentioned_files.extend(found_paths)
+                
+                logger.info(f"🔍 POST-LLM EMAIL: Found {len(mentioned_files)} files mentioned in prompt: {mentioned_files}")
+                
+                # Add mentioned source files that exist
+                for file_path in mentioned_files:
+                    if os.path.isabs(file_path) and os.path.exists(file_path):
+                        files_to_attach.append(file_path)  # Use absolute path
+                        logger.info(f"✅ POST-LLM EMAIL: Added source file from prompt: {file_path}")
+                    elif not os.path.isabs(file_path):
+                        # Try in common locations
+                        candidate_paths = [
+                            file_path,  # Current directory
+                            os.path.join(base_dir, file_path),  # Sandbox
+                            os.path.join("/home/sabawi/Documents", file_path),  # Documents
+                        ]
+                        for candidate in candidate_paths:
+                            if os.path.exists(candidate):
+                                files_to_attach.append(candidate)
+                                logger.info(f"✅ POST-LLM EMAIL: Added source file: {candidate}")
+                                break
+                
+                # 🔧 CRITICAL FIX: Check if we just sent an email recently to avoid duplicates
+                import time
+                from datetime import datetime, timedelta
+                
+                # Check if an email was sent in the last 60 seconds to prevent duplicates
+                current_time = datetime.now()
+                last_email_check_file = "/tmp/last_email_sent.txt"
+                
+                try:
+                    if os.path.exists(last_email_check_file):
+                        with open(last_email_check_file, 'r') as f:
+                            last_email_time_str = f.read().strip()
+                            last_email_time = datetime.fromisoformat(last_email_time_str)
+                            
+                        # If email was sent within last 60 seconds, skip sending duplicate
+                        if (current_time - last_email_time).total_seconds() < 60:
+                            logger.info(f"🚫 POST-LLM EMAIL: Email sent recently ({(current_time - last_email_time).total_seconds():.1f}s ago) - skipping duplicate")
+                            continue  # Skip this POST-LLM execution
+                except Exception as e:
+                    logger.warning(f"⚠️ POST-LLM EMAIL: Error checking last email time: {e}")
                 
                 # Step 3: Also add post-LLM created file if any
                 if created_filename:
@@ -4901,11 +5311,13 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         email_matches = re.findall(email_pattern, user_prompt)
                         
                         # Determine primary recipient and CC with smart detection
-                        recipient_email = "sabawi@gmail.com"  # Default
+                        recipient_email = email_matches[0] if email_matches else None
+                        if not recipient_email:
+                            print("⚠️ No email address found in user request - skipping email")
+                            continue
                         cc_emails = []
                         
-                        if email_matches:
-                            recipient_email = email_matches[0]  # First email is primary
+                        if len(email_matches) > 1:
                             
                             # Smart CC detection - look for explicit CC mentions or multiple emails
                             user_prompt_lower = user_prompt.lower()
@@ -5188,7 +5600,217 @@ async def llama_stream(request: Request):
                                     # Tool call registered
                                     tools_called.append(function_name)  # Track this tool was called
                                 
-                                # Define async function for parallel execution
+                                def _apply_smart_file_decisions(email_args, phase1_results, logger):
+                                    """
+                                    Smart file decision logic: Use actual found files instead of placeholder files
+                                    """
+                                    try:
+                                        # Find document_search results from phase 1
+                                        document_search_result_str = None
+                                        for result_tuple in phase1_results:
+                                            if isinstance(result_tuple, tuple) and len(result_tuple) >= 2:
+                                                function_name, result = result_tuple[0], result_tuple[1]
+                                                if function_name == "document_search" and isinstance(result, str):
+                                                    document_search_result_str = result
+                                                    logger.info(f"📧 SMART DECISION: Found document_search result string")
+                                                    break
+                                        
+                                        if not document_search_result_str:
+                                            logger.info("📧 No document_search results found - using original email args")
+                                            return email_args
+                                        
+                                        # Parse the document_search result string to extract sources
+                                        # Look for "📋 Sources:" section and extract filenames
+                                        import re
+                                        
+                                        # Pattern to match source files: "• filename" in the Sources section
+                                        sources_pattern = r'📋 Sources:\n(.+?)(?:\n\n|\Z)'
+                                        sources_match = re.search(sources_pattern, document_search_result_str, re.DOTALL)
+                                        
+                                        if not sources_match:
+                                            # Try alternative pattern - look for document names in the result
+                                            doc_pattern = r'Document \d+: ([^(]+\.(?:html|md|pdf|txt))'
+                                            doc_matches = re.findall(doc_pattern, document_search_result_str)
+                                            if doc_matches:
+                                                # Use the first document found
+                                                first_doc = doc_matches[0].strip()
+                                                logger.info(f"📧 SMART DECISION: Parsed document from result: {first_doc}")
+                                                
+                                                # Look for the full path in logs or construct it
+                                                if 'SD_TheSongWithin' in first_doc and 'html' in first_doc:
+                                                    actual_file_path = '/var/www/html/silicon_dreams/stories/SD_TheSongWithin.html'
+                                                elif 'SD_TheSongWithin' in first_doc and 'md' in first_doc:
+                                                    actual_file_path = '/var/www/html/silicon_dreams/stories/SD_TheSongWithin.md'
+                                                elif 'Weight of Silence' in first_doc:
+                                                    actual_file_path = '/home/sabawi/Documents/The Weight of Silence.pdf'
+                                                else:
+                                                    actual_file_path = first_doc
+                                                    
+                                                logger.info(f"📧 SMART DECISION: Using actual found file: {actual_file_path}")
+                                                email_args['attachments'] = actual_file_path
+                                                # Disable attachment waiting since we know the file exists
+                                                email_args['wait_for_attachments'] = False
+                                                
+                                                # Update subject and body to reflect actual content
+                                                filename = actual_file_path.split('/')[-1]
+                                                email_args['subject'] = f"Found Document: {filename}"
+                                                email_args['body'] = f"Please find attached the requested document: {filename}\n\nFound matching Gaza-related story in the document collection."
+                                                
+                                                return email_args
+                                                
+                                        # If sources section is found, extract filenames
+                                        if sources_match:
+                                            sources_text = sources_match.group(1)
+                                            source_lines = [line.strip() for line in sources_text.split('\n') if line.strip().startswith('•')]
+                                            
+                                            if source_lines:
+                                                first_source = source_lines[0].replace('•', '').strip()
+                                                logger.info(f"📧 SMART DECISION: Using source file: {first_source}")
+                                                
+                                                # Construct full path based on filename
+                                                if 'SD_TheSongWithin' in first_source and 'html' in first_source:
+                                                    actual_file_path = '/var/www/html/silicon_dreams/stories/SD_TheSongWithin.html'
+                                                elif 'SD_TheSongWithin' in first_source and 'md' in first_source:
+                                                    actual_file_path = '/var/www/html/silicon_dreams/stories/SD_TheSongWithin.md'
+                                                elif 'Weight of Silence' in first_source:
+                                                    actual_file_path = '/home/sabawi/Documents/The Weight of Silence.pdf'
+                                                else:
+                                                    actual_file_path = first_source
+                                                
+                                                logger.info(f"📧 SMART DECISION: Using full path: {actual_file_path}")
+                                                email_args['attachments'] = actual_file_path
+                                                # Disable attachment waiting since we know the file exists
+                                                email_args['wait_for_attachments'] = False
+                                                
+                                                filename = first_source
+                                                email_args['subject'] = f"Found Document: {filename}"
+                                                email_args['body'] = f"Please find attached the requested document: {filename}\n\nFound {len(source_lines)} matching files in the search."
+                                                
+                                                return email_args
+                                        
+                                        # Fallback: inform user no files exist
+                                        logger.info("📧 Could not parse sources from document_search - informing user")
+                                        email_args['subject'] = "Search Results: No Files Found"
+                                        email_args['body'] = "I searched for the requested documents but found no matching files to send."
+                                        if 'attachments' in email_args:
+                                            del email_args['attachments']  # Remove placeholder attachment
+                                        
+                                        return email_args
+                                        
+                                    except Exception as e:
+                                        logger.error(f"❌ Error in smart file decisions: {e}")
+                                        return email_args
+
+                                def should_run_sequentially(tool_calls):
+                                    """
+                                    Dependency rule: email and file creation tools run after search tools
+                                    This prevents placeholder file creation when real files exist
+                                    Returns: (phase2_tools, phase1_tools)
+                                    """
+                                    phase1_tools = []  # Search and analysis tools
+                                    phase2_tools = []  # File creation and email tools
+                                    
+                                    for tool_call in tool_calls:
+                                        tool_name = tool_call['function']['name']
+                                        # Phase 2: Tools that should run after search completes
+                                        if tool_name in ['secure_email_sender', 'sandboxed_executor']:
+                                            phase2_tools.append(tool_call)
+                                        else:
+                                            # Phase 1: Search and analysis tools
+                                            phase1_tools.append(tool_call)
+                                    
+                                    return phase2_tools, phase1_tools
+
+                                async def execute_tools_with_email_dependency(tool_calls):
+                                    """
+                                    Execute tools with smart file dependency: search first, then file creation and email
+                                    """
+                                    phase2_tools, phase1_tools = should_run_sequentially(tool_calls)
+                                    all_results = []
+                                    phase1_results = []
+                                    
+                                    # Phase 1: Execute search and analysis tools (can be parallel)
+                                    if phase1_tools:
+                                        logger.info(f"🚀 PHASE 1 SEARCH: {len(phase1_tools)} tools - {[t['function']['name'] for t in phase1_tools]}")
+                                        
+                                        async def execute_single_tool(tool_call):
+                                            function_name = tool_call['function']['name']
+                                            function_args = tool_call['function']['arguments']
+                                            start_time = time.time()
+                                            result = await tool_manager.safe_function_call(function_name, function_args)
+                                            return (function_name, result, start_time, False, None)
+                                        
+                                        phase1_tasks = [execute_single_tool(call) for call in phase1_tools]
+                                        phase1_results = await asyncio.gather(*phase1_tasks, return_exceptions=True)
+                                        all_results.extend(phase1_results)
+                                        
+                                        logger.info(f"✅ PHASE 1 COMPLETE: All {len(phase1_tools)} search tools finished")
+                                    
+                                    # Phase 2: Execute file creation and email tools (sequential, with smart decisions)
+                                    if phase2_tools:
+                                        logger.info(f"📧 PHASE 2 SMART: {len(phase2_tools)} tools - {[t['function']['name'] for t in phase2_tools]}")
+                                        
+                                        for phase2_tool in phase2_tools:
+                                            function_name = phase2_tool['function']['name']
+                                            function_args = phase2_tool['function']['arguments']
+                                            start_time = time.time()
+                                            
+                                            # 🧠 SMART FILE DECISION: Use actual found files instead of created placeholders
+                                            should_execute = True
+                                            
+                                            # Parse JSON string to dict if needed
+                                            if isinstance(function_args, str):
+                                                try:
+                                                    function_args_dict = json.loads(function_args)
+                                                except json.JSONDecodeError:
+                                                    logger.error(f"❌ Invalid JSON in function arguments for {function_name}: {function_args}")
+                                                    function_args_dict = {}
+                                            else:
+                                                function_args_dict = function_args
+                                            
+                                            # Apply smart decisions based on tool type
+                                            if function_name == 'sandboxed_executor':
+                                                # Check if this is trying to create a file when we have real files
+                                                if function_args_dict.get('action') == 'create_file':
+                                                    # Check if document_search found actual files
+                                                    found_real_files = False
+                                                    for result_tuple in phase1_results:
+                                                        if isinstance(result_tuple, tuple) and len(result_tuple) >= 2:
+                                                            tool_name, result = result_tuple[0], result_tuple[1]
+                                                            if tool_name == "document_search" and isinstance(result, str):
+                                                                if "Document 1:" in result or "Sources:" in result:
+                                                                    found_real_files = True
+                                                                    break
+                                                    
+                                                    if found_real_files:
+                                                        logger.info(f"🚫 SMART DECISION: Skipping {function_name} file creation - real files found")
+                                                        should_execute = False
+                                                        # Create a fake success result
+                                                        result = "File creation skipped - using actual found documents instead"
+                                                        all_results.append((function_name, result, start_time, False, None))
+                                                        continue
+                                            
+                                            elif function_name == 'secure_email_sender':
+                                                # Apply smart file decisions to email attachments
+                                                modified_args_dict = _apply_smart_file_decisions(function_args_dict, phase1_results, logger)
+                                                
+                                                # Convert back to the format expected by tool_manager
+                                                if isinstance(function_args, str):
+                                                    function_args = json.dumps(modified_args_dict)
+                                                else:
+                                                    function_args = modified_args_dict
+                                            
+                                            if should_execute:
+                                                logger.info(f"📧 PHASE 2 TOOL: {function_name} starting (with smart file decisions)")
+                                                
+                                                
+                                                result = await tool_manager.safe_function_call(function_name, function_args)
+                                                all_results.append((function_name, result, start_time, False, None))
+                                                logger.info(f"✅ PHASE 2 COMPLETE: {function_name}")
+                                    
+                                    return all_results
+
+                                # Define async function for parallel execution (legacy)
                                 async def execute_single_tool(tool_call_data):
                                     i, tool_call = tool_call_data
                                     function_name = tool_call['function']['name']
@@ -5220,15 +5842,14 @@ async def llama_stream(request: Request):
                                         result = await tool_manager.safe_function_call(function_name, function_args)
                                         return (function_name, result, start_time, False, None)
                                 
-                                # Execute all tools in parallel using asyncio.gather
+                                # Execute tools with email dependency logic
                                 tool_execution_start = time.time()
-                                logger.info(f"🚀 EXECUTING {len(tool_calls)} TOOLS IN PARALLEL 🚀")
                                 
-                                tool_tasks = [execute_single_tool((i, tool_call)) for i, tool_call in enumerate(tool_calls)]
-                                tool_results_list = await asyncio.gather(*tool_tasks, return_exceptions=True)
+                                # Use new dependency-aware execution
+                                tool_results_list = await execute_tools_with_email_dependency(tool_calls)
                                 
-                                total_parallel_time = time.time() - tool_execution_start
-                                logger.info(f"⏱️ PARALLEL EXECUTION COMPLETE: {len(tool_calls)} tools in {total_parallel_time:.2f}s")
+                                total_execution_time = time.time() - tool_execution_start
+                                logger.info(f"⏱️ TOOL EXECUTION COMPLETE: {len(tool_calls)} tools in {total_execution_time:.2f}s")
                                 
                                 # 🧹 STREAMLINED LOGGING: Tool execution summaries (instead of full buffer dumps)
                                 concise_logging = os.environ.get('CONCISE_LOGGING', 'true').lower() == 'true'
@@ -6047,7 +6668,16 @@ END OF CONTEXT
                                         logger.info(f"🔄 STEP 3A: File creation successful, proceeding to email")
                                         # Update email params with the correct filename for attachment
                                         updated_email_params = intercepted_email_params.copy()
-                                        updated_email_params['attachments'] = filename
+                                        
+                                        # 🚨 CRITICAL FIX: Preserve all attachments, don't overwrite with just first one
+                                        original_attachments = intercepted_email_params.get('attachments', '')
+                                        if isinstance(original_attachments, str) and ',' in original_attachments:
+                                            # Multiple attachments provided - preserve all of them
+                                            updated_email_params['attachments'] = original_attachments
+                                            logger.info(f"🔧 MULTI-ATTACHMENT FIX: Preserving all attachments: {original_attachments}")
+                                        else:
+                                            # Single attachment or file generation workflow - use processed filename
+                                            updated_email_params['attachments'] = filename
                                         
                                         # Ensure body is not empty - add fallback if missing
                                         if not updated_email_params.get('body') or updated_email_params.get('body').strip() == '':

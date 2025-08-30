@@ -103,3 +103,10 @@ server_complete.pid
 
 # Protected: Keep disabled conflicting tool visible but disabled
 !user_tools/_disabled_stock_analyzer.py
+
+# 🚨 CRITICAL SECURITY: NEVER COMMIT SANDBOX WORKSPACE CONTENTS 🚨
+# This directory contains user-generated files, personal data, resumes, cover letters,
+# and other potentially sensitive information that must NEVER be committed to git
+sandbox_workspace/
+sandbox_workspace/*
+sandbox_workspace/**/*
