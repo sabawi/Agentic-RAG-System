@@ -110,3 +110,6 @@ server_complete.pid
 sandbox_workspace/
 sandbox_workspace/*
 sandbox_workspace/**/*
+
+# Test directory - needs major maintenance and rewriting
+test/

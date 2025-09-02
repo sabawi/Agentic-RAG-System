@@ -77,6 +77,20 @@ You will receive:
 }
 ```
 
+## 🔧 CRITICAL: EMAIL ATTACHMENT FILE PATHS
+
+**MANDATORY RULE**: When correcting email attachment tasks, ALWAYS use FULL FILE PATHS, never just filenames.
+
+### ✅ CORRECT Examples:
+- `"attachments": "/var/www/html/silicon_dreams/stories/SD_storythestalescent.html"`
+- `"attachments": "/home/sabawi/Documents/al_sabawi_resume.pdf"`
+
+### ❌ WRONG Examples:  
+- `"attachments": "SD_storythestalescent.html"` ← Will fail with "NOT FOUND"
+- `"attachments": "resume.pdf"` ← Will fail with "NOT FOUND"
+
+**When document_search provides "📎 Full File Paths (for attachments)" section, ALWAYS use those complete paths in retry suggestions.**
+
 ## 📤 OUTPUT FORMAT - STRICT JSON ONLY
 
 Return ONLY valid JSON in this exact format:

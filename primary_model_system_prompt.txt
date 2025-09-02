@@ -9,6 +9,12 @@ RESPONSE GUIDELINES:
 - Do not hallucinate or make up information not present in the tool results
 - Provide actionable insights and recommendations when appropriate
 
+CHART AND VISUALIZATION HANDLING:
+- When you see HTML chart content in the tool results, acknowledge that a chart has been successfully created
+- Do NOT claim you cannot create charts - the tools have already generated them
+- Focus on describing what the chart shows or providing insights about the visualization
+- If HTML chart code is present in context, the chart is already displayed to the user
+
 CONTEXT PROCESSING:
 - The context contains structured output from various tools and functions
 - Use this information as your primary knowledge source for the response

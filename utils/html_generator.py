@@ -184,7 +184,7 @@ li { margin-bottom: 6px; }
         content: str,
         title: str = "Report",
         header_title: str = "Analysis Report",
-        header_subtitle: str = "Generated Report",
+        header_subtitle: str = "",
         include_disclaimer: bool = True,
         custom_timestamp: Optional[str] = None
     ) -> str:
@@ -207,7 +207,7 @@ li { margin-bottom: 6px; }
                 """
 
             # Prepare timestamp
-            timestamp = custom_timestamp or f"Report generated on {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}"
+            timestamp = custom_timestamp or f"{datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}"
 
             # Replace placeholders with properly escaped content
             import html as html_module
@@ -246,7 +246,7 @@ def create_html_report(
     content: str,
     title: str = "Report",
     header_title: str = "Analysis Report",
-    header_subtitle: str = "Generated Report",
+    header_subtitle: str = "",
     include_disclaimer: bool = True,
     custom_timestamp: Optional[str] = None
 ) -> str:

@@ -63,6 +63,7 @@ except ImportError as e:
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
 
@@ -282,6 +283,36 @@ def load_primary_model_system_prompt() -> str:
     except FileNotFoundError:
         logger.error("primary_model_system_prompt.txt not found, using fallback prompt")
         return "You are a helpful AI assistant. Provide comprehensive responses based on the context provided."
+
+# ==============================================================================
+# LOGGING UTILITIES
+# ==============================================================================
+
+def truncate_base64_for_logging(text: str, max_lines: int = 2) -> str:
+    """
+    Truncate base64 data in text for logging purposes.
+    Shows only first max_lines of base64 data followed by '...'
+    """
+    if not text:
+        return text
+    
+    # Find base64 data patterns
+    import re
+    base64_pattern = r'data:image/[^;]+;base64,([A-Za-z0-9+/=]{100,})'
+    
+    def replace_base64(match):
+        base64_data = match.group(1)
+        # Calculate characters per line (approximately 80 chars per line)
+        chars_per_line = 80
+        max_chars = max_lines * chars_per_line
+        
+        if len(base64_data) <= max_chars:
+            return match.group(0)  # Return full match if small enough
+        
+        truncated = base64_data[:max_chars]
+        return f"data:image/{match.group(0).split(';')[0].split('/')[1]};base64,{truncated}...[TRUNCATED {len(base64_data)-max_chars} more chars]"
+    
+    return re.sub(base64_pattern, replace_base64, text)
 
 # ==============================================================================
 # DATABASE CONNECTION POOL
@@ -543,8 +574,9 @@ class AsyncToolManager:
                     # Format the successful result
                     tool_result = result.get("result", {})
                     if isinstance(tool_result, dict):
-                        # Convert dict result to readable string
-                        return json.dumps(tool_result, indent=2)
+                        # Convert dict result to readable string with base64 truncation
+                        formatted_result = json.dumps(tool_result, indent=2)
+                        return truncate_base64_for_logging(formatted_result)
                     else:
                         return str(tool_result)
                 else:
@@ -1559,6 +1591,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files for image serving
+app.mount("/images", StaticFiles(directory="/home/sabawi/Development/flaskserver/sandbox_workspace"), name="images")
 
 # Initialize tool manager
 tool_manager = AsyncToolManager()
@@ -2831,7 +2866,8 @@ async def intelligent_retry_with_circuit_breakers(
             
             # 🚨 LOG EXACT LLM RESPONSE
             import json
-            logger.info(f"🔧 LLM REGENERATION RESPONSE:\n{'='*80}\n{json.dumps(regenerated_tools, indent=2)}\n{'='*80}")
+            truncated_regenerated_tools = truncate_base64_for_logging(json.dumps(regenerated_tools, indent=2))
+            logger.info(f"🔧 LLM REGENERATION RESPONSE:\n{'='*80}\n{truncated_regenerated_tools}\n{'='*80}")
             
             # 🚨 VALIDATION: Check if LLM actually regenerated tools
             if len(regenerated_tools) == 0:
@@ -2847,7 +2883,9 @@ async def intelligent_retry_with_circuit_breakers(
             
             # 🚨 LOG DETAILED EXECUTION RESULTS
             for idx, result in enumerate(corrected_results):
-                logger.info(f"🔧 EXECUTION RESULT {idx+1}:\n{'='*80}\nTool: {result.get('tool_name', 'Unknown')}\nCorrected: {result.get('corrected', False)}\nResult: {result.get('result', 'No result')}\n{'='*80}")
+                result_text = result.get('result', 'No result')
+                truncated_result = truncate_base64_for_logging(str(result_text))
+                logger.info(f"🔧 EXECUTION RESULT {idx+1}:\n{'='*80}\nTool: {result.get('tool_name', 'Unknown')}\nCorrected: {result.get('corrected', False)}\nResult: {truncated_result}\n{'='*80}")
             
             # 🚨 ANALYZE SUCCESS/FAILURE OF THIS ITERATION
             successful_corrections = [cr for cr in corrected_results if cr.get("corrected", False)]
@@ -3246,7 +3284,8 @@ The purpose is to drop the new code in place of the failed code."""
         
         # 🚨 LOG 3: COMPLETE TOOL SCHEMAS
         import json
-        logger.info(f"🚨 COMPLETE AVAILABLE TOOLS SCHEMAS:\n{'='*100}\n{json.dumps(available_tools, indent=2)}\n{'='*100}")
+        truncated_available_tools = truncate_base64_for_logging(json.dumps(available_tools, indent=2))
+        logger.info(f"🚨 COMPLETE AVAILABLE TOOLS SCHEMAS:\n{'='*100}\n{truncated_available_tools}\n{'='*100}")
         
         # 🚨 LOG 4: COMPLETE PAYLOAD STRUCTURE BEFORE CALL
         payload_info = {
@@ -3256,7 +3295,8 @@ The purpose is to drop the new code in place of the failed code."""
             "tool_names": [tool.get('function', {}).get('name', 'Unknown') for tool in available_tools],
             "iteration_count": iteration_count
         }
-        logger.info(f"🚨 COMPLETE PAYLOAD STRUCTURE:\n{'='*100}\n{json.dumps(payload_info, indent=2)}\n{'='*100}")
+        truncated_payload_info = truncate_base64_for_logging(json.dumps(payload_info, indent=2))
+        logger.info(f"🚨 COMPLETE PAYLOAD STRUCTURE:\n{'='*100}\n{truncated_payload_info}\n{'='*100}")
         
         result = await llm_manager.generate_tools(
             regeneration_prompt, 
@@ -3265,7 +3305,8 @@ The purpose is to drop the new code in place of the failed code."""
         )
         
         # 🚨 LOG 5: COMPLETE LLM RESPONSE
-        logger.info(f"🚨 COMPLETE LLM RESPONSE:\n{'='*100}\n{json.dumps(result, indent=2)}\n{'='*100}")
+        truncated_result = truncate_base64_for_logging(json.dumps(result, indent=2))
+        logger.info(f"🚨 COMPLETE LLM RESPONSE:\n{'='*100}\n{truncated_result}\n{'='*100}")
         
         tool_calls = result.get("tool_calls", [])
         logger.info(f"🔧 LLM returned {len(tool_calls)} regenerated tool calls")
@@ -3290,7 +3331,8 @@ async def _execute_corrected_tools(tool_manager, regenerated_tools, retry_candid
             logger.info(f"🔧 RE-EXECUTING CORRECTED TOOL: {function_name}")
             
             # 🚨 LOG EXACT TOOL CALL AND ARGUMENTS
-            logger.info(f"🔧 CORRECTED TOOL CALL:\n{'='*80}\nFunction: {function_name}\nArguments: {json.dumps(function_args, indent=2)}\n{'='*80}")
+            truncated_function_args = truncate_base64_for_logging(json.dumps(function_args, indent=2))
+            logger.info(f"🔧 CORRECTED TOOL CALL:\n{'='*80}\nFunction: {function_name}\nArguments: {truncated_function_args}\n{'='*80}")
             
             # Execute the corrected tool
             result = await tool_manager.safe_function_call(function_name, function_args)
@@ -3617,7 +3659,16 @@ ALWAYS mark as BAD if you see:
 - Empty or truncated results from execution tools
 - "FileNotFoundError", "PermissionError", or other Python exceptions
 
-⚠️ DO NOT MARK AS GOOD IF ANY TOOL HAS ERRORS - EVEN IF OTHER TOOLS SUCCEEDED
+🎯 SMART SUCCESS DETECTION: Consider overall task completion even with partial tool failures.
+
+CRITICAL: If user requirements are fully met despite some tool errors, the task may still be SUCCESSFUL.
+
+Examples of ACCEPTABLE partial failures:
+- File read fails BUT cover letter has no placeholders AND email sent successfully = TASK SUCCESS
+- API call fails BUT alternative data source provides complete information = TASK SUCCESS  
+- One calculation errors BUT other calculations provide sufficient analysis = TASK SUCCESS
+
+⚠️ Mark as BAD only if FINAL OUTPUT fails to meet user requirements or contains errors/placeholders
 
 ERROR PATTERNS (when status is BAD) - Sprint 3.2 Enhanced:
 
@@ -5526,14 +5577,23 @@ async def llama_stream(request: Request):
                     # Call the tool calling model to get JSON function calls
                     # 🎯 NEW APPROACH: Let tool calling model orchestrate ALL tools, intercept email calls
                     # 🚫 SMART TOOL FILTERING: Exclude inappropriate tools for meta-tasks
-                    is_meta_task = any(meta_pattern in user_prompt.lower() for meta_pattern in [
+                    # 🔧 FIX: Only check the actual user prompt, NOT conversation context
+                    actual_user_prompt = messages[-1]['content'] if messages else data.get('prompt', '')
+                    is_meta_task = any(meta_pattern in actual_user_prompt.lower() for meta_pattern in [
                         'generate a concise', 'title with emoji', 'generate 1-3 broad tags', 
                         'summarizing the chat history', 'categorizing the main themes'
                     ])
                     
+                    # 🎯 DEBUG: Log meta-task detection for troubleshooting
+                    logger.error(f"🔧 DEBUG_MARKER: META-TASK CHECK REACHED - prompt: {actual_user_prompt[:100]}...")
                     if is_meta_task:
-                        # 🚀 META-TASK BYPASS: Skip tool calling entirely for title/tag generation
-                        logger.info("🚀 META-TASK BYPASS: Skipping tool calling for title/tag generation")
+                        logger.error(f"🚫 META-TASK DETECTED: Skipping tools for: {actual_user_prompt[:100]}...")
+                    else:
+                        logger.error(f"✅ NORMAL TASK: Will use tools for: {actual_user_prompt[:100]}...")
+                    
+                    if is_meta_task:
+                        # 🚀 META-TASK BYPASS: Skip tool calling entirely for title/tag generation (minimal logging)
+                        # Reduced logging to minimize meta-task spam in logs
                         tools_results = ""  # Empty tools results for meta-tasks
                         tools_called = []   # No tools called
                         tools_array = []   # Empty tools array to prevent UnboundLocalError
@@ -5667,15 +5727,32 @@ async def llama_stream(request: Request):
                                                 first_source = source_lines[0].replace('•', '').strip()
                                                 logger.info(f"📧 SMART DECISION: Using source file: {first_source}")
                                                 
-                                                # Construct full path based on filename
-                                                if 'SD_TheSongWithin' in first_source and 'html' in first_source:
-                                                    actual_file_path = '/var/www/html/silicon_dreams/stories/SD_TheSongWithin.html'
-                                                elif 'SD_TheSongWithin' in first_source and 'md' in first_source:
-                                                    actual_file_path = '/var/www/html/silicon_dreams/stories/SD_TheSongWithin.md'
-                                                elif 'Weight of Silence' in first_source:
-                                                    actual_file_path = '/home/sabawi/Documents/The Weight of Silence.pdf'
-                                                else:
-                                                    actual_file_path = first_source
+                                                # 🔧 CRITICAL FIX: Extract full file path from document_search output
+                                                actual_file_path = first_source  # Default fallback
+                                                
+                                                # Look for "📎 Full File Paths (for attachments):" section
+                                                full_paths_match = re.search(r'📎 Full File Paths \(for attachments\):(.*?)(?=\n\n|\nTool:|$)', document_search_result_str, re.DOTALL)
+                                                if full_paths_match:
+                                                    paths_text = full_paths_match.group(1)
+                                                    path_lines = [line.strip() for line in paths_text.split('\n') if line.strip().startswith('•')]
+                                                    
+                                                    # Find path that matches the requested file format
+                                                    for path_line in path_lines:
+                                                        full_path = path_line.replace('•', '').strip()
+                                                        if first_source in full_path:
+                                                            actual_file_path = full_path
+                                                            logger.info(f"📧 SMART DECISION: Found matching full path: {actual_file_path}")
+                                                            break
+                                                    
+                                                    # If no exact match, use first available path with same extension
+                                                    if actual_file_path == first_source and path_lines:
+                                                        if '.html' in first_source:
+                                                            for path_line in path_lines:
+                                                                full_path = path_line.replace('•', '').strip()
+                                                                if '.html' in full_path:
+                                                                    actual_file_path = full_path
+                                                                    logger.info(f"📧 SMART DECISION: Using HTML path: {actual_file_path}")
+                                                                    break
                                                 
                                                 logger.info(f"📧 SMART DECISION: Using full path: {actual_file_path}")
                                                 email_args['attachments'] = actual_file_path
@@ -5915,12 +5992,18 @@ async def llama_stream(request: Request):
                                         
                                         logger.info(f"   TOOL {i+1}: {function_name}{args_summary}: {result_size} chars")
                                     
-                                    tools_results_list.append(f"Tool: {function_name}\nResult: {result}\n\n")
+                                    # Store FULL result for tools_results_list (needed for image extraction)
+                                    full_result = str(result)
+                                    tools_results_list.append(f"Tool: {function_name}\nResult: {full_result}\n\n")
+                                    
+                                    # Only truncate for logging display
+                                    truncated_result = truncate_base64_for_logging(full_result)
                             
                             else:
                                 # No tool calls generated - check if we should force data gathering
                                 logger.info("❌ No tool calls generated by the tool calling model")
-                                logger.info(f"Raw LLM Manager response: {json.dumps(response_data, indent=2)}")
+                                truncated_response_data = truncate_base64_for_logging(json.dumps(response_data, indent=2))
+                                logger.info(f"Raw LLM Manager response: {truncated_response_data}")
                                 
                                 # 🔥 PROGRAMMATIC TOOL CALL INJECTION 🔥
                                 # If the model refuses to call tools for file/email requests, force data gathering
@@ -5984,7 +6067,12 @@ async def llama_stream(request: Request):
                                         end_time = time.time()
                                         execution_time = end_time - start_time
                                         logger.info(f"🔧 FORCED Tool {function_name}: COMPLETE | {execution_time:.2f}s | Result: {len(str(result))} chars")
-                                        tools_results_list.append(f"Tool: {function_name}\nResult: {result}\n\n")
+                                        # Store FULL result for tools_results_list (needed for image extraction)
+                                        full_result = str(result)
+                                        tools_results_list.append(f"Tool: {function_name}\nResult: {full_result}\n\n")
+                                        
+                                        # Only truncate for logging display
+                                        truncated_result = truncate_base64_for_logging(full_result)
                         
                         else:
                             logger.error(f"❌ Tool calling model failed - no response data returned")
@@ -6152,7 +6240,8 @@ Generate the corrected tool calls:"""
                 if corrected_tools_results is not None:
                     logger.info(f"🔍 DEBUG: BEFORE applying corrected results - tools_results length: {len(tools_results)}")
                     logger.info(f"🔍 DEBUG: Corrected results length: {len(corrected_tools_results)}")
-                    logger.info(f"🔍 DEBUG: Corrected results preview: {corrected_tools_results[:200]}...")
+                    truncated_corrected_results = truncate_base64_for_logging(corrected_tools_results[:200] + "...")
+                    logger.info(f"🔍 DEBUG: Corrected results preview: {truncated_corrected_results}")
                     
                     tools_results = corrected_tools_results
                     
@@ -6266,7 +6355,9 @@ Generate the corrected tool calls:"""
                 logger.warning(f"🚨 tools_results is EMPTY - Primary LLM will have no tool context!")
             max_context_window = 65536  # 64k bytes
             max_context_tokens = max_context_window / 4  # estimating 4 bytes per token
-            full_tools_text = (prompt_context or "") + ".\n" + tools_results
+            # Truncate base64 data before sending to LLM context to prevent streaming back
+            truncated_tools_results = truncate_base64_for_logging(tools_results)
+            full_tools_text = (prompt_context or "") + ".\n" + truncated_tools_results
             
             # 🚨 CRITICAL: Parse tools_results AFTER Arbitrator corrections are applied
             # (Moved after line 5438 to ensure corrected results are used)
@@ -6364,8 +6455,24 @@ END OF CONTEXT
 
 """)
             
+            # 🖼️ PRE-LLM CONTEXT CLEANING: Remove base64 images from tools_results_summary before sending to LLM
+            cleaned_tools_results_summary = tools_results_summary
+            if tools_results and "analytical_visualizer" in tools_results:
+                logger.info(f"🧹 PRE-LLM CONTEXT CLEANING: Removing base64 image data from tools_results_summary before LLM processing")
+                
+                # Find and remove base64 image data using the same pattern as injection
+                import re
+                img_pattern = r'<img src="(data:image/png;base64,[^"]+)"[^>]*>'
+                img_match = re.search(img_pattern, cleaned_tools_results_summary)
+                
+                if img_match:
+                    # Replace the entire <img> tag with a simple text reference
+                    cleaned_tools_results_summary = re.sub(img_pattern, '**[Visualization has been generated and displayed above as HTML]**', cleaned_tools_results_summary)
+                    logger.info(f"✅ PRE-LLM CONTEXT CLEANING: Replaced {len(img_match.group(1))} chars of base64 data with text reference")
+                    logger.info(f"📊 CONTEXT SIZE REDUCTION: {len(tools_results_summary)} → {len(cleaned_tools_results_summary)} chars ({len(tools_results_summary) - len(cleaned_tools_results_summary)} chars removed)")
+            
             # 🎯 NEW ARCHITECTURE: Build structured CONTEXT block and user system prompt
-            context_block = _build_structured_context_block(tools_results_summary, tools_called)
+            context_block = _build_structured_context_block(cleaned_tools_results_summary, tools_called)
             
             # User-provided system prompt takes precedence
             user_system_prompt = data.get('system', '').strip()
@@ -6378,7 +6485,7 @@ END OF CONTEXT
                 enhanced_system = _build_enhanced_primary_system_prompt(
                     user_system_prompt, 
                     tools_were_executed=(len(tools_results.strip()) > 0),
-                    tools_results_summary=tools_results_summary
+                    tools_results_summary=cleaned_tools_results_summary
                 )
                 logger.info(f"📋 Using DEFAULT enhanced system prompt ({len(enhanced_system)} chars)")
             
@@ -6399,13 +6506,13 @@ END OF CONTEXT
                     # Reconstruct optimized prompt
                     optimized_prompt = f"{task_instruction}\n<chat_history>\n{chat_content}\n</chat_history>"
                     in_prompt = f"PROMPT: {optimized_prompt}"
-                    logger.info(f"🚀 META-TASK OPTIMIZED: Reduced prompt from {len(user_prompt)} to {len(optimized_prompt)} chars")
+                    # Reduced meta-task logging: logger.info(f"🚀 META-TASK OPTIMIZED: Reduced prompt from {len(user_prompt)} to {len(optimized_prompt)} chars")
                 else:
                     # Fallback: just truncate to reasonable size
                     if len(user_prompt) > 2000:
                         truncated = user_prompt[:1000] + "...[truncated]..." + user_prompt[-500:]
                         in_prompt = f"PROMPT: {truncated}"
-                        logger.info(f"🚀 META-TASK OPTIMIZED: Reduced prompt from {len(user_prompt)} to {len(truncated)} chars")
+                        # Reduced meta-task logging: logger.info(f"🚀 META-TASK OPTIMIZED: Reduced prompt from {len(user_prompt)} to {len(truncated)} chars")
                     else:
                         in_prompt = f"PROMPT: {user_prompt}"
             else:
@@ -6444,16 +6551,130 @@ END OF CONTEXT
                 # 🔍 DEBUG: DUMP COMPLETE PRIMARY LLM INPUT - This is what gets sent to Primary LLM
                 logger.info(f"🔍 DEBUG: ========== PRIMARY LLM PAYLOAD DUMP ==========")
                 logger.info(f"🔍 DEBUG: tools_results variable content ({len(tools_results)} chars):")
-                logger.info(f"🔍 DEBUG: tools_results = '{tools_results}'")
+                truncated_tools_results = truncate_base64_for_logging(tools_results)
+                logger.info(f"🔍 DEBUG: tools_results = '{truncated_tools_results}'")
                 logger.info(f"🔍 DEBUG: =====================================")
                 logger.info(f"🔍 DEBUG: context_block content ({len(context_block)} chars):")
-                logger.info(f"🔍 DEBUG: context_block = '{context_block}'")
+                truncated_context_block = truncate_base64_for_logging(context_block)
+                logger.info(f"🔍 DEBUG: context_block = '{truncated_context_block}'")
                 logger.info(f"🔍 DEBUG: =====================================")
                 logger.info(f"🔍 DEBUG: FULL in_prompt content ({len(in_prompt)} chars):")
-                logger.info(f"🔍 DEBUG: in_prompt = '{in_prompt}'")
+                truncated_in_prompt = truncate_base64_for_logging(in_prompt)
+                logger.info(f"🔍 DEBUG: in_prompt = '{truncated_in_prompt}'")
                 logger.info(f"🔍 DEBUG: ========== END PRIMARY LLM PAYLOAD DUMP ==========")
                 
                 llm_start_time = time.time()
+                
+                # 🎯 PRE-LLM IMAGE INJECTION: Check if analytical_visualizer was executed
+                if tools_results and "analytical_visualizer" in tools_results:
+                    logger.info(f"🖼️ PRE-LLM IMAGE INJECTION: Analytical visualizer detected in tools_results")
+                    
+                    # Extract base64 image data from tools_results
+                    import re
+                    img_pattern = r'<img src="(data:image/png;base64,[^"]+)"[^>]*>'
+                    img_match = re.search(img_pattern, tools_results)
+                    
+                    if img_match:
+                        base64_data_url = img_match.group(1)
+                        logger.info(f"📊 IMAGE FOUND: Creating HTML5 Canvas with {len(base64_data_url)} chars of base64 data")
+                        
+                        # Create unique canvas ID
+                        canvas_id = f"viz_canvas_{int(time.time())}"
+                        
+                        # Create complete HTML page that LibreChat can execute
+                        canvas_html = f'''```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytical Visualization</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }}
+        .container {{
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }}
+        .visualization {{
+            max-width: 100%;
+            height: auto;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin: 20px 0;
+        }}
+        h1 {{
+            color: #333;
+            margin-bottom: 20px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Analytical Visualization</h1>
+        <img src="{base64_data_url}" class="visualization" alt="Generated Analytical Visualization">
+    </div>
+</body>
+</html>
+```'''
+                        
+                        # 🔄 CHUNKED STREAMING: Break large HTML into manageable chunks  
+                        # Ensure proper separation between HTML injection and LLM output
+                        full_content = f'{canvas_html}\n\n'
+                        chunk_size = 8192  # 8KB chunks for safe transmission
+                        logger.info(f"📦 CHUNKED STREAMING: Breaking {len(full_content)} chars into {chunk_size} byte chunks")
+                        
+                        # Split content into chunks
+                        for i in range(0, len(full_content), chunk_size):
+                            chunk_content = full_content[i:i+chunk_size]
+                            
+                            image_chunk = {
+                                "id": f"chatcmpl-{int(time.time())}",
+                                "object": "chat.completion.chunk",
+                                "created": int(time.time()),
+                                "model": stream_payload.get("model", "default"),
+                                "choices": [{
+                                    "index": 0,
+                                    "delta": {
+                                        "content": chunk_content
+                                    },
+                                    "finish_reason": None
+                                }]
+                            }
+                            
+                            yield f'data: {json.dumps(image_chunk)}\n\n'
+                            logger.info(f"📦 CHUNK {i//chunk_size + 1}: Sent {len(chunk_content)} chars")
+                        
+                        # 📋 SEPARATOR CHUNK: Ensure clean boundary between HTML and LLM output
+                        separator_chunk = {
+                            "id": f"chatcmpl-{int(time.time())}",
+                            "object": "chat.completion.chunk", 
+                            "created": int(time.time()),
+                            "model": stream_payload.get("model", "default"),
+                            "choices": [{
+                                "index": 0,
+                                "delta": {
+                                    "content": "\n---\n\n"
+                                },
+                                "finish_reason": None
+                            }]
+                        }
+                        yield f'data: {json.dumps(separator_chunk)}\n\n'
+                        
+                        total_chunks = (len(full_content) + chunk_size - 1) // chunk_size
+                        logger.info(f"✅ PRE-LLM IMAGE INJECTION: Successfully streamed {len(full_content)} chars in {total_chunks} chunks with separator")
+                    else:
+                        logger.info(f"⚠️ PRE-LLM IMAGE INJECTION: No base64 image found in analytical_visualizer result")
+                
                 # LLM input ready
                 
                 async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=None) as response:
@@ -7046,7 +7267,8 @@ async def openai_models():
         logger.info(f"🔍 Models being returned:")
         for i, model in enumerate(response_data['data']):
             logger.info(f"🔍   Model {i+1}: {model['id']} (created: {model['created']}, owned_by: {model['owned_by']})")
-        logger.info(f"🔍 Full response: {json.dumps(response_data, indent=2)}")
+        truncated_full_response = truncate_base64_for_logging(json.dumps(response_data, indent=2))
+        logger.info(f"🔍 Full response: {truncated_full_response}")
         
         return response_data
         
@@ -7195,24 +7417,34 @@ async def openai_direct_stream(native_request_data: dict, model: str):
     """
     Option 2: Direct function calls to internal llama_stream (Faster, no HTTP overhead)
     Respects Prime Directive: Does not modify core server code
+    FIXED: Properly handles StreamingResponse from llama_stream
     """
     try:
         logger.info(f"🎯 Direct streaming: Calling internal llama_stream function")
+        logger.error(f"🔧 DIRECT_STREAM DEBUG: Received native_request_data: {native_request_data}")
+        logger.error(f"🔧 DIRECT_STREAM DEBUG: model: {model}")
         
         # Create mock request object for llama_stream (following Prime Directive)
         class MockRequest:
             def __init__(self, data):
                 self._data = data
             async def json(self):
+                logger.info(f"🔧 MockRequest.json() called with data: {self._data}")
                 return self._data
         
         mock_request = MockRequest(native_request_data)
+        logger.info(f"🔧 Native request data being passed: {native_request_data}")
+        
+        # 🔧 CRITICAL DEBUG: Compare with working native format
+        logger.info(f"🔧 COMPARISON - This should match working native requests")
+        logger.error(f"🔧 DIAGNOSTIC: OpenAI endpoint calling llama_stream with toolsInUse={native_request_data.get('toolsInUse')}")
         
         # Call the native llama_stream function directly
         internal_response = await llama_stream(mock_request)
         
-        # Process the streaming response
+        # 🔧 FIX: Properly handle StreamingResponse object with HTML injection support
         if hasattr(internal_response, 'body_iterator'):
+            logger.info("🔧 Processing StreamingResponse body_iterator")
             async for chunk_data in internal_response.body_iterator:
                 # Handle both bytes and string chunks
                 if isinstance(chunk_data, bytes):
@@ -7220,14 +7452,49 @@ async def openai_direct_stream(native_request_data: dict, model: str):
                 else:
                     raw_content = str(chunk_data)
                 
-                # Parse JSON response and extract "response" field
+                logger.debug(f"🔧 Raw chunk: {raw_content[:100]}...")
+                
+                # Check if this is already an OpenAI-format chunk (from HTML injection)
+                if raw_content.startswith('data: '):
+                    logger.debug("🔧 Detected OpenAI-format chunk (HTML injection), passing through")
+                    yield raw_content
+                    continue
+                
+                # Check if this is HTML content (direct HTML injection)
+                if raw_content.startswith('<!DOCTYPE html>') or raw_content.startswith('<html'):
+                    logger.debug("🔧 Detected HTML content, wrapping in OpenAI format")
+                    content_chunk = {
+                        "id": f"chatcmpl-{int(time.time())}",
+                        "object": "chat.completion.chunk", 
+                        "created": int(time.time()),
+                        "model": model,
+                        "choices": [{"index": 0, "delta": {"content": raw_content}, "finish_reason": None}]
+                    }
+                    yield f"data: {json.dumps(content_chunk)}\n\n"
+                    continue
+                
+                # Try to parse as JSON (regular Ollama response format)
                 if raw_content.strip():
                     try:
                         # Try to parse as JSON
                         native_json = json.loads(raw_content.strip())
+                        logger.debug(f"🔧 Parsed JSON: {native_json}")
                         
                         # Check if stream should end
-                        if native_json.get("done", False) or native_json.get("finished", False):
+                        if native_json.get("done", False):
+                            logger.info("🏁 Stream completion detected")
+                            # If there's still response content in the final chunk, send it first
+                            if "response" in native_json and native_json["response"]:
+                                content_chunk = {
+                                    "id": f"chatcmpl-{int(time.time())}",
+                                    "object": "chat.completion.chunk", 
+                                    "created": int(time.time()),
+                                    "model": model,
+                                    "choices": [{"index": 0, "delta": {"content": native_json["response"]}, "finish_reason": None}]
+                                }
+                                yield f"data: {json.dumps(content_chunk)}\n\n"
+                            
+                            # Send completion signal - but don't include metadata like context, created_at etc
                             final_chunk = {
                                 "id": f"chatcmpl-{int(time.time())}",
                                 "object": "chat.completion.chunk",
@@ -7248,20 +7515,54 @@ async def openai_direct_stream(native_request_data: dict, model: str):
                                 "model": model,
                                 "choices": [{"index": 0, "delta": {"content": native_json["response"]}, "finish_reason": None}]
                             }
+                            logger.debug(f"🔧 Sending content chunk: {native_json['response'][:50]}...")
                             yield f"data: {json.dumps(content_chunk)}\n\n"
-                    except json.JSONDecodeError:
-                        # Skip invalid JSON
-                        continue
+                    except json.JSONDecodeError as json_err:
+                        logger.debug(f"🔧 Not JSON, treating as raw content: {raw_content[:50]}...")
+                        # Filter out unwanted content - don't send metadata or empty responses
+                        if raw_content.strip() and not raw_content.startswith('{"model":'):
+                            # Skip content that looks like Ollama metadata or context tokens
+                            metadata_indicators = [
+                                "created_at", "total_duration", "load_duration", 
+                                "prompt_eval_count", "eval_count", "context", 
+                                "done_reason", "eval_duration"
+                            ]
+                            if any(metadata_key in raw_content for metadata_key in metadata_indicators):
+                                logger.debug("🔧 Skipping metadata content")
+                                continue
+                            
+                            # Skip content that looks like raw token arrays (numbers separated by commas)
+                            if raw_content.strip().startswith('[') or raw_content.replace(',', '').replace(' ', '').isdigit():
+                                logger.debug("🔧 Skipping token array content")
+                                continue
+                            
+                            # Skip content that is mostly numbers and commas (context tokens)
+                            numeric_chars = sum(1 for c in raw_content if c.isdigit() or c in [',', ' ', '\n'])
+                            if len(raw_content) > 50 and numeric_chars / len(raw_content) > 0.8:
+                                logger.debug("🔧 Skipping numeric token content")
+                                continue
+                            
+                            content_chunk = {
+                                "id": f"chatcmpl-{int(time.time())}",
+                                "object": "chat.completion.chunk", 
+                                "created": int(time.time()),
+                                "model": model,
+                                "choices": [{"index": 0, "delta": {"content": raw_content}, "finish_reason": None}]
+                            }
+                            yield f"data: {json.dumps(content_chunk)}\n\n"
         else:
             logger.error("🚨 Internal response missing body_iterator")
+            logger.error(f"🚨 Response type: {type(internal_response)}")
+            logger.error(f"🚨 Response attributes: {dir(internal_response)}")
     except Exception as e:
         logger.error(f"🚨 Direct streaming error: {str(e)}")
+        logger.error(f"🚨 Error traceback: {traceback.format_exc()}")
         error_chunk = {
             "id": f"chatcmpl-{int(time.time())}",
             "object": "chat.completion.chunk",
             "created": int(time.time()),
             "model": model,
-            "choices": [{"index": 0, "delta": {"content": "Error processing request"}, "finish_reason": None}]
+            "choices": [{"index": 0, "delta": {"content": f"Error processing request: {str(e)}"}, "finish_reason": None}]
         }
         yield f"data: {json.dumps(error_chunk)}\n\n"
 
@@ -7302,6 +7603,9 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
             # Choose routing method based on feature flag
             if ServerConfig.USE_DIRECT_FUNCTION_CALLS:
                 logger.info(f"🔀 Using DIRECT function calls (faster, no HTTP overhead)")
+                logger.error(f"🔧 HTTP DEBUG: About to call openai_direct_stream with native_request_data: {native_request_data}")
+                logger.error(f"🔧 HTTP DEBUG: model parameter: {model}")
+                logger.error(f"🔧 HTTP DEBUG: user_prompt: {user_prompt[:100]}...")
                 # Option 2: Direct function calls - More efficient
                 async for chunk_data in openai_direct_stream(native_request_data, model):
                     yield chunk_data

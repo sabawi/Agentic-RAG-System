@@ -964,8 +964,8 @@ This is a secure sandboxed environment for code execution and system commands.
             # Create parent directories if needed
             Path(file_path).parent.mkdir(parents=True, exist_ok=True)
             
-            # Extract title from content or use filename
-            title = "Generated Report"
+            # Extract title from content or use filename  
+            title = Path(filename).stem if filename else "Report"
             if content:
                 lines = content.split('\n')
                 for line in lines[:5]:  # Check first 5 lines for title
@@ -1193,7 +1193,7 @@ This is a secure sandboxed environment for code execution and system commands.
             else:
                 print("🔧 AUTO-HTML: Content needs HTML conversion, formatting as HTML")
                 # Extract title from content
-                title = "Generated Report"
+                title = Path(filename).stem if filename else "Report"
                 if content:
                     lines = content.split('\n')
                     for line in lines[:5]:  # Check first 5 lines for title
@@ -1679,7 +1679,7 @@ if __name__ == "__main__":
                 content=formatted_content,
                 title=title,
                 header_title=title,
-                header_subtitle="Generated Report",
+                header_subtitle="",
                 include_disclaimer=False  # Don't include financial disclaimer for general content
             )
             
@@ -1831,7 +1831,7 @@ if __name__ == "__main__":
 </head>
 <body>
     <h1>{title}</h1>
-    <div class="timestamp">Generated on {timestamp}</div>
+    <div class="timestamp">{timestamp}</div>
     <div class="content">
 {body}
     </div>
@@ -1912,7 +1912,7 @@ if __name__ == "__main__":
         if any('report' in line.lower() or 'analysis' in line.lower() for line in lines[:3]):
             formatted_lines.extend([
                 '---',
-                f'title: Generated Report',
+                f'title: {title}',
                 f'date: {datetime.now().strftime("%Y-%m-%d")}',
                 f'generated: {datetime.now().isoformat()}',
                 '---',

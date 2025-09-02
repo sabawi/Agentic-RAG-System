@@ -154,6 +154,20 @@ class DocumentSearchTool(BaseUserTool):
                     *[f"• {doc}" for doc in sorted(unique_docs)]
                 ])
             
+            # 🔧 CRITICAL FIX: Add full file paths for email attachment system
+            unique_paths = set()
+            for chunk in chunks:
+                doc_path = chunk.get('document_path', 'Unknown')
+                if doc_path != 'Unknown':
+                    unique_paths.add(doc_path)
+            
+            if unique_paths:
+                result_parts.extend([
+                    "",
+                    "📎 Full File Paths (for attachments):",
+                    *[f"• {path}" for path in sorted(unique_paths)]
+                ])
+            
             return {
                 "success": True,
                 "result": "\n".join(result_parts),

@@ -1084,7 +1084,17 @@ class SecureEmailSenderTool(BaseUserTool):
                     self._cleanup_generated_files(attachment_paths)
                     
                     recipients = [to_email] + cc_emails + bcc_emails
-                    message = f"✅ Email sent successfully via sendmail to {len(recipients)} recipient(s)"
+                    # 📧 DETAILED EMAIL LOG: Show full email details for debugging
+                    attachment_summary = []
+                    if attachment_paths:
+                        for path in attachment_paths:
+                            if os.path.exists(path):
+                                size = os.path.getsize(path)
+                                attachment_summary.append(f"{path} ({size}B)")
+                            else:
+                                attachment_summary.append(f"{path} (NOT FOUND)")
+                    
+                    message = f"✅ Email sent successfully via sendmail\n📧 TO: {to_email}\n📧 SUBJECT: {subject}\n📧 BODY: {body[:100]}...\n📎 ATTACHMENTS: {attachment_summary if attachment_summary else 'None'}\n📊 RECIPIENTS: {len(recipients)}"
                     return {"success": True, "result": message, "error": None}
                 else:
                     return {"success": False, "error": "Failed to send email via sendmail", "result": None}
@@ -1111,7 +1121,17 @@ class SecureEmailSenderTool(BaseUserTool):
                         self._cleanup_generated_files(attachment_paths)
                         
                         recipients = [to_email] + cc_emails + bcc_emails
-                        message = f"✅ Email sent successfully via sendmail (fallback) to {len(recipients)} recipient(s)"
+                        # 📧 DETAILED EMAIL LOG: Show full email details for debugging
+                        attachment_summary = []
+                        if attachment_paths:
+                            for path in attachment_paths:
+                                if os.path.exists(path):
+                                    size = os.path.getsize(path)
+                                    attachment_summary.append(f"{path} ({size}B)")
+                                else:
+                                    attachment_summary.append(f"{path} (NOT FOUND)")
+                        
+                        message = f"✅ Email sent successfully via sendmail (fallback)\n📧 TO: {to_email}\n📧 SUBJECT: {subject}\n📧 BODY: {body[:100]}...\n📎 ATTACHMENTS: {attachment_summary if attachment_summary else 'None'}\n📊 RECIPIENTS: {len(recipients)}"
                         return {"success": True, "result": message, "error": None}
                     else:
                         return {"success": False, "error": f"No sender email configured for provider: {provider} and sendmail fallback failed", "result": None}

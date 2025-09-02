@@ -71,6 +71,14 @@ I MUST ASK: **"SECURITY SCAN COMPLETE - APPROVE COMMIT? (YES/NO)"**
 - [ ] Email/file generation workflow will be preserved
 - [ ] All existing functionality will be preserved
 
+📚 LESSONS LEARNED COMPLIANCE:
+- [ ] Reviewed comprehensive lessons from File Path Mapping Bug Fix
+- [ ] Completed LESSONS LEARNED COMPLIANCE VERIFICATION checklist
+- [ ] Applied design principles for extensible tool outputs
+- [ ] Verified variable scope and defensive programming approach
+- [ ] Planned end-to-end testing strategy (not just unit tests)
+- [ ] Designed additive-only changes with fallback logic
+
 📋 I SWEAR TO UPHOLD THESE DIRECTIVES BEFORE PROCEEDING
 ```
 
@@ -1095,6 +1103,151 @@ This performance breakthrough maintains the core Agentic-RAG architecture while 
 
 This optimization demonstrates how systematic debugging, targeted fixes, and thorough testing can deliver dramatic performance improvements while preserving system functionality.
 
+## 📚 MANDATORY DEVELOPMENT REVIEW: Critical Lessons Learned
+
+### **🎯 COMPREHENSIVE LESSONS FROM FILE PATH MAPPING BUG FIX**
+
+**MANDATORY FOR ALL MAJOR FEATURES AND BUG FIXES - NO EXCEPTIONS**
+
+These lessons must be reviewed before ANY major development work:
+
+#### **🏗️ FUNDAMENTAL DESIGN PRINCIPLES**
+
+**1) Design Decisions Must Consider Extensible Future Use**
+- **Lesson**: Tool outputs should return ALL necessary data for future downstream systems
+- **Application**: Tools must provide both user-friendly summaries AND machine-readable data
+- **Rule**: Always ask "What might other systems need from this tool's output?"
+
+**2) Arbitrator System Prompts Must Be Flexible and External**
+- **Critical**: Configuration hardcoded in code creates inflexible systems
+- **Solution**: Move all prompts, rules, and configurations to external files (e.g., `config/arbitrator_system_prompt.txt`)
+- **Rule**: All behavioral instructions must be hot-reloadable without code changes
+
+**3) Tool Output Should Be Self-Contained for Downstream Systems**
+- **Lesson**: Tools should return ALL necessary data for subsequent operations, not just human-readable summaries
+- **Applied**: document_search now returns both user-friendly sources AND full file paths for attachment systems
+- **Rule**: Every tool should consider what downstream systems might need from its output
+
+**4) Separation of Concerns in System Architecture**
+- **Lesson**: Search logic, file resolution, and email attachment should be loosely coupled
+- **Applied**: document_search provides data, SMART DECISION processes it, email system uses it
+- **Rule**: Avoid tight coupling between tool outputs and specific use cases
+
+#### **🔧 CRITICAL IMPLEMENTATION PRACTICES**
+
+**5) Variable Scoping Must Be Verified in Context**
+- **Fatal Pitfall**: Used `search_result` variable that didn't exist in scope (should have been `document_search_result_str`)
+- **Lesson**: Always verify variable names exist in the actual execution context, not assumed context
+- **Rule**: Use IDE/linting tools to catch undefined variable references before deployment
+
+**6) Regex Pattern Matching Requires Defensive Programming**
+- **Applied**: Used robust regex with fallback logic: exact match → extension match → first available
+- **Rule**: Always include fallback strategies for pattern matching failures
+
+**7) Server Restarts Are Mandatory for Python Module Changes**
+- **Critical**: Python module caching means code changes don't take effect without restart
+- **Rule**: Always restart server after modifying .py files, never assume changes are live
+
+#### **🧪 DEBUGGING METHODOLOGY REQUIREMENTS**
+
+**8) End-to-End Testing Beats Theoretical Fixes**
+- **Pitfall**: Assuming fixes work without full workflow testing
+- **Lesson**: Always test complete user journey: search → file resolution → email → attachment verification
+- **Rule**: Implement automated end-to-end test cases for critical workflows
+
+**9) Log-Driven Debugging Is Essential**
+- **Applied**: Used specific log messages like "📧 SMART DECISION:" to trace execution flow
+- **Rule**: Every critical code path should have distinctive log messages for debugging
+
+**10) User Interruption Often Reveals Overcomplicated Solutions**
+- **Quote**: "you were over complicating the issue" - user correctly identified simple root cause
+- **Lesson**: Step back and look for simple, direct solutions before complex architectures
+- **Rule**: Always ask "What's the simplest way to solve this?" first
+
+#### **🏗️ ARCHITECTURAL REQUIREMENTS**
+
+**11) Configuration Files Should Be External and Hot-Reloadable**
+- **Applied**: `config/arbitrator_system_prompt.txt` approach should be standard for all configurations
+- **Rule**: Never hardcode behavioral logic in source code
+
+**12) Tool Integration Points Need Standardized Data Formats**
+- **Applied**: "📎 Full File Paths (for attachments):" provides standardized section for file references
+- **Rule**: Define standard output formats for common data types (files, URLs, emails, etc.)
+
+#### **🛡️ PRODUCTION SAFETY MANDATES**
+
+**13) Fragile Systems Require Additive-Only Changes**
+- **Success**: Enhanced document_search without breaking existing functionality
+- **Applied**: Added new sections while preserving original output format
+- **Rule**: Always prefer additive changes over modifications to working systems
+
+**14) Smart Fallback Logic Prevents Single Points of Failure**
+- **Applied**: SMART DECISION has multiple fallback strategies for file path resolution
+- **Rule**: Every critical path should have graceful degradation options
+
+#### **📋 DEVELOPMENT WORKFLOW REQUIREMENTS**
+
+**15) Complex Fixes Require Phased Implementation**
+- **Applied**: Part 1 (enhance tool) → Part 2 (update arbitrator) → Part 3 (fix SMART DECISION)
+- **Rule**: Break complex fixes into testable phases rather than monolithic changes
+
+**16) Cross-System Dependencies Must Be Mapped**
+- **Discovery**: document_search → arbitrator → SMART DECISION → email system dependency chain
+- **Rule**: Document all system interdependencies before making changes
+
+#### **🎯 PREVENTIVE MEASURES - MANDATORY**
+
+**17) Integration Testing Should Cover Edge Cases**
+- **Missing**: No automated test for "find document + email attachment" workflow
+- **Rule**: Create integration tests for all tool combinations that interact
+
+**18) Code Review Should Focus on Variable Scope and Context**
+- **Miss**: Variable name error (`search_result` vs `document_search_result_str`) could have been caught
+- **Rule**: Systematic review of variable references in complex nested code
+
+### **⚡ MANDATORY PRE-DEVELOPMENT CHECKLIST**
+
+**BEFORE ANY MAJOR FEATURE OR BUG FIX, EXPLICITLY VERIFY:**
+
+```
+🔒 LESSONS LEARNED COMPLIANCE VERIFICATION
+=========================================
+
+📋 DESIGN REVIEW:
+- [ ] Considered extensible tool output for future systems
+- [ ] Identified configuration that should be external
+- [ ] Planned self-contained tool outputs
+- [ ] Designed loose coupling between components
+
+🔧 IMPLEMENTATION REVIEW:
+- [ ] Variable scope verified in actual context
+- [ ] Defensive programming with fallbacks planned
+- [ ] Server restart procedure documented
+
+🧪 TESTING STRATEGY:
+- [ ] End-to-end testing planned (not just unit tests)
+- [ ] Log-driven debugging messages designed
+- [ ] Simple solution considered before complex architecture
+
+🛡️ SAFETY MEASURES:
+- [ ] Additive-only changes where possible
+- [ ] Fallback logic for critical paths
+- [ ] Cross-system dependencies mapped
+- [ ] Integration tests planned for tool interactions
+
+📋 I SWEAR TO APPLY THESE LESSONS TO THIS DEVELOPMENT TASK
+```
+
+### **💀 VIOLATION CONSEQUENCES**
+
+**If these lessons are not applied:**
+- **Bug Recurrence**: Same classes of bugs will reoccur
+- **System Fragility**: Fragile integrations will break frequently  
+- **Development Inefficiency**: Repeated debugging cycles
+- **Production Incidents**: Critical workflow failures
+
+**THIS REVIEW IS MANDATORY - NO EXCEPTIONS**
+
 ## 🚨 MANDATORY CONFIGURATION MANAGEMENT DIRECTIVES
 
 ### **🔒 CRITICAL RULE: NO MANUAL CONFIG EDITS**
@@ -1175,3 +1328,28 @@ The August 25 infinite loop was caused by:
 - [ ] No ad-hoc manual modifications committed
 
 **FAILURE TO FOLLOW THESE DIRECTIVES IS A CRITICAL SYSTEM VIOLATION.**
+
+---
+
+## 📝 Recent Development Updates
+
+### 2025-01-02: LLM-Driven Visualization System Enhancement (EXPERIMENTAL)
+
+**Changes Made:**
+- Enhanced `analytical_visualizer.py` with LLM-driven code generation using GPT-4o-mini
+- Updated tool calling system prompts to better recognize visualization modification requests
+- Added debug markers for troubleshooting follow-up request routing issues
+- Removed hardcoded chart pattern matching in favor of dynamic approach
+
+**Status:** 
+- ✅ Direct tool testing shows successful chart generation
+- ⚠️ Follow-up request routing through OpenAI compatibility layer requires further investigation
+- 🧪 Extensive testing still needed before considering production-ready
+
+**Key Files Modified:**
+- `user_tools/analytical_visualizer.py` - Complete LLM-driven rewrite
+- `user_tools/analytical_visualizer_tool.py` - Updated wrapper for new architecture
+- `pre_tool_model_system_prompt.txt` - Enhanced visualization trigger detection
+- `fastapi_server_complete.py` - Debug markers and meta-task detection fixes
+
+**Note:** This is experimental work. More comprehensive testing needed to validate reliability across all use cases. The system shows promise for scientific visualization generation but requires additional refinement for production deployment.

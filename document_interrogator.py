@@ -99,7 +99,7 @@ MAX_SERVICE_RESTART_ATTEMPTS = 3  # Maximum service restart attempts
 DEFAULT_BATCH_SIZE = 25  # Default embedding batch size
 DEFAULT_CHUNK_SIZE = 1000  # Characters per document chunk
 DEFAULT_SEARCH_RESULTS = 5  # Default number of search results
-MAX_FILES_PER_DIRECTORY_SCAN = 5  # Safety limit for directory processing
+MAX_FILES_PER_DIRECTORY_SCAN = None  # No limit - process ALL files in directory
 MAX_FILES_PER_TOTAL_SCAN = 100  # Total safety limit for scanning
 SCAN_PROGRESS_LOG_INTERVAL = 10  # Log progress every N files
 
@@ -1564,7 +1564,7 @@ class DocumentInterrogator:
                                 total_files_processed += 1
                                 dir_files_processed += 1
                                 
-                                if dir_files_processed >= MAX_FILES_PER_DIRECTORY_SCAN:  # Limit per directory
+                                if MAX_FILES_PER_DIRECTORY_SCAN is not None and dir_files_processed >= MAX_FILES_PER_DIRECTORY_SCAN:  # Limit per directory
                                     logger.info(f"📈 Directory {dir_idx+1}: processed {dir_files_processed} files, moving to next directory")
                                     break
                             else:
