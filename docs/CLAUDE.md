@@ -109,6 +109,31 @@ I MUST ASK: **"FILE TRACKING AUDIT COMPLETE - APPROVE CHANGES? (YES/NO)"**
 
 ---
 
+## 🔥 IRONCLAD DEVELOPMENT RULES INTEGRATION 🔥
+
+**⚡ MANDATORY: ALL development must follow the comprehensive rules in:**
+- `docs/IRONCLAD_DEVELOPMENT_RULES.md` - Complete development standards
+- `docs/DEVELOPMENT_CHECKLIST_TEMPLATE.md` - Mandatory checklist for every change
+
+**These rules are ABSOLUTE and apply to ANY code change, regardless of size or complexity.**
+
+**Key violations that led to this requirement:**
+- ❌ Hardcoded values instead of constants
+- ❌ Insufficient user interface testing  
+- ❌ Skipped comprehensive testing phases
+- ❌ Assumptions without verification
+- ❌ Manual config editing instead of proper tools
+
+**⚡ EVERY DEVELOPMENT TASK MUST:**
+1. Complete the mandatory development checklist 100%
+2. Test from user perspective, not just developer perspective
+3. Use constants instead of ANY hardcoded values
+4. Test both creation AND update scenarios
+5. Verify existing functionality remains unbroken
+6. Test interactive features manually with real user flows
+
+---
+
 **BEFORE ANY FIX, FEATURE, OR CODE CHANGE - YOU MUST:**
 
 #### **🔒 STEP 1: COMPLETE DIRECTIVE REVIEW (MANDATORY)**

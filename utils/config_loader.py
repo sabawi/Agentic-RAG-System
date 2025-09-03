@@ -9,6 +9,18 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from .platform import platform_paths, EnvironmentManager
 
+# Import constants to avoid hardcoded values
+import sys
+config_dir = Path(__file__).parent.parent / "config"
+sys.path.insert(0, str(config_dir))
+from llm_constants import (
+    DEFAULT_PRIMARY_TIMEOUT, DEFAULT_SECONDARY_TIMEOUT,
+    DEFAULT_PRIMARY_TEMPERATURE, DEFAULT_SECONDARY_TEMPERATURE,
+    DEFAULT_CONTEXT_WINDOW_SIZE, DEFAULT_IMAGE_PROCESSING_MAX_TOKENS,
+    OLLAMA_DEFAULT_BASE_URL, DEFAULT_IMAGE_PROCESSING_MODEL,
+    DEFAULT_TOOL_CALLING_MODEL, DEFAULT_PRIMARY_MODEL
+)
+
 logger = logging.getLogger(__name__)
 
 class ConfigLoader:
@@ -85,7 +97,7 @@ class ConfigLoader:
         """Get LLM configuration for specific type
         
         Args:
-            llm_type: Type of LLM (primary, tool_calling)
+            llm_type: Type of LLM (primary, tool_calling, image_processing)
             
         Returns:
             Dict with LLM configuration
@@ -122,9 +134,9 @@ class ConfigLoader:
         return {
             'type': 'ollama',
             'config': {
-                'base_url': 'http://127.0.0.1:11434',
-                'model': 'llama3.2:3b',
-                'timeout': 300
+                'base_url': OLLAMA_DEFAULT_BASE_URL,
+                'model': DEFAULT_PRIMARY_MODEL,
+                'timeout': DEFAULT_SECONDARY_TIMEOUT
             }
         }
     
@@ -174,6 +186,8 @@ class ConfigLoader:
             llm_config['primary'] = {'type': 'ollama', 'config': {}}
         if 'tool_calling' not in llm_config:
             llm_config['tool_calling'] = {'type': 'ollama', 'config': {}}
+        if 'image_processing' not in llm_config:
+            llm_config['image_processing'] = {'type': 'ollama', 'config': {}}
         
         return config
     
@@ -188,21 +202,33 @@ class ConfigLoader:
                 'primary': {
                     'type': 'ollama',
                     'config': {
-                        'base_url': 'http://127.0.0.1:11434',
-                        'model': 'llama3.2:3b',
-                        'timeout': 600,
-                        'temperature': 0.7,
+                        'base_url': OLLAMA_DEFAULT_BASE_URL,
+                        'model': DEFAULT_PRIMARY_MODEL,
+                        'timeout': DEFAULT_PRIMARY_TIMEOUT,
+                        'temperature': DEFAULT_PRIMARY_TEMPERATURE,
                         'stream': True
                     }
                 },
                 'tool_calling': {
                     'type': 'ollama',
                     'config': {
-                        'base_url': 'http://127.0.0.1:11434',
-                        'model': 'qwen3:8b',
-                        'timeout': 300,
-                        'temperature': 0.1,
+                        'base_url': OLLAMA_DEFAULT_BASE_URL,
+                        'model': DEFAULT_TOOL_CALLING_MODEL,
+                        'timeout': DEFAULT_SECONDARY_TIMEOUT,
+                        'temperature': DEFAULT_SECONDARY_TEMPERATURE,
                         'stream': False
+                    }
+                },
+                'image_processing': {
+                    'type': 'ollama',
+                    'config': {
+                        'base_url': OLLAMA_DEFAULT_BASE_URL,
+                        'model': DEFAULT_IMAGE_PROCESSING_MODEL,
+                        'timeout': DEFAULT_SECONDARY_TIMEOUT,
+                        'temperature': DEFAULT_SECONDARY_TEMPERATURE,
+                        'stream': False,
+                        'context_window_size': DEFAULT_CONTEXT_WINDOW_SIZE,
+                        'max_tokens': DEFAULT_IMAGE_PROCESSING_MAX_TOKENS
                     }
                 },
                 'fallback': {

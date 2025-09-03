@@ -9,41 +9,63 @@ import sys
 import yaml
 from pathlib import Path
 
+# Import constants to avoid hardcoded values
+from config.llm_constants import (
+    DEFAULT_PRIMARY_TIMEOUT, DEFAULT_SECONDARY_TIMEOUT,
+    DEFAULT_PRIMARY_TEMPERATURE, DEFAULT_SECONDARY_TEMPERATURE,
+    DEFAULT_CONTEXT_WINDOW_SIZE, DEFAULT_PRIMARY_MAX_TOKENS, DEFAULT_SECONDARY_MAX_TOKENS,
+    DEFAULT_IMAGE_PROCESSING_MAX_TOKENS, OLLAMA_DEFAULT_BASE_URL, OLLAMA_HEALTH_CHECK_URL,
+    OLLAMA_DEFAULT_NUM_PREDICT_PRIMARY, OLLAMA_DEFAULT_NUM_PREDICT_SECONDARY,
+    OPENAI_BASE_URL, QWEN_BASE_URL, GEMINI_BASE_URL,
+    DEFAULT_IMAGE_PROCESSING_MODEL, VISION_MODELS_OLLAMA, VISION_MODELS_OPENAI,
+    ENV_VAR_OPENAI, ENV_VAR_QWEN, ENV_VAR_GOOGLE,
+    DEFAULT_RETRY_ATTEMPTS, DEFAULT_RETRY_DELAY, DEFAULT_OPENAI_RETRY_DELAY,
+    DEFAULT_CONNECTION_POOL_SIZE, DEFAULT_MAX_CONCURRENT_REQUESTS,
+    DEFAULT_REQUEST_TIMEOUT, DEFAULT_STREAMING_CHUNK_SIZE
+)
+
 class LLMConfigTool:
     def __init__(self):
         self.config_file = Path("config/llm_config.yaml")
+        # Combine vision models with regular models
+        ollama_models = {
+            'llama3.2:3b': 'Llama 3.2 3B (Fast, Light)',
+            'llama3.2:1b': 'Llama 3.2 1B (Fastest)',
+            'llama3.1:8b': 'Llama 3.1 8B (Balanced)',
+            'qwen3:8b': 'Qwen 3 8B (Tool Calling)',
+            'deepseek-r1:8b': 'DeepSeek R1 8B (Reasoning)',
+            'mistral:7b': 'Mistral 7B',
+            'gemma2:9b': 'Gemma 2 9B',
+            'phi3:3.8b': 'Phi 3 3.8B'
+        }
+        ollama_models.update(VISION_MODELS_OLLAMA)
+        
+        openai_models = {
+            'gpt-4o': 'GPT-4o (Latest)',
+            'gpt-4-turbo': 'GPT-4 Turbo',
+            'gpt-4': 'GPT-4',
+            'gpt-3.5-turbo': 'GPT-3.5 Turbo',
+            'gpt-4o-mini': 'GPT-4o Mini (Fast)'
+        }
+        openai_models.update(VISION_MODELS_OPENAI)
+        
         self.providers = {
             'ollama': {
                 'name': 'Ollama (Local)',
-                'base_url': 'http://127.0.0.1:11434',
+                'base_url': OLLAMA_DEFAULT_BASE_URL,
                 'api_key': None,
-                'models': {
-                    'llama3.2:3b': 'Llama 3.2 3B (Fast, Light)',
-                    'llama3.2:1b': 'Llama 3.2 1B (Fastest)',
-                    'llama3.1:8b': 'Llama 3.1 8B (Balanced)',
-                    'qwen3:8b': 'Qwen 3 8B (Tool Calling)',
-                    'deepseek-r1:8b': 'DeepSeek R1 8B (Reasoning)',
-                    'mistral:7b': 'Mistral 7B',
-                    'gemma2:9b': 'Gemma 2 9B',
-                    'phi3:3.8b': 'Phi 3 3.8B'
-                }
+                'models': ollama_models
             },
             'openai': {
                 'name': 'OpenAI (Cloud)',
-                'base_url': 'https://api.openai.com/v1',
-                'api_key': '${OPENAI_API_KEY}',
-                'models': {
-                    'gpt-4o': 'GPT-4o (Latest)',
-                    'gpt-4-turbo': 'GPT-4 Turbo',
-                    'gpt-4': 'GPT-4',
-                    'gpt-3.5-turbo': 'GPT-3.5 Turbo',
-                    'gpt-4o-mini': 'GPT-4o Mini (Fast)'
-                }
+                'base_url': OPENAI_BASE_URL,
+                'api_key': ENV_VAR_OPENAI,
+                'models': openai_models
             },
             'qwen': {
                 'name': 'Qwen Cloud (Alibaba)',
-                'base_url': 'https://dashscope.aliyuncs.com/api/v1',
-                'api_key': '${QWEN_API_KEY}',
+                'base_url': QWEN_BASE_URL,
+                'api_key': ENV_VAR_QWEN,
                 'models': {
                     'qwen-plus': 'Qwen Plus',
                     'qwen-turbo': 'Qwen Turbo',
@@ -55,8 +77,8 @@ class LLMConfigTool:
             },
             'gemini': {
                 'name': 'Google Gemini (Cloud)',
-                'base_url': 'https://generativelanguage.googleapis.com/v1beta',
-                'api_key': '${GOOGLE_API_KEY}',
+                'base_url': GEMINI_BASE_URL,
+                'api_key': ENV_VAR_GOOGLE,
                 'models': {
                     'gemini-1.5-pro': 'Gemini 1.5 Pro',
                     'gemini-1.5-flash': 'Gemini 1.5 Flash',
@@ -124,7 +146,7 @@ class LLMConfigTool:
                 print("\nExiting...")
                 sys.exit(0)
     
-    def create_config(self, primary_provider, primary_model, tool_provider, tool_model):
+    def create_config(self, primary_provider, primary_model, tool_provider, tool_model, image_provider=None, image_model=None):
         """Create complete configuration"""
         config = {
             'debug': {
@@ -146,13 +168,17 @@ class LLMConfigTool:
                     'type': tool_provider,
                     'config': self.get_model_config(tool_provider, tool_model, is_primary=False)
                 },
+                'image_processing': {
+                    'type': image_provider or 'ollama',
+                    'config': self.get_model_config(image_provider or 'ollama', image_model or DEFAULT_IMAGE_PROCESSING_MODEL, is_primary=False)
+                },
                 'providers': {}
             },
             'performance': {
-                'connection_pool_size': 10,
-                'max_concurrent_requests': 5,
-                'request_timeout': 600,
-                'streaming_chunk_size': 1024
+                'connection_pool_size': DEFAULT_CONNECTION_POOL_SIZE,
+                'max_concurrent_requests': DEFAULT_MAX_CONCURRENT_REQUESTS,
+                'request_timeout': DEFAULT_REQUEST_TIMEOUT,
+                'streaming_chunk_size': DEFAULT_STREAMING_CHUNK_SIZE
             },
             'platform': {
                 'config_dir': {
@@ -184,6 +210,8 @@ class LLMConfigTool:
         
         # Add provider-specific configurations
         used_providers = set([primary_provider, tool_provider])
+        if image_provider:
+            used_providers.add(image_provider)
         for provider_key in used_providers:
             config['llm']['providers'][provider_key] = self.get_provider_config(provider_key)
         
@@ -196,42 +224,42 @@ class LLMConfigTool:
         # Base configuration with all required fields
         base_config = {
             'model': model,
-            'timeout': 600 if is_primary else 300,
-            'context_window_size': 8192,  # CRITICAL: Required for all providers
+            'timeout': DEFAULT_PRIMARY_TIMEOUT if is_primary else DEFAULT_SECONDARY_TIMEOUT,
+            'context_window_size': DEFAULT_CONTEXT_WINDOW_SIZE,  # CRITICAL: Required for all providers
             'temperature': 0.7
         }
         
         if provider_key == 'ollama':
             # Ollama-specific configuration
             base_config.update({
-                'num_predict': 16384 if is_primary else 4096,  # CRITICAL: Output token limit for Ollama
-                'max_tokens': 8192 if is_primary else 4096,    # Backward compatibility
-                'base_url': 'http://127.0.0.1:11434',
+                'num_predict': OLLAMA_DEFAULT_NUM_PREDICT_PRIMARY if is_primary else OLLAMA_DEFAULT_NUM_PREDICT_SECONDARY,  # CRITICAL: Output token limit for Ollama
+                'max_tokens': DEFAULT_PRIMARY_MAX_TOKENS if is_primary else DEFAULT_SECONDARY_MAX_TOKENS,    # Backward compatibility
+                'base_url': OLLAMA_DEFAULT_BASE_URL,
                 'api_key': None,
                 'stream': is_primary
             })
         else:
             # Non-Ollama providers (OpenAI, Qwen, Gemini, etc.)
             base_config.update({
-                'max_tokens': 8192 if is_primary else 4096,    # CRITICAL: Output token limit for non-Ollama
+                'max_tokens': DEFAULT_PRIMARY_MAX_TOKENS if is_primary else DEFAULT_SECONDARY_MAX_TOKENS,    # CRITICAL: Output token limit for non-Ollama
                 'stream': is_primary
             })
             
             # Provider-specific settings
             if provider_key == 'openai':
                 base_config.update({
-                    'api_key': '${OPENAI_API_KEY}',
-                    'base_url': 'https://api.openai.com/v1'
+                    'api_key': ENV_VAR_OPENAI,
+                    'base_url': OPENAI_BASE_URL
                 })
             elif provider_key == 'qwen':
                 base_config.update({
-                    'api_key': '${QWEN_API_KEY}',
-                    'base_url': 'https://dashscope.aliyuncs.com/api/v1'
+                    'api_key': ENV_VAR_QWEN,
+                    'base_url': QWEN_BASE_URL
                 })
             elif provider_key == 'gemini':
                 base_config.update({
-                    'api_key': '${GOOGLE_API_KEY}',
-                    'base_url': 'https://generativelanguage.googleapis.com/v1beta'
+                    'api_key': ENV_VAR_GOOGLE,
+                    'base_url': GEMINI_BASE_URL
                 })
         
         return base_config
@@ -240,36 +268,36 @@ class LLMConfigTool:
         """Get provider-specific configuration"""
         configs = {
             'ollama': {
-                'health_check_url': 'http://127.0.0.1:11434/api/tags',
-                'retry_attempts': 3,
-                'retry_delay': 2
+                'health_check_url': OLLAMA_HEALTH_CHECK_URL,
+                'retry_attempts': DEFAULT_RETRY_ATTEMPTS,
+                'retry_delay': DEFAULT_RETRY_DELAY
             },
             'openai': {
-                'api_key': '${OPENAI_API_KEY}',
-                'base_url': 'https://api.openai.com/v1',
+                'api_key': ENV_VAR_OPENAI,
+                'base_url': OPENAI_BASE_URL,
                 'organization': None,
-                'retry_attempts': 3,
-                'retry_delay': 1,
+                'retry_attempts': DEFAULT_RETRY_ATTEMPTS,
+                'retry_delay': DEFAULT_OPENAI_RETRY_DELAY,
                 'models': {
                     'primary': 'gpt-4o',
                     'tool_calling': 'gpt-4o'
                 }
             },
             'qwen': {
-                'api_key': '${QWEN_API_KEY}',
-                'base_url': 'https://dashscope.aliyuncs.com/api/v1',
-                'retry_attempts': 3,
-                'retry_delay': 1,
+                'api_key': ENV_VAR_QWEN,
+                'base_url': QWEN_BASE_URL,
+                'retry_attempts': DEFAULT_RETRY_ATTEMPTS,
+                'retry_delay': DEFAULT_OPENAI_RETRY_DELAY,
                 'models': {
                     'primary': 'qwen-plus',
                     'tool_calling': 'qwen-plus'
                 }
             },
             'gemini': {
-                'api_key': '${GOOGLE_API_KEY}',
-                'base_url': 'https://generativelanguage.googleapis.com/v1beta',
-                'retry_attempts': 3,
-                'retry_delay': 1,
+                'api_key': ENV_VAR_GOOGLE,
+                'base_url': GEMINI_BASE_URL,
+                'retry_attempts': DEFAULT_RETRY_ATTEMPTS,
+                'retry_delay': DEFAULT_OPENAI_RETRY_DELAY,
                 'models': {
                     'primary': 'gemini-1.5-pro',
                     'tool_calling': 'gemini-1.5-flash'
@@ -351,10 +379,13 @@ class LLMConfigTool:
         print("8. 🔧 Custom Configuration")
         print("   Choose your own combinations")
         print()
-        print("9. ⚡ Optimization Settings")
-        print("   Configure performance optimizations")
+        print("9. 🖼️ Image Processing Setup")
+        print("   Configure vision models for image analysis")
         print()
-        print("10. 🧠 Arbitrator Settings")
+        print("10. ⚡ Optimization Settings")
+        print("    Configure performance optimizations")
+        print()
+        print("11. 🧠 Arbitrator Settings")
         print("    Configure task validation and retry logic")
         print()
     
@@ -401,7 +432,7 @@ class LLMConfigTool:
         
         while True:
             try:
-                choice = input("Select configuration (1-10): ").strip()
+                choice = input("Select configuration (1-11): ").strip()
                 
                 if choice in ['1', '2', '3', '4', '5', '6', '7']:
                     config = self.apply_quick_config(choice)
@@ -425,15 +456,19 @@ class LLMConfigTool:
                     self.display_environment_setup_custom(primary_provider, tool_provider)
                     return
                 elif choice == '9':
+                    # Image processing configuration
+                    self.configure_image_processing()
+                    return
+                elif choice == '10':
                     # Optimization settings
                     self.configure_optimization()
                     return
-                elif choice == '10':
+                elif choice == '11':
                     # Arbitrator settings
                     self.configure_arbitrator()
                     return
                 else:
-                    print("Please enter 1, 2, 3, 4, 5, 6, 7, 8, 9, or 10")
+                    print("Please enter 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, or 11")
                     
             except (ValueError, KeyboardInterrupt):
                 print("\nExiting...")
@@ -499,6 +534,191 @@ class LLMConfigTool:
         print("\n🚀 Restart your server to apply changes:")
         print("./stop_complete.sh && ./start_complete.sh")
         print("\n✅ Configuration complete!")
+
+    def configure_image_processing(self):
+        """Configure image processing LLM settings"""
+        print("\n🖼️ IMAGE PROCESSING LLM CONFIGURATION")
+        print("=" * 50)
+        print("Configure vision models for image analysis, OCR, and visual Q&A")
+        print("These models will be available to user tools for image processing tasks")
+        print()
+        
+        # Load current config
+        current_config = self.load_current_config()
+        current_image = current_config.get('llm', {}).get('image_processing', {}) if current_config else {}
+        
+        current_enabled = bool(current_image)
+        current_provider = current_image.get('type', 'ollama')
+        current_model = current_image.get('config', {}).get('model', DEFAULT_IMAGE_PROCESSING_MODEL)
+        
+        print(f"📋 Current Configuration:")
+        print(f"   Status: {'✅ Configured' if current_enabled else '❌ Not configured'}")
+        if current_enabled:
+            print(f"   Provider: {current_provider}")
+            print(f"   Model: {current_model}")
+        print()
+        
+        # Configuration options
+        print("🔧 Configuration Options:")
+        print("1. 🏠 Local Vision Models (Ollama)")
+        print("   • llava:7b - Fast, good quality")
+        print("   • llava:13b - Better quality, slower")
+        print("   • bakllava - Specialized for detailed analysis")
+        print("   • moondream - Lightweight vision model")
+        print()
+        print("2. ☁️ Cloud Vision APIs")
+        print("   • OpenAI GPT-4 Vision - Premium quality")
+        print("   • Google Gemini Vision - Good balance")
+        print("   • Qwen Vision - Cost-effective")
+        print()
+        print("3. ❌ Disable Image Processing")
+        print()
+        print("4. 🔙 Back to Main Menu")
+        print()
+        
+        while True:
+            try:
+                choice = input("Select option (1-4): ").strip()
+                
+                if choice == '1':
+                    # Local Ollama models
+                    print("\n🏠 LOCAL VISION MODELS")
+                    print("Available models:")
+                    vision_models = [
+                        ('llava:7b', 'LLaVA 7B - Fast, good quality'),
+                        ('llava:13b', 'LLaVA 13B - Better quality, slower'),
+                        ('bakllava', 'BakLLaVA - Detailed analysis'),
+                        ('moondream', 'Moondream - Lightweight')
+                    ]
+                    
+                    for idx, (model, desc) in enumerate(vision_models, 1):
+                        print(f"{idx}. {model} - {desc}")
+                    
+                    model_choice = input(f"Select model (1-{len(vision_models)}): ").strip()
+                    if model_choice.isdigit() and 1 <= int(model_choice) <= len(vision_models):
+                        selected_model = vision_models[int(model_choice) - 1][0]
+                        self.update_image_processing_config('ollama', selected_model)
+                        print(f"\n✅ Image processing configured with {selected_model}")
+                        print(f"🚀 Make sure to pull the model: ollama pull {selected_model}")
+                        return
+                    else:
+                        print("Invalid selection.")
+                        continue
+                        
+                elif choice == '2':
+                    # Cloud APIs
+                    print("\n☁️ CLOUD VISION APIS")
+                    print("Available providers:")
+                    cloud_models = [
+                        ('openai', 'gpt-4-vision-preview', 'OpenAI GPT-4 Vision'),
+                        ('gemini', 'gemini-1.5-pro-vision', 'Google Gemini Vision'),
+                        ('qwen', 'qwen-vl-plus', 'Qwen Vision Plus')
+                    ]
+                    
+                    for idx, (provider, model, desc) in enumerate(cloud_models, 1):
+                        print(f"{idx}. {desc}")
+                    
+                    provider_choice = input(f"Select provider (1-{len(cloud_models)}): ").strip()
+                    if provider_choice.isdigit() and 1 <= int(provider_choice) <= len(cloud_models):
+                        provider, model, desc = cloud_models[int(provider_choice) - 1]
+                        self.update_image_processing_config(provider, model)
+                        print(f"\n✅ Image processing configured with {desc}")
+                        print(f"🔐 Make sure to set your API key for {provider}")
+                        return
+                    else:
+                        print("Invalid selection.")
+                        continue
+                        
+                elif choice == '3':
+                    # Disable
+                    self.update_image_processing_config(None, None)
+                    print("\n❌ Image processing disabled")
+                    return
+                    
+                elif choice == '4':
+                    # Back to main menu
+                    return
+                    
+                else:
+                    print("Please enter 1, 2, 3, or 4")
+                    
+            except (ValueError, KeyboardInterrupt):
+                print("\nExiting...")
+                return
+        
+        print("\n🚀 Restart your server to apply changes:")
+        print("./stop_complete.sh && ./start_complete.sh")
+    
+    def update_image_processing_config(self, provider_type, model):
+        """Update image processing configuration in the config file"""
+        config_path = Path("config/llm_config.yaml")
+        
+        # Load current config
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            config = self._get_default_config()
+        
+        # Ensure LLM section exists
+        if 'llm' not in config:
+            config['llm'] = {}
+            
+        if provider_type is None:
+            # Remove image processing config
+            if 'image_processing' in config['llm']:
+                del config['llm']['image_processing']
+        else:
+            # Set image processing config
+            if provider_type == 'ollama':
+                config['llm']['image_processing'] = {
+                    'type': 'ollama',
+                    'config': {
+                        'model': model,
+                        'timeout': DEFAULT_SECONDARY_TIMEOUT,
+                        'context_window_size': DEFAULT_CONTEXT_WINDOW_SIZE,
+                        'temperature': DEFAULT_SECONDARY_TEMPERATURE,
+                        'max_tokens': DEFAULT_IMAGE_PROCESSING_MAX_TOKENS,
+                        'stream': False,
+                        'base_url': OLLAMA_DEFAULT_BASE_URL,
+                        'api_key': None
+                    }
+                }
+            else:
+                # Cloud provider
+                base_config = {
+                    'model': model,
+                    'timeout': DEFAULT_SECONDARY_TIMEOUT,
+                    'context_window_size': DEFAULT_CONTEXT_WINDOW_SIZE,
+                    'temperature': DEFAULT_SECONDARY_TEMPERATURE,
+                    'max_tokens': DEFAULT_IMAGE_PROCESSING_MAX_TOKENS,
+                    'stream': False
+                }
+                
+                if provider_type == 'openai':
+                    base_config.update({
+                        'api_key': ENV_VAR_OPENAI,
+                        'base_url': OPENAI_BASE_URL
+                    })
+                elif provider_type == 'gemini':
+                    base_config.update({
+                        'api_key': ENV_VAR_GOOGLE,
+                        'base_url': GEMINI_BASE_URL
+                    })
+                elif provider_type == 'qwen':
+                    base_config.update({
+                        'api_key': ENV_VAR_QWEN,
+                        'base_url': QWEN_BASE_URL
+                    })
+                
+                config['llm']['image_processing'] = {
+                    'type': provider_type,
+                    'config': base_config
+                }
+        
+        # Save updated config
+        with open(config_path, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
     def configure_optimization(self):
         """Interactive optimization settings configuration"""
@@ -751,11 +971,11 @@ class LLMConfigTool:
                     'model': 'gpt-4o-mini',
                     'timeout': 60,
                     'context_window_size': 4096,
-                    'temperature': 0.1,
+                    'temperature': DEFAULT_SECONDARY_TEMPERATURE,
                     'max_tokens': 1024,
                     'stream': False,
-                    'api_key': '${OPENAI_API_KEY}',
-                    'base_url': 'https://api.openai.com/v1'
+                    'api_key': ENV_VAR_OPENAI,
+                    'base_url': OPENAI_BASE_URL
                 }
             }
         
@@ -769,17 +989,17 @@ class LLMConfigTool:
             # Update provider-specific config
             if provider_type == 'openai':
                 config['arbitrator']['config'].update({
-                    'api_key': '${OPENAI_API_KEY}',
-                    'base_url': 'https://api.openai.com/v1'
+                    'api_key': ENV_VAR_OPENAI,
+                    'base_url': OPENAI_BASE_URL
                 })
             elif provider_type == 'qwen':
                 config['arbitrator']['config'].update({
-                    'api_key': '${QWEN_API_KEY}',
-                    'base_url': 'https://dashscope.aliyuncs.com/api/v1'
+                    'api_key': ENV_VAR_QWEN,
+                    'base_url': QWEN_BASE_URL
                 })
             elif provider_type == 'gemini':
                 config['arbitrator']['config'].update({
-                    'api_key': '${GOOGLE_API_KEY}',
+                    'api_key': ENV_VAR_GOOGLE,
                     'base_url': 'https://generativelanguage.googleapis.com/v1'
                 })
         
