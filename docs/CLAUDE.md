@@ -38,6 +38,77 @@ I MUST ASK: **"SECURITY SCAN COMPLETE - APPROVE COMMIT? (YES/NO)"**
 
 ---
 
+## 🔒 SUPREME AUDIT LAW: MANDATORY POST-CHANGE FILE TRACKING GATE 🔒
+
+### **⚡ ABSOLUTE RULE - TRIGGERED AFTER MULTI-FILE CHANGES ⚡**
+
+**WHENEVER 3+ FILES ARE MODIFIED, CREATED, OR DELETED:**
+
+### **⚡ STEP 1: MANDATORY FILE TRACKING AUDIT (CANNOT BE SKIPPED)**
+I MUST EXPLICITLY STATE:
+```
+🔍 FILE TRACKING AUDIT COMPLETE
+=====================================
+
+📊 CHANGE STATISTICS:
+- [ ] Total files modified: [COUNT]
+- [ ] Total files created: [COUNT]  
+- [ ] Total files deleted: [COUNT]
+- [ ] Total directories affected: [COUNT]
+
+📋 COMPREHENSIVE FILE INVENTORY:
+- [ ] Listed ALL modified files with purpose
+- [ ] Listed ALL new files with justification
+- [ ] Listed ALL deleted files with reason
+- [ ] Verified no important files accidentally untracked
+- [ ] Checked user_tools/ directory completeness  
+- [ ] Checked docs/ directory completeness
+- [ ] Checked main directory for stray debug files
+
+🔒 ALL SIGNIFICANT CHANGES PROPERLY TRACKED AND DOCUMENTED
+```
+
+### **⚡ STEP 2: EXPLICIT USER APPROVAL (MANDATORY)**
+I MUST ASK: **"FILE TRACKING AUDIT COMPLETE - APPROVE CHANGES? (YES/NO)"**
+
+### **💀 ENFORCEMENT: AUTOMATIC TASK TERMINATION**
+- If I modify 3+ files without completing audit: **IMMEDIATE FAILURE**
+- If significant files remain untracked: **MANDATORY TRACKING** required
+- If user says NO: **STOP** and await instructions
+- **NO EXCEPTIONS - NO BYPASSES - NO SHORTCUTS**
+
+### **📋 MANDATORY AUDIT PROCEDURES:**
+
+#### **🔍 SCENARIO 1: Major System Changes (5+ files)**
+**Additional Requirements:**
+- Document architectural impact in commit message
+- List all affected subsystems (tools, server, prompts, configs)
+- Verify no breaking changes to critical dependencies
+- Check for potential integration issues
+
+#### **🔍 SCENARIO 2: New Tool/Feature Development**
+**Additional Requirements:**
+- Ensure all new tool files are tracked: `.py`, `_tool.py`, tests
+- Update documentation in `docs/` directory
+- Verify tool registration and discovery
+- Check for configuration file impacts
+
+#### **🔍 SCENARIO 3: Debug/Development Cleanup**
+**Additional Requirements:**
+- List all debug files created during development
+- Decision on each: DELETE, TRACK, or IGNORE
+- Update .gitignore for temporary/debug patterns
+- Clean up any experimental code branches
+
+#### **🔍 SCENARIO 4: System Prompt/Configuration Changes**
+**Additional Requirements:**
+- List all prompt files modified
+- Document prompt change rationale
+- Check for config file dependencies
+- Verify no hardcoded values introduced
+
+---
+
 **BEFORE ANY FIX, FEATURE, OR CODE CHANGE - YOU MUST:**
 
 #### **🔒 STEP 1: COMPLETE DIRECTIVE REVIEW (MANDATORY)**

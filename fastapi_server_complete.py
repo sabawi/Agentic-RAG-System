@@ -7589,11 +7589,27 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
             yield f"data: {json.dumps(chunk)}\n\n"
             
             # Mirror/capture native streaming response
+            # 🔧 CRITICAL FIX: Properly split enhanced prompt for multi-turn conversations
+            actual_prompt = ""
+            context_part = ""
+            
+            if "\n=== CURRENT REQUEST ===\n" in user_prompt:
+                # This is a multi-turn conversation with context
+                parts = user_prompt.split("\n=== CURRENT REQUEST ===\n")
+                context_part = parts[0]  # Everything before current request
+                actual_prompt = parts[1]  # Current user request only
+                logger.info(f"🔄 MULTI-TURN: Separated context ({len(context_part)} chars) from prompt ({len(actual_prompt)} chars)")
+            else:
+                # Single turn - no context separation needed
+                actual_prompt = user_prompt
+                context_part = ""
+                logger.info(f"🆕 SINGLE-TURN: Using full prompt ({len(actual_prompt)} chars)")
+            
             native_request_data = {
-                "prompt": user_prompt,
+                "prompt": actual_prompt,
                 "model": ServerConfig.DEFAULT_MODEL,
                 "toolsInUse": True,
-                "prompt_context": "",
+                "prompt_context": context_part,  # 🔧 FIX: Now properly includes conversation context
                 "searchWebInUse": False,
                 "images": ["noimage"],
                 "tools_calling_model": ServerConfig.DEFAULT_TOOL_CALLING_MODEL,
@@ -7603,9 +7619,10 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
             # Choose routing method based on feature flag
             if ServerConfig.USE_DIRECT_FUNCTION_CALLS:
                 logger.info(f"🔀 Using DIRECT function calls (faster, no HTTP overhead)")
-                logger.error(f"🔧 HTTP DEBUG: About to call openai_direct_stream with native_request_data: {native_request_data}")
-                logger.error(f"🔧 HTTP DEBUG: model parameter: {model}")
-                logger.error(f"🔧 HTTP DEBUG: user_prompt: {user_prompt[:100]}...")
+                logger.error(f"🔧 CONTEXT FIX DEBUG: Calling openai_direct_stream")
+                logger.error(f"🔧 CONTEXT FIX DEBUG: prompt='{actual_prompt[:100]}...'")
+                logger.error(f"🔧 CONTEXT FIX DEBUG: context='{context_part[:100]}...'")
+                logger.error(f"🔧 CONTEXT FIX DEBUG: model='{model}'")
                 # Option 2: Direct function calls - More efficient
                 async for chunk_data in openai_direct_stream(native_request_data, model):
                     yield chunk_data
