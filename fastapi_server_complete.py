@@ -12,6 +12,7 @@ FastAPI server with all original Flask functionality including:
 """
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
@@ -177,9 +178,11 @@ class ApiResponse(BaseModel):
     timestamp: str
 
 # OpenAI Compatibility Models - Minimal trust design
+from typing import Union, List, Any
+
 class OpenAIMessage(BaseModel):
     role: str = Field(..., description="Message role")
-    content: str = Field(..., description="Message content")
+    content: Union[str, List[Dict[str, Any]]] = Field(..., description="Message content - string or structured content for vision")
 
 class OpenAIChatRequest(BaseModel):
     model: str = Field(..., description="Model name - we only trust this and content")
@@ -191,6 +194,8 @@ class OpenAIChatRequest(BaseModel):
     top_p: Optional[float] = Field(default=None)
     frequency_penalty: Optional[float] = Field(default=None)
     presence_penalty: Optional[float] = Field(default=None)
+    # Support for custom images parameter (file paths or base64)
+    images: Optional[List[str]] = Field(default=None, description="Image data - file paths or base64")
     
     class Config:
         extra = "ignore"  # Ignore all other fields for security
@@ -212,6 +217,13 @@ simple_cache = {}
 
 # Simple conversation memory for OpenAI compatibility endpoint (in-memory only)
 openai_conversations = {}
+
+# Import conversation PDF export functionality
+try:
+    from user_tools._universal_pdf_generator import UniversalPDFGenerator
+    CONVERSATION_PDF_AVAILABLE = True
+except ImportError:
+    CONVERSATION_PDF_AVAILABLE = False
 
 # ==============================================================================
 # LOGGING SETUP
@@ -571,8 +583,23 @@ class AsyncToolManager:
                 result = await tool.execute(**params)
                 
                 if result.get("success", False):
-                    # Format the successful result
-                    tool_result = result.get("result", {})
+                    # Format the successful result - handle different result key patterns
+                    tool_result = None
+                    
+                    # Try different common result keys used by tools
+                    if "result" in result:
+                        tool_result = result["result"]
+                    elif "description" in result:
+                        # Handle image_to_text and similar tools that use "description"
+                        tool_result = result["description"]
+                    elif "content" in result:
+                        # Handle tools that use "content" key
+                        tool_result = result["content"]
+                    else:
+                        # Fallback: return the entire result dict excluding success/error keys
+                        excluded_keys = {"success", "error", "model", "timestamp"}
+                        tool_result = {k: v for k, v in result.items() if k not in excluded_keys}
+                    
                     if isinstance(tool_result, dict):
                         # Convert dict result to readable string with base64 truncation
                         formatted_result = json.dumps(tool_result, indent=2)
@@ -2830,8 +2857,7 @@ async def intelligent_retry_with_circuit_breakers(
             "message": "Cannot regenerate tools without tool_manager access"
         }
     
-    # Import LLM manager for regeneration
-    from llm_providers.manager import llm_manager
+    # Use global llm_manager for regeneration
     
     # 🔄 ITERATIVE REGENERATION WITH CIRCUIT BREAKER LOGIC
     MAX_ITERATIONS = 3  # Circuit breaker: maximum retry iterations
@@ -3272,31 +3298,21 @@ The purpose is to drop the new code in place of the failed code."""
     regeneration_prompt = regeneration_context + fix_instructions
     
     try:
-        # 🚨 SUPREME LAW: COMPLETE AND TOTAL LLM INPUT LOGGING
-        logger.info(f"🚨🚨🚨 SUPREME LAW: COMPLETE TOOL CALLING LLM INPUT LOGGING 🚨🚨🚨")
+        # Tool regeneration: Starting LLM call
         logger.info(f"🔧 Calling tool_calling LLM with {len(available_tools)} available tools")
         
-        # 🚨 LOG 1: COMPLETE SYSTEM PROMPT
-        logger.info(f"🚨 COMPLETE SYSTEM PROMPT:\n{'='*100}\n{system_prompt}\n{'='*100}")
+        # Tool regeneration: System prompt ready
+        logger.info(f"🔧 Tool regeneration - system prompt: {len(system_prompt)} chars")
         
-        # 🚨 LOG 2: COMPLETE USER REGENERATION PROMPT
-        logger.info(f"🚨 COMPLETE USER REGENERATION PROMPT:\n{'='*100}\n{regeneration_prompt}\n{'='*100}")
+        # Tool regeneration: User prompt ready
+        logger.info(f"🔧 Tool regeneration - user prompt: {len(regeneration_prompt)} chars")
         
-        # 🚨 LOG 3: COMPLETE TOOL SCHEMAS
-        import json
-        truncated_available_tools = truncate_base64_for_logging(json.dumps(available_tools, indent=2))
-        logger.info(f"🚨 COMPLETE AVAILABLE TOOLS SCHEMAS:\n{'='*100}\n{truncated_available_tools}\n{'='*100}")
+        # Tool regeneration: Available tools summary
+        logger.info(f"🔧 Tool regeneration - available tools: {len(available_tools)}")
         
-        # 🚨 LOG 4: COMPLETE PAYLOAD STRUCTURE BEFORE CALL
-        payload_info = {
-            "system_prompt_length": len(system_prompt),
-            "user_prompt_length": len(regeneration_prompt),
-            "available_tools_count": len(available_tools),
-            "tool_names": [tool.get('function', {}).get('name', 'Unknown') for tool in available_tools],
-            "iteration_count": iteration_count
-        }
-        truncated_payload_info = truncate_base64_for_logging(json.dumps(payload_info, indent=2))
-        logger.info(f"🚨 COMPLETE PAYLOAD STRUCTURE:\n{'='*100}\n{truncated_payload_info}\n{'='*100}")
+        # Tool regeneration: Payload prepared
+        tool_names = [tool.get('function', {}).get('name', 'Unknown') for tool in available_tools]
+        logger.info(f"🔧 Tool regeneration - tools: {', '.join(tool_names[:3])}{'...' if len(tool_names) > 3 else ''} (iteration {iteration_count})")
         
         result = await llm_manager.generate_tools(
             regeneration_prompt, 
@@ -3304,9 +3320,8 @@ The purpose is to drop the new code in place of the failed code."""
             system_prompt=system_prompt
         )
         
-        # 🚨 LOG 5: COMPLETE LLM RESPONSE
-        truncated_result = truncate_base64_for_logging(json.dumps(result, indent=2))
-        logger.info(f"🚨 COMPLETE LLM RESPONSE:\n{'='*100}\n{truncated_result}\n{'='*100}")
+        # Tool regeneration: Response received
+        logger.info(f"🔧 Tool regeneration - response: {len(str(result))} chars, {len(result.get('tool_calls', []))} tool calls")
         
         tool_calls = result.get("tool_calls", [])
         logger.info(f"🔧 LLM returned {len(tool_calls)} regenerated tool calls")
@@ -3476,8 +3491,7 @@ async def arbitrator_validate_tasks(tools_called: List[str], tools_results_list:
         Optional[str]: Validated and potentially corrected tool results, or None on failure
     """
     try:
-        # Import LLM manager for arbitrator calls
-        from llm_providers.manager import llm_manager
+        # Use global llm_manager for arbitrator calls
         import json  # Explicit import to avoid scoping issues
         
         logger.info(f"🧠 Starting arbitrator validation for {len(tools_called)} tools")
@@ -4622,20 +4636,56 @@ Comprehensive stock analysis completed successfully.
                     if "get_news_summaries" in tools_results:
                         # News analysis email with dynamic subject
                         email_subject = _generate_dynamic_title(user_prompt, tools_results)
-                        result = await email_tool_instance.execute(
-                            to_email=recipient_email,
-                            subject=email_subject, 
-                            body=f"Please find attached the latest {email_subject.lower()} with critical updates and detailed analysis.",
-                            attachments=attachment_path
-                        )
+                        # 🔧 CRITICAL FIX: Add timeout to prevent infinite hanging
+                        import asyncio
+                        
+                        try:
+                            logger.info(f"⏰ POST-LLM AUTO-EXECUTION: Starting email execution with 120s timeout...")
+                            
+                            # Execute email with timeout to prevent hanging
+                            result = await asyncio.wait_for(
+                                email_tool_instance.execute(
+                                    to_email=recipient_email,
+                                    subject=email_subject, 
+                                    body=f"Please find attached the latest {email_subject.lower()} with critical updates and detailed analysis.",
+                                    attachments=attachment_path
+                                ),
+                                timeout=120  # 2 minute timeout
+                            )
+                            
+                            logger.info(f"✅ POST-LLM AUTO-EXECUTION: Email completed successfully")
+                            
+                        except asyncio.TimeoutError:
+                            logger.error(f"⏰ POST-LLM AUTO-EXECUTION: TIMEOUT after 120 seconds - email execution hung!")
+                            result = {'success': False, 'error': 'Email execution timed out after 120 seconds'}
+                        except Exception as e:
+                            logger.error(f"❌ POST-LLM AUTO-EXECUTION: Email execution failed: {e}")
+                            result = {'success': False, 'error': str(e)}
                     else:
                         # Stock analysis email
-                        result = await email_tool_instance.execute(
-                            to_email=recipient_email,
-                            subject="Stock Analysis Report",
-                            body="Please find attached the comprehensive stock analysis report with detailed financial insights.",
-                            attachments=attachment_path
-                        )
+                        # 🔧 CRITICAL FIX: Add timeout to prevent infinite hanging
+                        try:
+                            logger.info(f"⏰ POST-LLM AUTO-EXECUTION: Starting stock email execution with 120s timeout...")
+                            
+                            # Execute email with timeout to prevent hanging
+                            result = await asyncio.wait_for(
+                                email_tool_instance.execute(
+                                    to_email=recipient_email,
+                                    subject="Stock Analysis Report",
+                                    body="Please find attached the comprehensive stock analysis report with detailed financial insights.",
+                                    attachments=attachment_path
+                                ),
+                                timeout=120  # 2 minute timeout
+                            )
+                            
+                            logger.info(f"✅ POST-LLM AUTO-EXECUTION: Stock email completed successfully")
+                            
+                        except asyncio.TimeoutError:
+                            logger.error(f"⏰ POST-LLM AUTO-EXECUTION: TIMEOUT after 120 seconds - stock email execution hung!")
+                            result = {'success': False, 'error': 'Stock email execution timed out after 120 seconds'}
+                        except Exception as e:
+                            logger.error(f"❌ POST-LLM AUTO-EXECUTION: Stock email execution failed: {e}")
+                            result = {'success': False, 'error': str(e)}
                 else:
                     # Fallback to wrapper
                     email_tool = tool_manager.available_functions["secure_email_sender"]
@@ -4860,6 +4910,25 @@ async def _detect_html_email_request_in_args(function_args_dict: dict, user_prom
         'email the full response above'  # Even without explicit HTML, we should use our template
     ]
     
+    # 📄 CONVERSATION PDF DETECTION - Check for conversation export requests
+    conversation_pdf_indicators = [
+        'email the previous conversation as pdf',
+        'email previous conversation as pdf',
+        'email conversation as pdf attachment',
+        'email the conversation as pdf',
+        'send conversation pdf',
+        'export conversation to pdf and email',
+        'email conversation history as pdf',
+        'email the above full and complete response',
+        'email the above response as pdf',
+        'email the full response as pdf',
+        'email the complete response as pdf',
+        'pdf attachment with',
+        'neatly formatted pdf attachment'
+    ]
+    
+    has_conversation_pdf_request = any(indicator in user_prompt_lower for indicator in conversation_pdf_indicators)
+    
     has_html_in_prompt = any(indicator in user_prompt_lower for indicator in html_email_indicators)
     
     if has_html_format or has_html_source or has_style_param or has_html_in_prompt:
@@ -4890,7 +4959,86 @@ async def _detect_html_email_request_in_args(function_args_dict: dict, user_prom
             'detected': True
         }
     
+    # 📄 CONVERSATION PDF PROCESSING - Handle conversation export requests
+    if has_conversation_pdf_request:
+        # Extract email details from tool arguments first
+        to_email = function_args_dict.get('to_email')
+        subject = function_args_dict.get('subject', 'Conversation Export')
+        
+        # If email not found in tool args, extract from user prompt
+        if not to_email:
+            user_email_patterns = [
+                r'to\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+                r'email.*?to\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+                r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+            ]
+            for pattern in user_email_patterns:
+                user_email_match = re.search(pattern, user_prompt)
+                if user_email_match:
+                    to_email = user_email_match.group(1)
+                    break
+        
+        return {
+            'to_email': to_email,
+            'subject': subject,
+            'type': 'conversation_pdf',
+            'detected': True
+        }
+    
     return {}
+
+def _detect_conversation_pdf_request(function_args_dict: dict, user_prompt: str) -> dict:
+    """
+    Detect if the user is requesting conversation export as PDF attachment
+    """
+    user_prompt_lower = user_prompt.lower()
+    conversation_pdf_indicators = [
+        'email the previous conversation as pdf',
+        'email previous conversation as pdf', 
+        'email conversation as pdf attachment',
+        'email the conversation as pdf',
+        'send conversation pdf',
+        'export conversation to pdf and email',
+        'email conversation history as pdf',
+        'send the conversation as pdf',
+        'email our conversation as pdf',
+        'email the above full and complete response',
+        'email the above response as pdf',
+        'email the full response as pdf',
+        'email the complete response as pdf',
+        'pdf attachment with',
+        'neatly formatted pdf attachment'
+    ]
+    
+    has_conversation_pdf_request = any(indicator in user_prompt_lower for indicator in conversation_pdf_indicators)
+    
+    if has_conversation_pdf_request:
+        # Extract email details from tool arguments first
+        to_email = function_args_dict.get('to_email')
+        subject = function_args_dict.get('subject', 'Conversation Export')
+        
+        # If email not found in tool args, extract from user prompt
+        if not to_email:
+            import re
+            user_email_patterns = [
+                r'to\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+                r'email.*?to\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+                r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+            ]
+            for pattern in user_email_patterns:
+                user_email_match = re.search(pattern, user_prompt)
+                if user_email_match:
+                    to_email = user_email_match.group(1)
+                    break
+        
+        return {
+            'to_email': to_email,
+            'subject': subject,
+            'type': 'conversation_pdf',
+            'detected': True
+        }
+    
+    return {'detected': False}
 
 async def _extract_html_params_from_results(tools_results: str, user_prompt: str = "") -> dict:
     """
@@ -5238,15 +5386,110 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                             break
                     
                     if email_tool_instance and html_filename:
-                        result = await email_tool_instance.execute(
-                            to_email=html_email_request.get('to_email'),
-                            subject=html_email_request.get('subject', 'HTML Report'),
-                            body=f"Please find attached HTML document.",
-                            attachments=html_filename
-                        )
+                        # 🔧 CRITICAL FIX: Add timeout to prevent infinite hanging
+                        import asyncio
+                        
+                        try:
+                            logger.info(f"⏰ POST-LLM HTML EMAIL: Starting email execution with 120s timeout...")
+                            
+                            # Execute email with timeout to prevent hanging
+                            result = await asyncio.wait_for(
+                                email_tool_instance.execute(
+                                    to_email=html_email_request.get('to_email'),
+                                    subject=html_email_request.get('subject', 'HTML Report'),
+                                    body=f"Please find attached HTML document.",
+                                    attachments=html_filename
+                                ),
+                                timeout=120  # 2 minute timeout
+                            )
+                            
+                            logger.info(f"✅ POST-LLM HTML EMAIL: Completed successfully")
+                            
+                        except asyncio.TimeoutError:
+                            logger.error(f"⏰ POST-LLM HTML EMAIL: TIMEOUT after 120 seconds - email execution hung!")
+                            result = {'success': False, 'error': 'HTML email execution timed out after 120 seconds'}
+                        except Exception as e:
+                            logger.error(f"❌ POST-LLM HTML EMAIL: Email execution failed: {e}")
+                            result = {'success': False, 'error': str(e)}
                         logger.info(f"🎯 POST-LLM HTML EMAIL: Sent with complete content")
                         additional_results += f"Tool: {tool_name} (HTML email with complete content)\nResult: {result}\n\n"
                         continue  # Skip regular email processing
+                
+                # 📄 CONVERSATION PDF EMAIL PROCESSING
+                conversation_pdf_request = _detect_conversation_pdf_request(function_args_dict, user_prompt)
+                if conversation_pdf_request.get('detected'):
+                    logger.info(f"📄 POST-LLM CONVERSATION PDF: Processing conversation export request")
+                    
+                    # Get conversation history from the current session 
+                    message_history = []
+                    
+                    # Extract conversation history from the context if available
+                    if "=== CONVERSATION HISTORY ===" in user_prompt:
+                        # Parse conversation from user_prompt context
+                        conv_start = user_prompt.find("=== CONVERSATION HISTORY ===")
+                        conv_end = user_prompt.find("=== CURRENT REQUEST ===")
+                        
+                        if conv_start != -1 and conv_end != -1:
+                            conversation_text = user_prompt[conv_start:conv_end]
+                            # Parse the conversation format
+                            for line in conversation_text.split('\n'):
+                                line = line.strip()
+                                if line and ':' in line and (line.upper().startswith('USER:') or line.upper().startswith('ASSISTANT:') or line.upper().startswith('SYSTEM:')):
+                                    message_history.append(line)
+                    
+                    # If no conversation history found, create a summary of current interaction
+                    if not message_history:
+                        message_history = [
+                            f"USER: {user_prompt.split('=== CURRENT REQUEST ===')[-1].strip() if '=== CURRENT REQUEST ===' in user_prompt else user_prompt}",
+                            f"ASSISTANT: {complete_llm_response[:1000]}{'...' if len(complete_llm_response) > 1000 else ''}"
+                        ]
+                    
+                    # Generate conversation PDF
+                    pdf_filename = "conversation_export.pdf"
+                    pdf_result = export_conversation_to_pdf(message_history, pdf_filename)
+                    
+                    if pdf_result.get('success'):
+                        # Send email with conversation PDF attachment
+                        email_tool_instance = None
+                        for tool in tool_manager.user_tools:
+                            if tool.name == "secure_email_sender":
+                                email_tool_instance = tool
+                                break
+                        
+                        if email_tool_instance:
+                            # 🔧 CRITICAL FIX: Add timeout to prevent infinite hanging
+                            import asyncio
+                            
+                            try:
+                                logger.info(f"⏰ POST-LLM CONVERSATION PDF: Starting email execution with 120s timeout...")
+                                
+                                # Execute email with timeout to prevent hanging
+                                email_result = await asyncio.wait_for(
+                                    email_tool_instance.execute(
+                                        to_email=conversation_pdf_request.get('to_email'),
+                                        subject=conversation_pdf_request.get('subject', 'Conversation Export'),
+                                        body=f"Please find attached the conversation export in PDF format.\n\nThis document contains {pdf_result.get('message_count', 0)} messages from our conversation.",
+                                        attachments=pdf_filename
+                                    ),
+                                    timeout=120  # 2 minute timeout
+                                )
+                                
+                                logger.info(f"✅ POST-LLM CONVERSATION PDF: Email completed successfully")
+                                
+                            except asyncio.TimeoutError:
+                                logger.error(f"⏰ POST-LLM CONVERSATION PDF: TIMEOUT after 120 seconds - email execution hung!")
+                                email_result = {'success': False, 'error': 'Conversation PDF email execution timed out after 120 seconds'}
+                            except Exception as e:
+                                logger.error(f"❌ POST-LLM CONVERSATION PDF: Email execution failed: {e}")
+                                email_result = {'success': False, 'error': str(e)}
+                            logger.info(f"📄 POST-LLM CONVERSATION PDF: Sent successfully")
+                            additional_results += f"Tool: {tool_name} (Conversation PDF export)\nResult: {email_result}\n\n"
+                            continue  # Skip regular email processing
+                        else:
+                            logger.error(f"❌ POST-LLM CONVERSATION PDF: Could not find email tool")
+                    else:
+                        logger.error(f"❌ POST-LLM CONVERSATION PDF: Export failed - {pdf_result.get('error')}")
+                        additional_results += f"Tool: {tool_name} (Conversation PDF export failed)\nResult: Error: {pdf_result.get('error')}\n\n"
                 
                 # 🚀 BULLETPROOF EMAIL EXECUTION (Regular processing)
                 # Handles all email scenarios: single file, multiple files, existing files, new files
@@ -5356,15 +5599,20 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                             break
                     
                     if email_tool_instance:
+                        logger.info(f"✅ POST-LLM EMAIL: Found email tool instance")
+                        
                         # 🔥 ENHANCED: Smart email and CC extraction from user prompt
                         import re
                         email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
                         email_matches = re.findall(email_pattern, user_prompt)
                         
+                        logger.info(f"📧 POST-LLM EMAIL: Found {len(email_matches)} email addresses: {email_matches}")
+                        
                         # Determine primary recipient and CC with smart detection
                         recipient_email = email_matches[0] if email_matches else None
                         if not recipient_email:
-                            print("⚠️ No email address found in user request - skipping email")
+                            logger.warning(f"⚠️ POST-LLM EMAIL: No email address found in user request - skipping email")
+                            additional_results += f"Tool: {tool_name} (post-LLM execution skipped)\nResult: No email address found in request\n\n"
                             continue
                         cc_emails = []
                         
@@ -5431,16 +5679,46 @@ AI Document Generation System"""
                         
                         logger.info(f"📧 POST-LLM EMAIL: Subject: {subject}")
                         logger.info(f"📧 POST-LLM EMAIL: Attachments: {attachments_str}")
+                        logger.info(f"📧 POST-LLM EMAIL: Recipients: {recipient_email}, CC: {cc_emails_str}")
+                        logger.info(f"📧 POST-LLM EMAIL: Body length: {len(email_body)} chars")
                         
-                        email_result = await email_tool_instance.execute(
-                            to_email=recipient_email,
-                            cc_emails=cc_emails_str,
-                            subject=subject,
-                            body=email_body,
-                            attachments=attachments_str
-                        )
+                        # 🔧 CRITICAL FIX: Add timeout to prevent infinite hanging
+                        import asyncio
                         
-                        logger.info(f"🎯 POST-LLM: Email RESULT: {email_result}")
+                        try:
+                            logger.info(f"⏰ POST-LLM EMAIL: Starting email execution with 120s timeout...")
+                            
+                            # Execute email with timeout to prevent hanging
+                            email_result = await asyncio.wait_for(
+                                email_tool_instance.execute(
+                                    to_email=recipient_email,
+                                    cc_emails=cc_emails_str if cc_emails_str else None,  # Don't pass empty string
+                                    subject=subject,
+                                    body=email_body,
+                                    attachments=attachments_str
+                                ),
+                                timeout=120  # 2 minute timeout
+                            )
+                            
+                            logger.info(f"✅ POST-LLM EMAIL: Completed successfully")
+                            logger.info(f"🎯 POST-LLM: Email RESULT: {email_result}")
+                            
+                        except asyncio.TimeoutError:
+                            logger.error(f"⏰ POST-LLM EMAIL: TIMEOUT after 120 seconds - email execution hung!")
+                            email_result = {
+                                'success': False, 
+                                'error': 'Email execution timed out after 120 seconds',
+                                'result': None
+                            }
+                        except Exception as email_error:
+                            logger.error(f"❌ POST-LLM EMAIL: Exception during execution: {email_error}")
+                            import traceback
+                            logger.error(f"❌ POST-LLM EMAIL: Traceback: {traceback.format_exc()}")
+                            email_result = {
+                                'success': False,
+                                'error': f'Email execution failed: {str(email_error)}',
+                                'result': None
+                            }
                         
                         if email_result.get('success'):
                             additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: Email sent to {recipient_email} with attachment {created_filename}\n\n"
@@ -5521,23 +5799,146 @@ async def llama_stream(request: Request):
     images = data.get('images', ['noimage'])
     tools_calling_model = data.get('tools_calling_model', ServerConfig.DEFAULT_TOOL_CALLING_MODEL)
     
-    # Handle images exactly like original
-    image_exists = False
-    if "images" in data:
-        if data["images"][0] != "noimage":
-            logger.info("Image processing enabled")
-            image_exists = True
+    # 🖼️ COMPREHENSIVE IMAGE PROCESSING FIX
+    async def process_image_data(images_raw):
+        """Process images: convert file paths to base64 with smart resizing and comprehensive error handling."""
+        import os
+        import base64
+        import io
+        from PIL import Image
+        
+        if not images_raw or images_raw == ['noimage']:
+            return ['noimage'], False
+            
+        processed_images = []
+        image_exists = False
+        
+        for i, img_data in enumerate(images_raw):
+            if img_data == "noimage":
+                processed_images.append("noimage")
+                continue
+                
+            try:
+                logger.info(f"🖼️ Processing image {i+1}: {type(img_data)} - {str(img_data)[:100]}...")
+                
+                # Check if it's already base64 data (starts with base64 chars or data: URI)
+                if isinstance(img_data, str):
+                    # Remove data URI prefix if present
+                    if img_data.startswith('data:image/'):
+                        _, base64_part = img_data.split(',', 1)
+                        img_data = base64_part
+                    
+                    # Check if it looks like base64 (contains only base64 characters)
+                    import re
+                    if re.match(r'^[A-Za-z0-9+/]*={0,2}$', img_data) and len(img_data) > 100:
+                        logger.info(f"🖼️ Image {i+1}: Already base64 data ({len(img_data)} chars)")
+                        processed_images.append(img_data)
+                        image_exists = True
+                        continue
+                    
+                    # Otherwise, treat as file path
+                    file_path = img_data.strip()
+                    
+                    # Expand user path (~)
+                    file_path = os.path.expanduser(file_path)
+                    
+                    if not os.path.exists(file_path):
+                        logger.error(f"🖼️ Image {i+1}: File not found: {file_path}")
+                        processed_images.append("noimage")
+                        continue
+                    
+                    if not os.path.isfile(file_path):
+                        logger.error(f"🖼️ Image {i+1}: Not a file: {file_path}")
+                        processed_images.append("noimage")
+                        continue
+                    
+                    # Check file extension
+                    valid_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+                    file_ext = os.path.splitext(file_path)[1].lower()
+                    if file_ext not in valid_extensions:
+                        logger.error(f"🖼️ Image {i+1}: Unsupported format {file_ext}: {file_path}")
+                        processed_images.append("noimage")
+                        continue
+                    
+                    # Read file as binary
+                    try:
+                        with open(file_path, 'rb') as f:
+                            img_bytes = f.read()
+                        logger.info(f"🖼️ Image {i+1}: Read {len(img_bytes)} bytes from {file_path}")
+                    except Exception as e:
+                        logger.error(f"🖼️ Image {i+1}: Failed to read file {file_path}: {e}")
+                        processed_images.append("noimage")
+                        continue
+                    
+                    # Progressive optimization for qwen2.5vl:3b - compress without aggressive resizing
+                    resize_threshold = 2000000  # 2MB threshold for smart compression (not aggressive resizing)
+                    if len(img_bytes) > resize_threshold:
+                        logger.info(f"🖼️ Image {i+1}: Large image ({len(img_bytes)} bytes), applying smart compression...")
+                        try:
+                            # Smart compression approach for qwen2.5vl:3b
+                            with Image.open(io.BytesIO(img_bytes)) as img:
+                                original_size = img.size
+                                
+                                # Only resize if extremely large (>4000px), otherwise just compress
+                                if max(img.size) > 4000:
+                                    # Conservative resize - maintain high resolution for vision model
+                                    max_size = 2400  # Much larger than before to preserve detail
+                                    img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+                                    logger.info(f"🖼️ Image {i+1}: Resized from {original_size} to {img.size}")
+                                
+                                # Convert to RGB if needed
+                                if img.mode not in ('RGB', 'L'):
+                                    img = img.convert('RGB')
+                                
+                                # Compress with higher quality to preserve details for vision model
+                                buffer = io.BytesIO()
+                                img.save(buffer, format='JPEG', quality=92, optimize=True)  # Higher quality
+                                img_bytes = buffer.getvalue()
+                                logger.info(f"🖼️ Image {i+1}: Compressed to {len(img_bytes)} bytes ({img.size[0]}x{img.size[1]})")
+                        except Exception as e:
+                            logger.warning(f"🖼️ Image {i+1}: Compression failed, using original: {e}")
+                    
+                    # Convert to base64 (raw base64, no data URI prefix for Ollama compatibility)
+                    img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+                    processed_images.append(img_base64)
+                    image_exists = True
+                    logger.info(f"🖼️ Image {i+1}: Successfully processed - {len(img_base64)} base64 chars")
+                    
+                else:
+                    logger.error(f"🖼️ Image {i+1}: Unsupported data type: {type(img_data)}")
+                    processed_images.append("noimage")
+                    
+            except Exception as e:
+                logger.error(f"🖼️ Image {i+1}: Processing failed: {e}")
+                logger.error(f"🖼️ Image {i+1}: Exception type: {type(e)}")
+                import traceback
+                logger.error(f"🖼️ Image {i+1}: Traceback: {traceback.format_exc()}")
+                processed_images.append("noimage")
+        
+        logger.info(f"🖼️ Image processing complete: {len(processed_images)} images, image_exists={image_exists}")
+        return processed_images, image_exists
+    
+    # Process images with comprehensive error handling
+    try:
+        images, image_exists = await process_image_data(images)
+        # Update the data dictionary with processed images
+        data["images"] = images
+        logger.info(f"🖼️ Updated data[images] with {len([img for img in images if img != 'noimage'])} processed images")
+    except Exception as e:
+        logger.error(f"🖼️ CRITICAL: Image processing failed: {e}")
+        images = ['noimage']
+        image_exists = False
     
     async def generate_stream():
         import time  # Import time at function start for timing measurements
         logger.info("🔧 DEBUG: generate_stream() function called")
         try:
-            tools_results_list = []  # Use list for O(1) append vs O(n²) string concatenation
-            tools_called = []  # Track all tools that were called
-            
             # 🔧 VARIABLE SCOPE FIX: Initialize variables at function scope
+            nonlocal image_exists  # Access outer scope image_exists variable
             is_meta_task = False  # Default value to prevent UnboundLocalError
             tools_results = ""    # Default value to prevent UnboundLocalError
+            tools_results_list = []  # Use list for O(1) append vs O(n²) string concatenation
+            tools_called = []  # Track all tools that were called
             
             # 🎯 EMAIL INTERCEPTION STATE  
             email_intercepted = False
@@ -5548,6 +5949,111 @@ async def llama_stream(request: Request):
             if (tools_in_use):
                 # Tool execution phase initiated
                 logger.info("🔧 DEBUG: Entering tool execution phase")
+                
+                # 🖼️ FORCED IMAGE PROCESSING: When images are present, automatically call image_to_text
+                forced_image_processing_result = ""
+                if image_exists:
+                    logger.info("🖼️ FORCED IMAGE PROCESSING: Images detected, automatically processing...")
+                    
+                    # Check if image processing LLM is available
+                    try:
+                        # Use global llm_manager instance
+                        
+                        # Check if image processing provider is configured
+                        if hasattr(llm_manager, 'image_processing_provider') and llm_manager.image_processing_provider:
+                            logger.info("🖼️ Image processing LLM available, processing images...")
+                            
+                            # Load and execute image_to_text tool
+                            try:
+                                from user_tools.tool_discovery import get_user_tool_by_name, load_user_tools
+                                user_tools = load_user_tools()
+                                image_tool = get_user_tool_by_name(user_tools, "image_to_text")
+                                
+                                if image_tool:
+                                    # Prepare image data for the tool
+                                    images_data = []
+                                    for i, img_data in enumerate(data.get("images", [])):
+                                        if img_data != "noimage":
+                                            images_data.append({
+                                                "type": "base64",
+                                                "data": img_data,
+                                                "filename": f"user_image_{i+1}"
+                                            })
+                                    
+                                    if images_data:
+                                        # Execute image_to_text tool
+                                        import time
+                                        start_time = time.time()
+                                        result = await image_tool.execute(
+                                            images=images_data,
+                                            processing_mode="sequential",  # Use sequential for forced processing
+                                            quality="high"
+                                        )
+                                        execution_time = time.time() - start_time
+                                        
+                                        if result.get('success'):
+                                            processed_count = result.get('processed_images', 0)
+                                            logger.info(f"🖼️ FORCED IMAGE PROCESSING COMPLETE: {processed_count} images processed in {execution_time:.1f}s")
+                                            
+                                            # Format the results for primary LLM context
+                                            image_descriptions = []
+                                            for img_result in result.get('results', []):
+                                                if img_result.get('description'):
+                                                    filename = img_result.get('filename', 'image')
+                                                    description = img_result.get('description')
+                                                    image_descriptions.append(f"[{filename}]: {description}")
+                                            
+                                            if image_descriptions:
+                                                # Generate timestamp for chronological ordering
+                                                import datetime
+                                                timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+                                                
+                                                forced_image_processing_result = f"""
+🖼️ IMAGE PROCESSING RESULTS [{timestamp}]:
+{chr(10).join(image_descriptions)}
+
+The above image analysis was automatically performed on newly uploaded images. This visual content is now available for your response."""
+                                            
+                                            # Add to tools results for primary LLM - will be appended to existing context
+                                            tools_called.append("image_to_text")
+                                            tools_results_list.append(f"Tool: image_to_text\nResult: {forced_image_processing_result}\n")
+                                            
+                                        else:
+                                            error_msg = result.get('error', 'Unknown error during image processing')
+                                            logger.error(f"🖼️ FORCED IMAGE PROCESSING FAILED: {error_msg}")
+                                            import datetime
+                                            timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+                                            forced_image_processing_result = f"\n🖼️ IMAGE PROCESSING ERROR [{timestamp}]: {error_msg}\nImages were detected but could not be processed.\n"
+                                    else:
+                                        logger.warning("🖼️ No valid image data found despite image_exists=True")
+                                else:
+                                    logger.error("🖼️ image_to_text tool not found in user tools")
+                                    import datetime
+                                    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+                                    forced_image_processing_result = f"\n🖼️ IMAGE PROCESSING UNAVAILABLE [{timestamp}]: image_to_text tool not found.\nImages were detected but cannot be processed.\n"
+                                    
+                            except Exception as e:
+                                logger.error(f"🖼️ FORCED IMAGE PROCESSING ERROR: {e}")
+                                import datetime
+                                timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+                                forced_image_processing_result = f"\n🖼️ IMAGE PROCESSING ERROR [{timestamp}]: {str(e)}\nImages were detected but could not be processed.\n"
+                        else:
+                            logger.warning("🖼️ Image processing LLM not configured")
+                            import datetime
+                            timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+                            forced_image_processing_result = f"\n🖼️ IMAGE PROCESSING UNAVAILABLE [{timestamp}]: No image processing model configured.\nImages were detected but cannot be analyzed. Please configure an image processing model in the LLM settings.\n"
+                            
+                    except Exception as e:
+                        logger.error(f"🖼️ FORCED IMAGE PROCESSING SETUP ERROR: {e}")
+                        import datetime
+                        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+                        forced_image_processing_result = f"\n🖼️ IMAGE PROCESSING ERROR [{timestamp}]: {str(e)}\nImages were detected but processing setup failed.\n"
+                    
+                    # 🔄 CRITICAL: Reset image_exists flag after processing (success or failure)
+                    # This prevents re-triggering image processing on subsequent conversation turns
+                    # The image processing results remain in context as reference for the conversation
+                    image_exists = False
+                    logger.info("🔄 FORCED IMAGE PROCESSING: Reset image_exists flag to False - processing complete")
                 
                 # STAGE 1: Call tool calling model to generate JSON function calls
                 # Load system prompt from external file
@@ -5813,6 +6319,56 @@ async def llama_stream(request: Request):
                                         async def execute_single_tool(tool_call):
                                             function_name = tool_call['function']['name']
                                             function_args = tool_call['function']['arguments']
+                                            
+                                            # Parse JSON string arguments to dictionary if needed
+                                            if isinstance(function_args, str):
+                                                try:
+                                                    function_args = json.loads(function_args)
+                                                except json.JSONDecodeError:
+                                                    logger.error(f"❌ Invalid JSON in function arguments for {function_name}: {function_args}")
+                                                    function_args = {}
+                                            
+                                            # 🖼️ INTERCEPT IMAGE_TO_TEXT CALLS - Replace placeholder with actual image data
+                                            if function_name == "image_to_text" and data.get("images") and data.get("images")[0] != "noimage":
+                                                # Handle both "image" (singular) and "images" (plural) parameters
+                                                if "image" in function_args and function_args["image"] in ["user_provided_image_data", "<user_provided_image_data>", "<actual_base64_image_data>"]:
+                                                    # Replace placeholder with actual base64 image data for singular parameter
+                                                    actual_images = data.get("images", [])
+                                                    if actual_images and actual_images[0] != "noimage":
+                                                        function_args["image"] = actual_images[0]  # Use first image for singular parameter
+                                                        logger.info(f"🖼️ REPLACED singular image placeholder with actual base64 data ({len(actual_images[0])} chars)")
+                                                    else:
+                                                        logger.warning(f"🖼️ No image data available for singular image parameter")
+                                                elif "images" in function_args:
+                                                    # Parse images if it's a string
+                                                    images_arg = function_args["images"]
+                                                    if isinstance(images_arg, str):
+                                                        try:
+                                                            images_arg = json.loads(images_arg)
+                                                        except json.JSONDecodeError:
+                                                            logger.warning(f"🖼️ Failed to parse images argument: {images_arg}")
+                                                            images_arg = []
+                                                    
+                                                    # Replace placeholder with actual image data
+                                                    if isinstance(images_arg, list):
+                                                        processed_images = []
+                                                        for i, img_item in enumerate(images_arg):
+                                                            if isinstance(img_item, dict) and img_item.get("path") == "user_provided_image_data":
+                                                                # Replace with actual base64 image data
+                                                                actual_images = data.get("images", [])
+                                                                if i < len(actual_images) and actual_images[i] != "noimage":
+                                                                    processed_images.append({
+                                                                        "type": "base64",
+                                                                        "data": f"data:image/jpeg;base64,{actual_images[i]}",
+                                                                        "filename": f"user_image_{i+1}"
+                                                                    })
+                                                                else:
+                                                                    logger.warning(f"🖼️ No image data available for index {i}")
+                                                            else:
+                                                                processed_images.append(img_item)
+                                                        function_args["images"] = processed_images
+                                                        logger.info(f"🖼️ REPLACED image placeholder with {len(processed_images)} actual image(s)")
+                                            
                                             start_time = time.time()
                                             result = await tool_manager.safe_function_call(function_name, function_args)
                                             return (function_name, result, start_time, False, None)
@@ -5904,6 +6460,47 @@ async def llama_stream(request: Request):
                                     # Add image if applicable
                                     if "image" in function_args and image_exists:
                                         function_args["image"] = data.get("images", [None])[0]
+                                    
+                                    # 🖼️ INTERCEPT IMAGE_TO_TEXT CALLS - Replace placeholder with actual image data
+                                    if function_name == "image_to_text" and data.get("images") and data.get("images")[0] != "noimage":
+                                        # Handle both "image" (singular) and "images" (plural) parameters
+                                        if "image" in function_args and function_args["image"] in ["user_provided_image_data", "<user_provided_image_data>", "<actual_base64_image_data>"]:
+                                            # Replace placeholder with actual base64 image data for singular parameter
+                                            actual_images = data.get("images", [])
+                                            if actual_images and actual_images[0] != "noimage":
+                                                function_args["image"] = actual_images[0]  # Use first image for singular parameter
+                                                logger.info(f"🖼️ REPLACED singular image placeholder with actual base64 data ({len(actual_images[0])} chars)")
+                                            else:
+                                                logger.warning(f"🖼️ No image data available for singular image parameter")
+                                        elif "images" in function_args:
+                                            # Parse images if it's a string
+                                            images_arg = function_args["images"]
+                                            if isinstance(images_arg, str):
+                                                try:
+                                                    images_arg = json.loads(images_arg)
+                                                except json.JSONDecodeError:
+                                                    logger.warning(f"🖼️ Failed to parse images argument: {images_arg}")
+                                                    images_arg = []
+                                            
+                                            # Replace placeholder with actual image data
+                                            if isinstance(images_arg, list):
+                                                processed_images = []
+                                                for i, img_item in enumerate(images_arg):
+                                                    if isinstance(img_item, dict) and img_item.get("path") == "user_provided_image_data":
+                                                        # Replace with actual base64 image data
+                                                        actual_images = data.get("images", [])
+                                                        if i < len(actual_images) and actual_images[i] != "noimage":
+                                                            processed_images.append({
+                                                                "type": "base64",
+                                                                "data": f"data:image/jpeg;base64,{actual_images[i]}",
+                                                                "filename": f"user_image_{i+1}"
+                                                            })
+                                                        else:
+                                                            logger.warning(f"🖼️ No image data available for index {i}")
+                                                    else:
+                                                        processed_images.append(img_item)
+                                                function_args["images"] = processed_images
+                                                logger.info(f"🖼️ REPLACED image placeholder with {len(processed_images)} actual image(s)")
                                     
                                     # Execute the function with timing
                                     start_time = time.time()
@@ -7297,11 +7894,51 @@ async def openai_chat_completions(request: OpenAIChatRequest):
         
         # Build conversation context from message history
         message_history = []
+        images = []  # Collect images from vision requests
+        
+        # 🖼️ CRITICAL FIX: Use images parameter if provided (custom format)
+        if request.images and request.images != ["noimage"]:
+            images.extend(request.images)
+            logger.info(f"🖼️ Using images from request parameter: {len(images)} images")
+        
         for message in request.messages:
             if message.role in ["user", "assistant"]:
-                message_history.append(f"{message.role.upper()}: {message.content}")
+                # Handle both string and structured content (for vision)
+                if isinstance(message.content, str):
+                    content_text = message.content
+                elif isinstance(message.content, list):
+                    # Extract text and images from structured content
+                    text_parts = []
+                    for item in message.content:
+                        if item.get('type') == 'text':
+                            text_parts.append(item.get('text', ''))
+                        elif item.get('type') == 'image_url':
+                            image_url = item.get('image_url', {}).get('url', '')
+                            if image_url.startswith('data:image/'):
+                                # Extract base64 data
+                                base64_data = image_url.split(',', 1)[1] if ',' in image_url else image_url
+                                images.append(base64_data)
+                            elif image_url.startswith('file://'):
+                                # Extract local file path
+                                file_path = image_url[7:]  # Remove 'file://' prefix
+                                if os.path.exists(file_path):
+                                    try:
+                                        with open(file_path, 'rb') as f:
+                                            img_bytes = f.read()
+                                        base64_data = base64.b64encode(img_bytes).decode('utf-8')
+                                        images.append(base64_data)
+                                        logger.info(f"🖼️ Loaded local file: {file_path} ({len(img_bytes)} bytes)")
+                                    except Exception as e:
+                                        logger.error(f"🖼️ Error loading file {file_path}: {e}")
+                                else:
+                                    logger.warning(f"🖼️ File not found: {file_path}")
+                    content_text = ' '.join(text_parts)
+                else:
+                    content_text = str(message.content)
+                
+                message_history.append(f"{message.role.upper()}: {content_text}")
                 if message.role == "user":
-                    user_prompt = message.content  # Use the latest user message
+                    user_prompt = content_text  # Use the latest user message text
         
         if not user_prompt:
             raise HTTPException(status_code=400, detail="No user message found")
@@ -7325,22 +7962,22 @@ async def openai_chat_completions(request: OpenAIChatRequest):
         enhanced_prompt = conversation_context + user_prompt if is_followup else user_prompt
         
         if is_streaming:
-            return await openai_streaming_response(enhanced_prompt, request.model, conversation_id)
+            return await openai_streaming_response(enhanced_prompt, request.model, conversation_id, images)
         else:
-            return await openai_non_streaming_response(enhanced_prompt, request.model, conversation_id)
+            return await openai_non_streaming_response(enhanced_prompt, request.model, conversation_id, images)
         
     except Exception as e:
         logger.error(f"🚨 OpenAI compatibility error: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-async def openai_non_streaming_response(user_prompt: str, model: str, conversation_id: str):
+async def openai_non_streaming_response(user_prompt: str, model: str, conversation_id: str, images: list = None):
     """Handle non-streaming OpenAI response with proper format"""
     try:
         logger.info(f"🔒 OpenAI Non-streaming Response - falling back to streaming with collect")
         
         # For non-streaming, we'll use streaming mode and collect all chunks
-        streaming_response = await openai_streaming_response(user_prompt, model, conversation_id)
+        streaming_response = await openai_streaming_response(user_prompt, model, conversation_id, images)
         
         # Collect all streaming content
         response_content = ""
@@ -7566,7 +8203,213 @@ async def openai_direct_stream(native_request_data: dict, model: str):
         }
         yield f"data: {json.dumps(error_chunk)}\n\n"
 
-async def openai_streaming_response(user_prompt: str, model: str, conversation_id: str):
+def export_conversation_to_pdf(message_history: list, filename: str = "conversation.pdf") -> dict:
+    """
+    Export conversation history to a well-formatted PDF file
+    
+    Args:
+        message_history: List of formatted message strings (e.g., ["USER: Hello", "ASSISTANT: Hi there"])
+        filename: Output PDF filename
+        
+    Returns:
+        dict with success status and file path
+    """
+    from datetime import datetime
+    
+    try:
+        if not CONVERSATION_PDF_AVAILABLE:
+            return {
+                "success": False,
+                "error": "PDF generation not available - missing UniversalPDFGenerator"
+            }
+        
+        if not message_history:
+            return {
+                "success": False, 
+                "error": "No conversation history to export"
+            }
+        
+        # Parse message history into structured format
+        parsed_messages = []
+        for msg in message_history:
+            # Parse "ROLE: content" format
+            if ':' in msg and msg.upper().startswith(('USER:', 'ASSISTANT:', 'SYSTEM:')):
+                parts = msg.split(':', 1)
+                role = parts[0].strip().lower()
+                content = parts[1].strip()
+                
+                parsed_messages.append({
+                    'role': role,
+                    'content': content,
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                })
+        
+        if not parsed_messages:
+            return {
+                "success": False,
+                "error": "Could not parse conversation messages"
+            }
+        
+        # 🚀 NEW APPROACH: markdown → HTML → PDF (double conversion)
+        # Generate conversation content as HTML first (since HTML conversion works well)
+        html_content = _format_conversation_for_html(parsed_messages)
+        
+        # Create PDF using HTML-to-PDF conversion
+        pdf_generator = UniversalPDFGenerator()
+        success = pdf_generator.create_pdf_from_html(
+            title="Conversation Export",
+            html_content=html_content,
+            output_path=filename,
+            subtitle=f"Exported on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}"
+        )
+        
+        if success:
+            return {
+                "success": True,
+                "file_path": filename,
+                "message_count": len(parsed_messages),
+                "message": f"Conversation exported to {filename}"
+            }
+        else:
+            return {
+                "success": False,
+                "error": "PDF generation failed"
+            }
+            
+    except Exception as e:
+        logger.error(f"Conversation PDF export error: {e}")
+        return {
+            "success": False,
+            "error": f"Export failed: {str(e)}"
+        }
+
+def _format_conversation_for_html(messages: list) -> str:
+    """Format conversation messages as clean HTML for PDF conversion"""
+    html_parts = []
+    
+    # Add conversation statistics
+    html_parts.append("<h2>📊 Conversation Summary</h2>")
+    html_parts.append("<ul>")
+    html_parts.append(f"<li><strong>Total Messages:</strong> {len(messages)}</li>")
+    
+    user_count = sum(1 for msg in messages if msg['role'] == 'user')
+    assistant_count = sum(1 for msg in messages if msg['role'] == 'assistant')
+    
+    html_parts.append(f"<li><strong>User Messages:</strong> {user_count}</li>")
+    html_parts.append(f"<li><strong>Assistant Messages:</strong> {assistant_count}</li>")
+    html_parts.append("</ul>")
+    html_parts.append("<br><br>")
+    
+    # Add conversation content
+    html_parts.append("<h2>💬 Conversation History</h2>")
+    
+    for i, message in enumerate(messages, 1):
+        role = message['role'].title()
+        content = message['content']
+        
+        # 🔧 FIX: Don't add artificial headers - content already has its own bulleted headings
+        # Only add minimal role identification for user messages, let assistant content speak for itself
+        if role == 'User':
+            # Add simple user header for clarity
+            html_parts.append(f"<h4>👤 User</h4>")
+            formatted_content = _convert_markdown_to_html(content)
+            html_parts.append(formatted_content)
+        else:
+            # For assistant messages, just add the content without artificial headers
+            # The content already has proper headings and bullet structure
+            formatted_content = _convert_markdown_to_html(content)
+            html_parts.append(formatted_content)
+        
+        # Add separator between messages (simple spacing instead of horizontal rule)
+        if i < len(messages):
+            html_parts.append("<br><br><br>")
+    
+    return '\n'.join(html_parts)
+
+def _convert_markdown_to_html(content: str) -> str:
+    """Convert markdown content to clean HTML"""
+    import re
+    
+    # Clean up the content
+    content = content.strip()
+    
+    # Convert headers first (before other processing)
+    content = re.sub(r'^### (.*?)$', r'<h4>\1</h4>', content, flags=re.MULTILINE)
+    content = re.sub(r'^## (.*?)$', r'<h3>\1</h3>', content, flags=re.MULTILINE)
+    content = re.sub(r'^# (.*?)$', r'<h2>\1</h2>', content, flags=re.MULTILINE)
+    
+    # Convert code blocks first (to avoid interfering with other formatting)
+    content = re.sub(r'```(\w*)\n?(.*?)```', r'<pre><code>\2</code></pre>', content, flags=re.DOTALL)
+    content = re.sub(r'`([^`]+)`', r'<code>\1</code>', content)
+    
+    # Convert lists line by line to handle bold formatting properly
+    lines = content.split('\n')
+    processed_lines = []
+    in_ul = False
+    in_ol = False
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Handle bullet lists
+        if stripped.startswith(('- ', '* ', '+ ')):
+            if not in_ul:
+                processed_lines.append('<ul>')
+                in_ul = True
+            if in_ol:
+                processed_lines.append('</ol>')
+                in_ol = False
+            item_content = stripped[2:].strip()
+            # Apply bold/italic formatting to list item content (comprehensive patterns)
+            item_content = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', item_content)
+            item_content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', item_content, flags=re.DOTALL)
+            item_content = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', item_content)
+            processed_lines.append(f'<li>{item_content}</li>')
+        
+        # Handle numbered lists
+        elif re.match(r'^\d+\.\s+', stripped):
+            if not in_ol:
+                processed_lines.append('<ol>')
+                in_ol = True
+            if in_ul:
+                processed_lines.append('</ul>')
+                in_ul = False
+            item_content = re.sub(r'^\d+\.\s+', '', stripped)
+            # Apply bold/italic formatting to list item content (comprehensive patterns)
+            item_content = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', item_content)
+            item_content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', item_content, flags=re.DOTALL)
+            item_content = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', item_content)
+            processed_lines.append(f'<li>{item_content}</li>')
+        
+        # Regular content
+        else:
+            # Close any open lists
+            if in_ul:
+                processed_lines.append('</ul>')
+                in_ul = False
+            if in_ol:
+                processed_lines.append('</ol>')
+                in_ol = False
+            
+            if stripped:
+                # Apply bold/italic formatting to regular paragraphs (comprehensive patterns)
+                formatted_line = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', stripped)
+                formatted_line = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', formatted_line, flags=re.DOTALL)
+                formatted_line = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', formatted_line)
+                processed_lines.append(f'<p>{formatted_line}</p>')
+            else:
+                processed_lines.append('')
+    
+    # Close any remaining open lists
+    if in_ul:
+        processed_lines.append('</ul>')
+    if in_ol:
+        processed_lines.append('</ol>')
+    
+    return '\n'.join(processed_lines)
+
+
+async def openai_streaming_response(user_prompt: str, model: str, conversation_id: str, images: list = None):
     """Handle streaming OpenAI response with proper format - simplified implementation"""
     try:
         logger.info(f"🔒 OpenAI Streaming Response requested")
@@ -7611,7 +8454,7 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
                 "toolsInUse": True,
                 "prompt_context": context_part,  # 🔧 FIX: Now properly includes conversation context
                 "searchWebInUse": False,
-                "images": ["noimage"],
+                "images": images if images else ["noimage"],  # 🔧 FIX: Use actual images from OpenAI request
                 "tools_calling_model": ServerConfig.DEFAULT_TOOL_CALLING_MODEL,
                 "system": ""
             }
