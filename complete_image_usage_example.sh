@@ -1,0 +1,107 @@
+#!/bin/bash
+# Complete Image-to-Text Tool Usage Example
+
+echo "🖼️ Image-to-Text Tool Usage Guide"
+echo "=================================="
+
+echo
+echo "Step 1: Configure Image Processing LLM"
+echo "--------------------------------------"
+echo "# Run this to set up vision models:"
+echo "echo '9' | python llm_config_tool.py"
+echo
+echo "# Choose from:"
+echo "# - Local: llava:7b (recommended for development)"
+echo "# - Cloud: OpenAI Vision (best quality)"
+
+echo
+echo "Step 2: Test with Native API"
+echo "----------------------------"
+
+echo
+echo "# Example 1: Natural language request"
+echo "curl -X POST http://localhost:5000/llama3_1b/stream \\"
+echo "  -H 'Content-Type: application/json' \\"
+echo "  -d '{"
+echo "    \"prompt\": \"Analyze this image and describe what you see\","
+echo "    \"model\": \"qwen3:8b\","
+echo "    \"tools\": true,"
+echo "    \"stream\": false"
+echo "  }'"
+
+echo
+echo "# Example 2: Direct tool call with base64 image"
+echo "curl -X POST http://localhost:5000/llama3_1b/stream \\"
+echo "  -H 'Content-Type: application/json' \\"
+echo "  -d '{"
+echo "    \"prompt\": \"Use image_to_text tool\","
+echo "    \"tools\": true,"
+echo "    \"tool_calls\": [{"
+echo "      \"function\": {"
+echo "        \"name\": \"image_to_text\","
+echo "        \"arguments\": {"
+echo "          \"images\": [{"
+echo "            \"type\": \"base64\","
+echo "            \"data\": \"data:image/jpeg;base64,/9j/4AAQ...\""
+echo "          }]"
+echo "        }"
+echo "      }"
+echo "    }]"
+echo "  }'"
+
+echo
+echo "Step 3: Use in Open-WebUI"
+echo "------------------------"
+echo "1. Open http://localhost:3000 (your Open-WebUI instance)"
+echo "2. Upload an image in the chat"
+echo "3. Type: 'Please analyze this image'"
+echo "4. The system automatically calls image_to_text tool"
+echo "5. Get detailed image description in response"
+
+echo
+echo "Step 4: Advanced Usage"
+echo "---------------------"
+echo "# Multiple images with different sources:"
+echo "curl -X POST http://localhost:5000/llama3_1b/stream \\"
+echo "  -H 'Content-Type: application/json' \\"
+echo "  -d '{"
+echo "    \"prompt\": \"Analyze these images\","
+echo "    \"tools\": true,"
+echo "    \"tool_calls\": [{"
+echo "      \"function\": {"
+echo "        \"name\": \"image_to_text\","
+echo "        \"arguments\": {"
+echo "          \"images\": ["
+echo "            {\"type\": \"file\", \"path\": \"/path/to/image.jpg\"},"
+echo "            {\"type\": \"url\", \"url\": \"https://example.com/chart.png\"}"
+echo "          ],"
+echo "          \"processing_mode\": \"batch\""
+echo "        }"
+echo "      }"
+echo "    }]"
+echo "  }'"
+
+echo
+echo "Expected Response Format:"
+echo "------------------------"
+echo "{"
+echo "  \"success\": true,"
+echo "  \"total_images\": 2,"
+echo "  \"processed_images\": 2,"
+echo "  \"failed_images\": 0,"
+echo "  \"processing_mode\": \"batch\","
+echo "  \"results\": ["
+echo "    {"
+echo "      \"index\": 0,"
+echo "      \"source\": \"file:image.jpg\","
+echo "      \"success\": true,"
+echo "      \"description\": \"Detailed image analysis...\","
+echo "      \"original_size\": [1920, 1080],"
+echo "      \"processed_size\": [1024, 576]"
+echo "    }"
+echo "  ]"
+echo "}"
+
+echo
+echo "🎉 Ready to analyze images!"
+echo "=========================="
