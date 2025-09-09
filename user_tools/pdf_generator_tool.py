@@ -233,52 +233,47 @@ class PDFGeneratorTool(BaseUserTool):
         )
     
     async def execute(self, **kwargs) -> Dict[str, Any]:
-        """Execute PDF generation"""
+        """Execute PDF generation using CENTRALIZED PDF SERVICE"""
+        
+        print("🎯 PDFGeneratorTool: Routing to CENTRALIZED PDF SERVICE")
+        
         try:
-            if not REPORTLAB_AVAILABLE:
-                return {
-                    "success": False,
-                    "error": "PDF generation requires reportlab. Install with: pip install reportlab"
-                }
+            # Import the centralized PDF service
+            from services.pdf_service import create_pdf
             
             # Extract parameters
             filename = kwargs.get('filename', '')
             title = kwargs.get('title', '')
             content = kwargs.get('content', '')
             content_type = kwargs.get('content_type', 'auto')
-            subtitle = kwargs.get('subtitle', '')
             
             # Validate inputs
-            if not filename or not title or not content:
+            if not filename or not content:
                 return {
                     "success": False,
-                    "error": "Missing required parameters: filename, title, and content are required"
+                    "error": "Missing required parameters: filename and content are required"
                 }
             
             # Ensure filename has .pdf extension
             if not filename.lower().endswith('.pdf'):
                 filename += '.pdf'
             
-            # Detect content type if auto
-            if content_type == 'auto':
-                content_type = self._detect_content_type(content)
+            # Route to centralized PDF service
+            result = create_pdf(
+                content=content,
+                output_path=filename,
+                title=title or "Generated Document",
+                content_type=content_type
+            )
             
-            # Generate PDF
-            pdf_path = await self._generate_pdf(filename, title, content, content_type, subtitle)
-            
-            return {
-                "success": True,
-                "pdf_path": pdf_path,
-                "content_type_detected": content_type,
-                "message": f"PDF generated successfully: {pdf_path}"
-            }
+            return result
             
         except Exception as e:
             return {
                 "success": False,
                 "error": f"PDF generation failed: {str(e)}"
             }
-    
+
     def _detect_content_type(self, content: str) -> str:
         """Automatically detect content type"""
         content_lower = content.lower().strip()
@@ -334,8 +329,11 @@ class PDFGeneratorTool(BaseUserTool):
                           content_type: str, subtitle: str = '') -> str:
         """Generate PDF with appropriate formatting"""
         
-        # Create output path
-        output_path = Path.cwd() / filename
+        # Create output path - handle both absolute and relative paths correctly
+        if Path(filename).is_absolute():
+            output_path = Path(filename)
+        else:
+            output_path = Path.cwd() / filename
         
         # Create document
         doc = SimpleDocTemplate(
@@ -706,6 +704,190 @@ class PDFGeneratorTool(BaseUserTool):
         text = text.replace('&lt;font name="Courier"&gt;', '<font name="Courier">').replace('&lt;/font&gt;', '</font>')
         
         return text
+    
+    async def _generate_pdf_with_markdown_pdf(self, filename: str, title: str, content: str) -> str:
+        """Generate PDF using markdown-pdf library (improved implementation)"""
+        try:
+            # Import the markdown-pdf library
+            from markdown_pdf import MarkdownPdf, Section
+            from pathlib import Path
+            import tempfile
+            import os
+            import datetime
+            
+            print(f"📋 PDF-GENERATOR: Using markdown-pdf library for professional formatting")
+            
+            # Create output path - handle both absolute and relative paths correctly
+            if Path(filename).is_absolute():
+                output_path = Path(filename)
+            else:
+                output_path = Path.cwd() / filename
+            
+            # Create parent directories if needed
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Extract better title from content if possible
+            extracted_title = title
+            if content:
+                lines = content.split('\n')
+                first_line = lines[0].strip() if lines else ""
+                if first_line and len(first_line) < 200 and not first_line.startswith('##'):
+                    extracted_title = first_line
+                else:
+                    # Look for markdown titles (# Title)
+                    for line in lines[:10]:
+                        line = line.strip()
+                        if line.startswith('# '):
+                            extracted_title = line[2:].strip()
+                            break
+            
+            # Safety check - ensure title is not the entire content
+            if len(extracted_title) > 200:
+                extracted_title = title
+            
+            # DEBUG logging
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+            print(f"📋 PDF-GENERATOR DEBUG [{timestamp}]: INVOKING markdown-pdf library")
+            print(f"📋 PDF-GENERATOR DEBUG: Filename: {filename}")
+            print(f"📋 PDF-GENERATOR DEBUG: Full path: {output_path}")
+            print(f"📋 PDF-GENERATOR DEBUG: Title: '{extracted_title}' (length: {len(extracted_title)})")
+            print(f"📋 PDF-GENERATOR DEBUG: Content length: {len(content)} characters")
+            print(f"📋 PDF-GENERATOR DEBUG: Starting professional PDF generation...")
+            
+            # Create PDF using markdown-pdf library
+            pdf = MarkdownPdf(toc_level=2, optimize=True)
+            
+            # Set document metadata
+            pdf.meta["title"] = extracted_title
+            pdf.meta["author"] = "AI Assistant"
+            pdf.meta["subject"] = "Generated Report"
+            
+            # Create custom CSS for professional formatting
+            custom_css = """
+            /* Set default font */
+            body {
+                font-family: "DejaVu Serif", serif;
+                font-size: 12pt;
+                line-height: 1.6;
+                color: #222;
+                margin: 1in;
+            }
+
+            /* Headings */
+            h1 {
+                font-size: 24pt;
+                color: #003366;
+                text-align: center;
+                margin-bottom: 20px;
+                border-bottom: 2px solid #003366;
+                padding-bottom: 10px;
+            }
+            h2 {
+                font-size: 18pt;
+                color: #004488;
+                margin-top: 30px;
+                margin-bottom: 15px;
+                border-left: 4px solid #004488;
+                padding-left: 15px;
+            }
+            h3 {
+                font-size: 14pt;
+                color: #006699;
+                margin-top: 20px;
+                margin-bottom: 10px;
+            }
+            h4 {
+                font-size: 13pt;
+                color: #0088aa;
+                margin-top: 15px;
+                margin-bottom: 8px;
+            }
+
+            /* Paragraphs */
+            p {
+                margin-bottom: 12px;
+                text-align: justify;
+            }
+
+            /* Lists */
+            ul, ol {
+                margin-left: 20px;
+                margin-bottom: 12px;
+            }
+            
+            li {
+                margin-bottom: 6px;
+            }
+
+            /* Strong/Bold text */
+            strong, b {
+                color: #003366;
+                font-weight: bold;
+            }
+
+            /* Code blocks */
+            code, pre {
+                font-family: "Courier New", monospace;
+                background: #f4f4f4;
+                border: 1px solid #ccc;
+                padding: 6px;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+
+            /* Tables */
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+                font-size: 11pt;
+            }
+            
+            th, td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }
+            
+            th {
+                background-color: #003366;
+                color: white;
+                font-weight: bold;
+            }
+            
+            tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+
+            /* Table of contents styling */
+            .toc {
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
+                padding: 20px;
+                margin-bottom: 30px;
+                border-radius: 5px;
+            }
+            """
+            
+            # NOTE: Using default markdown-pdf styling (custom CSS not supported in meta)
+            
+            # Add the content as a section with proper formatting
+            pdf.add_section(Section(content, toc=True))
+            
+            # Save the PDF
+            print(f"📋 PDF-GENERATOR DEBUG: Calling pdf.save('{output_path}')...")
+            pdf.save(str(output_path))
+            print(f"📋 PDF-GENERATOR DEBUG: PDF generation completed successfully!")
+            
+            # PDF generation completed
+            
+            return str(output_path)
+            
+        except Exception as e:
+            print(f"❌ PDF-GENERATOR ERROR: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
 
 # Test function

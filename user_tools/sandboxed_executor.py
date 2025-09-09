@@ -279,6 +279,7 @@ class SandboxedExecutorTool(BaseUserTool):
                     # Call our auto-detection logic directly instead of recursing through _create_file
                     if actual_filename.lower().endswith('.pdf'):
                         print(f"🧠 SMART DETECTION: Calling _create_real_pdf_file for {actual_filename}")
+                        # 🛡️ SECURITY: MUST create proper PDF or FAIL - NEVER create fake PDF files
                         create_result = await self._create_real_pdf_file(actual_filename, report_content)
                     elif actual_filename.lower().endswith('.html'):
                         create_result = await self._create_real_html_file(actual_filename, report_content)
@@ -788,8 +789,9 @@ This is a secure sandboxed environment for code execution and system commands.
             print(f"💥💥💥 _CREATE_FILE: ❌ Traceback: {traceback.format_exc()}")
             return {"success": False, "error": f"File type detection error: {str(e)}", "result": None}
         
-        if filename_lower.endswith('.pdf') and convert_to_pdf:
+        if filename_lower.endswith('.pdf'):
             print("💥💥💥 _CREATE_FILE: ✅ PDF CONDITION MET -> calling _create_real_pdf_file")
+            # 🛡️ SECURITY: MUST create proper PDF or FAIL - NEVER create fake PDF files
             return await self._create_real_pdf_file(filename, content)
         elif filename_lower.endswith('.html'):
             print("💥💥💥 _CREATE_FILE: Detected .html extension -> calling _create_real_html_file")
@@ -873,13 +875,21 @@ This is a secure sandboxed environment for code execution and system commands.
             
             # Convert to PDF if requested
             if convert_to_pdf:
-                pdf_result = await self._convert_text_to_pdf(file_path, content)
-                if pdf_result["success"]:
-                    result["pdf_file"] = pdf_result["pdf_path"]
-                    result["pdf_created"] = True
-                else:
-                    result["pdf_error"] = pdf_result["error"]
-                    result["pdf_created"] = False
+                # ***** BIG EYE-CATCHING LOG ENTRY *****
+                print(f"***** CONVERT/CREATE TO PDF content='{content[:200]}...' FROM sandboxed_executor._create_file.convert_to_pdf *****")
+                print(f"***** PDF PARAMS: filename={filename}, content_length={len(content)} *****")
+                
+                # COMMENTED OUT PDF GENERATION - TESTING PHASE
+                # pdf_result = await self._convert_text_to_pdf(file_path, content)
+                # if pdf_result["success"]:
+                #     result["pdf_file"] = pdf_result["pdf_path"]
+                #     result["pdf_created"] = True
+                # else:
+                #     result["pdf_error"] = pdf_result["error"]
+                
+                # TEMPORARY: Just mark it as skipped
+                result["pdf_skipped"] = "PDF conversion DISABLED for testing"
+                result["pdf_created"] = False
             
             return {
                 "success": True,
@@ -945,84 +955,59 @@ This is a secure sandboxed environment for code execution and system commands.
             return {"success": False, "error": f"File append error: {str(e)}", "result": None}
     
     async def _create_real_pdf_file(self, filename: str, content: str) -> Dict[str, Any]:
-        """Create a real PDF file using the universal PDF generator"""
+        """Create a real PDF file using CENTRALIZED PDF SERVICE"""
+        
+        print("🎯 SandboxedExecutor: Routing PDF creation to CENTRALIZED PDF SERVICE")
+        
         try:
-            print(f"🔧 AUTO-PDF: Detected .pdf request, creating real PDF instead of text file")
-            
-            # Import the universal PDF generator
-            import sys
-            import os
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            sys.path.insert(0, current_dir)
-            from _universal_pdf_generator import UniversalPDFGenerator
+            # Import the centralized PDF service
+            from services.pdf_service import create_pdf
             
             # Validate path
             is_valid, file_path = self._validate_path(filename)
             if not is_valid:
                 return {"success": False, "error": file_path, "result": None}
             
-            # Create parent directories if needed
-            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+            # Extract title from filename
+            title = Path(filename).stem if filename else "Document"
             
-            # Extract title from content or use filename  
-            title = Path(filename).stem if filename else "Report"
-            if content:
-                lines = content.split('\n')
-                for line in lines[:5]:  # Check first 5 lines for title
-                    line = line.strip()
-                    if line and not line.startswith('#'):
-                        title = line[:50] + "..." if len(line) > 50 else line
-                        break
-                    elif line.startswith('# '):
-                        title = line[2:].strip()
-                        break
+            print(f"🎯 SandboxedExecutor: Creating PDF via central service")
+            print(f"   📁 File: {file_path}")
+            print(f"   📄 Title: {title}")
+            print(f"   📏 Content: {len(content)} chars")
             
-            # Use the universal PDF generator
-            print(f"🔧 AUTO-PDF: Using UniversalPDFGenerator with reportlab")
-            print(f"🔧 AUTO-PDF: Title='{title}', Content length={len(content)}, Output='{file_path}'")
-            
-            generator = UniversalPDFGenerator()
-            success = generator.create_pdf(
-                title=title,
+            # Route to centralized PDF service
+            result = create_pdf(
                 content=content,
                 output_path=file_path,
-                subtitle=None,  # No subtitle
-                metadata=None   # No metadata
+                title=title,
+                content_type="auto"
             )
             
-            print(f"🔧 AUTO-PDF: PDF generation {'SUCCESS' if success else 'FAILED'}")
-            
-            if success:
-                # Get file stats
-                file_stats = os.stat(file_path)
-                
-                result = {
+            if result["success"]:
+                return {
+                    "success": True,
                     "filename": filename,
                     "full_path": file_path,
-                    "size_bytes": file_stats.st_size,
-                    "created": datetime.fromtimestamp(file_stats.st_ctime).isoformat(),
-                    "permissions": oct(file_stats.st_mode)[-3:],
-                    "pdf_generated": True,
-                    "content_type": "application/pdf"
+                    "size_bytes": result.get("size_bytes", 0),
+                    "created": datetime.now().isoformat(),
+                    "content_type": "application/pdf",
+                    "service": result.get("service", "CentralizedPDFService"),
+                    "result": f"PDF created successfully using {result.get('service', 'PDF service')}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get("error", "PDF creation failed"),
+                    "result": None
                 }
                 
-                print(f"✅ AUTO-PDF: Real PDF created successfully ({file_stats.st_size} bytes)")
-                return {"success": True, "result": result, "error": None}
-            else:
-                return {"success": False, "error": "PDF generation failed", "result": None}
-                
-        except ImportError as e:
-            print(f"⚠️ Universal PDF generator import error: {e}")
-            print("⚠️ Falling back to text file creation")
-            # Fall back to regular text file creation
-            return await self._create_text_file_fallback(filename, content)
         except Exception as e:
-            print(f"❌ Real PDF creation error: {e}")
-            print(f"❌ Error type: {type(e).__name__}")
-            import traceback
-            print(f"❌ Traceback: {traceback.format_exc()}")
-            return {"success": False, "error": f"PDF creation error: {str(e)}", "result": None}
-    
+            return {
+                "success": False,
+                "error": f"PDF creation failed: {str(e)}",
+                "result": None
+            }
     async def _create_text_file_fallback(self, filename: str, content: str) -> Dict[str, Any]:
         """Fallback to create text file when PDF generation fails"""
         # Validate path
@@ -1522,147 +1507,31 @@ This is a secure sandboxed environment for code execution and system commands.
             return {"success": False, "error": f"Code execution error: {str(e)}", "result": None}
     
     async def _convert_text_to_pdf(self, text_file_path: str, content: str) -> Dict[str, Any]:
-        """Convert text content to PDF using Python."""
-        try:
-            # Generate PDF file path
-            text_path = Path(text_file_path)
-            pdf_path = text_path.with_suffix('.pdf')
-            
-            # Create Python script to generate PDF
-            pdf_script = f'''#!/usr/bin/env python3
-"""
-Auto-generated PDF converter script
-"""
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-import textwrap
+        """Convert text content to PDF - COMPLETELY DISABLED"""
+        
+        print("##### PDF CONVERSION CALLED WITH:")
+        print(f"###   text_file_path: {text_file_path}")
+        print(f"###   content length: {len(content) if content else 0}")
+        print("### PDF PROCESSING IS COMPLETELY DISABLED ###")
+        
+        return {
+            "success": False,
+            "error": "PDF processing is completely disabled by system administrator"
+        }
 
-def create_pdf():
-    try:
-        # Read the text file
-        with open("{text_file_path}", "r", encoding="utf-8") as f:
-            content = f.read()
-        
-        # Create PDF
-        doc = SimpleDocTemplate("{pdf_path}", pagesize=letter,
-                               rightMargin=72, leftMargin=72,
-                               topMargin=72, bottomMargin=18)
-        
-        # Get styles
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=16,
-            spaceAfter=30,
-            alignment=1  # Center alignment
-        )
-        
-        story = []
-        
-        # Add title
-        title = "{text_path.stem}".replace("_", " ").title()
-        story.append(Paragraph(title, title_style))
-        story.append(Spacer(1, 12))
-        
-        # Split content into paragraphs
-        paragraphs = content.split('\\n\\n')
-        
-        for para in paragraphs:
-            if para.strip():
-                # Wrap long lines
-                wrapped_lines = []
-                for line in para.split('\\n'):
-                    if len(line) > 80:
-                        wrapped_lines.extend(textwrap.wrap(line, width=80))
-                    else:
-                        wrapped_lines.append(line)
-                
-                para_text = ' '.join(wrapped_lines)
-                story.append(Paragraph(para_text, styles['Normal']))
-                story.append(Spacer(1, 12))
-        
-        # Build PDF
-        doc.build(story)
-        print("✅ PDF created successfully!")
-        print(f"📄 Output: {pdf_path}")
-        
-        return True
-        
-    except ImportError as e:
-        print(f"❌ Missing dependency: {{e}}")
-        print("💡 Try: pip install reportlab")
-        return False
-    except Exception as e:
-        print(f"❌ PDF creation error: {{e}}")
-        return False
-
-if __name__ == "__main__":
-    success = create_pdf()
-    exit(0 if success else 1)
-'''
-            
-            # Save the PDF script
-            script_path = self.sandbox_path / "tmp" / "generate_pdf.py"
-            with open(script_path, 'w', encoding='utf-8') as f:
-                f.write(pdf_script)
-            
-            # Execute the PDF generation script
-            result = await self._execute_command({"command": f"python3 {script_path}"})
-            
-            if result["success"] and os.path.exists(pdf_path):
-                return {
-                    "success": True,
-                    "pdf_path": str(pdf_path),
-                    "message": "PDF created successfully"
-                }
-            else:
-                # Fallback to simple text-to-PDF using basic approach
-                return await self._create_simple_pdf(text_file_path, content)
-                
-        except Exception as e:
-            return {"success": False, "error": f"PDF conversion error: {str(e)}"}
-    
     async def _create_simple_pdf(self, text_file_path: str, content: str) -> Dict[str, Any]:
-        """Fallback: Create simple PDF using basic text formatting."""
-        try:
-            text_path = Path(text_file_path)
-            pdf_path = text_path.with_suffix('.pdf')
-            
-            # Create simple HTML version first
-            html_content = f'''<!DOCTYPE html>
-<html>
-<head>
-    <title>{text_path.stem.replace("_", " ").title()}</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; margin: 2cm; line-height: 1.6; }}
-        h1 {{ color: #333; text-align: center; }}
-        p {{ text-align: justify; margin-bottom: 1em; }}
-    </style>
-</head>
-<body>
-    <h1>{text_path.stem.replace("_", " ").title()}</h1>
-    <div>
-        {content.replace(chr(10), "</p><p>").replace("<p></p>", "")}
-    </div>
-</body>
-</html>'''
-            
-            html_path = text_path.with_suffix('.html')
-            with open(html_path, 'w', encoding='utf-8') as f:
-                f.write(html_content)
-            
-            return {
-                "success": True,
-                "pdf_path": str(html_path),
-                "message": "Created HTML version (PDF conversion requires additional packages)"
-            }
-            
-        except Exception as e:
-            return {"success": False, "error": f"Simple PDF creation error: {str(e)}"}
-    
+        """Fallback: Create simple PDF - COMPLETELY DISABLED"""
+        
+        print("##### SIMPLE PDF CREATION CALLED WITH:")
+        print(f"###   text_file_path: {text_file_path}")
+        print(f"###   content length: {len(content) if content else 0}")
+        print("### PDF PROCESSING IS COMPLETELY DISABLED ###")
+        
+        return {
+            "success": False,
+            "error": "PDF processing is completely disabled by system administrator"
+        }
+
     def _convert_to_html_shared(self, content: str, title: str) -> str:
         """Convert content to HTML using shared template system"""
         try:

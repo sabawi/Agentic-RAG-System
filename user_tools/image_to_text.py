@@ -8,6 +8,8 @@ import json
 import logging
 import os
 import base64
+import yaml
+import signal
 from datetime import datetime
 from typing import Dict, Any
 
@@ -30,6 +32,7 @@ class ImageToTextTool(BaseUserTool):
     def __init__(self):
         super().__init__()
         self.system_prompt = self._load_system_prompt()
+        self.vision_config = self._load_vision_config()
 
     @property
     def name(self) -> str:
@@ -68,6 +71,7 @@ class ImageToTextTool(BaseUserTool):
     async def execute(self, **kwargs) -> Dict[str, Any]:
         """Execute image-to-text conversion using simple Ollama approach."""
         try:
+            logger.info("🖼️ Starting vision model processing with extended timeout (30 minutes)")
             return self.get_image_processing_results(kwargs)
         except Exception as e:
             logger.error(f"🖼️ Image processing failed: {e}")
@@ -100,7 +104,7 @@ class ImageToTextTool(BaseUserTool):
             - Returns error message if processing fails
         """
 
-        image_processing_model = "qwen2.5vl:3b"
+        image_processing_model = self.vision_config.get('model', 'qwen2.5vl:3b')
         # image_processing_model = "bakllava:latest"
         imgPrompt = ''
         img = None
@@ -114,9 +118,9 @@ class ImageToTextTool(BaseUserTool):
                 "error": "No image provided"
             }
         
-        # Debug: Log image data format (can be removed in production)
-        # print(f"🖼️ DEBUG: Image data type: {type(img)}", flush=True)
-        # print(f"🖼️ DEBUG: Image data preview: {str(img)[:100]}...", flush=True)
+        # Debug: Log image data format (commented out in production)
+        # print(f"🖼️ DEBUG: Original image data type: {type(img)}", flush=True)
+        # print(f"🖼️ DEBUG: Original image data preview: {str(img)[:100]}...", flush=True)
         
         # Handle different image data formats
         processed_img = self._process_image_data(img)
@@ -143,10 +147,11 @@ class ImageToTextTool(BaseUserTool):
                 "error": "No valid image data after processing"
             }
         
-        # Debug processed image format (can be removed in production)
+        # Debug processed image format (commented out in production)
         # print(f"🖼️ DEBUG: Processed image type: {type(processed_img)}", flush=True)
+        # print(f"🖼️ DEBUG: Processed image preview: {str(processed_img)[:100]}...", flush=True)
         
-        # Skip messages structure and use direct ollama.generate call
+        # Skip messages structure and use direct ollama.generate call with timeout protection
 
         try:
             if not ollama:
@@ -156,15 +161,31 @@ class ImageToTextTool(BaseUserTool):
                 }
 
             # print(f"\n\nCalling Model ==>{image_processing_model}",flush=True)
-            # Use generate method for image processing
+            # Use generate method for image processing with timeout
             logger.info(f"🖼️ Starting generation with {image_processing_model} (think=False, no streaming)...")
-            response = ollama.generate(
-                model=image_processing_model,
-                prompt=imgPrompt,
-                images=[processed_img],  # Use images parameter in generate
-                stream=False,  # Turn off streaming so results return to primary LLM
-                options={'think': False}  # Disable thinking phase for faster processing
-            )
+            
+            # Add timeout protection to prevent hanging
+            import signal
+            
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Vision model processing timeout")
+            
+            # Set timeout for vision model processing (configurable, default 30 minutes)
+            timeout_seconds = self.vision_config.get('timeout', 1800)
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(timeout_seconds)
+            
+            try:
+                response = ollama.generate(
+                    model=image_processing_model,
+                    prompt=imgPrompt,
+                    images=[processed_img],  # Use images parameter in generate
+                    stream=False,  # Turn off streaming so results return to primary LLM
+                    options={'think': False}  # Disable thinking phase for faster processing
+                )
+            finally:
+                # Always clear the alarm
+                signal.alarm(0)
             
             # Get complete response
             res = response.get('response', '')
@@ -180,11 +201,19 @@ class ImageToTextTool(BaseUserTool):
                 "timestamp": todayStr
             }
             
-        except Exception as e:
-            logger.error(f"🖼️ Image processing exception: {e}")
+        except TimeoutError as e:
+            logger.error(f"🖼️ Vision model timeout: {e}")
             return {
                 "success": False,
-                "error": f"Error: {e}"
+                "error": f"Vision model processing timeout: {str(e)}. The model qwen2.5vl:3b may need to be reloaded or replaced."
+            }
+        except Exception as e:
+            logger.error(f"🖼️ Image processing exception: {e}")
+            # Try fallback to basic error response
+            fallback_response = f"Image processing encountered an error: {str(e)}. The vision model may need attention."
+            return {
+                "success": False,
+                "error": fallback_response
             }
 
     def _process_image_data(self, img_data):
@@ -196,13 +225,14 @@ class ImageToTextTool(BaseUserTool):
                 if os.path.isfile(img_data):
                     return img_data  # Return single item, not list for Ollama
                 
-                # If it's base64 data with data URL prefix, extract and decode to bytes
+                # If it's base64 data with data URL prefix, extract base64 string
                 if img_data.startswith('data:image/'):
                     # Extract base64 data after the comma
                     base64_data = img_data.split(',', 1)[1] if ',' in img_data else img_data
                     try:
-                        # Decode to bytes for Ollama
-                        return base64.b64decode(base64_data)
+                        # Validate base64 but return the string (ollama needs base64 string, not bytes)
+                        base64.b64decode(base64_data, validate=True)
+                        return base64_data  # Return base64 string, not bytes
                     except Exception as e:
                         logger.warning(f"🖼️ Invalid base64 data in data URL: {e}")
                         return None
@@ -211,10 +241,10 @@ class ImageToTextTool(BaseUserTool):
                 if len(img_data) > 50 and not img_data.startswith('http'):  # Assume it's base64 if long enough
                     # Check if it's valid base64
                     try:
-                        # Try to decode - if successful, it's base64
-                        decoded_bytes = base64.b64decode(img_data, validate=True)
-                        # Successfully decoded base64 to bytes
-                        return decoded_bytes
+                        # Try to decode - if successful, it's valid base64
+                        base64.b64decode(img_data, validate=True)
+                        # Successfully validated base64 - return the string (not bytes)
+                        return img_data  # Return base64 string for ollama
                     except Exception as e:
                         logger.warning(f"🖼️ Invalid base64 data: {e}")
                         return None
@@ -253,3 +283,27 @@ class ImageToTextTool(BaseUserTool):
             logger.warning(f"🖼️ Failed to load system prompt from file: {e}")
             # Fallback to a basic prompt
             return "You are an expert image analyst. Analyze the image very carefully and provide a detailed description including any text, objects, colors, and data trends you observe. Be thorough and accurate in your analysis."
+
+    def _load_vision_config(self) -> Dict[str, Any]:
+        """Load vision model configuration from config file."""
+        try:
+            # Get the directory of this script
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            # Go up one level to get to the project root
+            project_root = os.path.dirname(script_dir)
+            config_file = os.path.join(project_root, 'config', 'llm_config.yaml')
+            
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                vision_config = config.get('vision', {}).get('config', {})
+                logger.info(f"🖼️ Loaded vision config: model={vision_config.get('model', 'qwen2.5vl:3b')}, timeout={vision_config.get('timeout', 1800)}s")
+                return vision_config
+        except Exception as e:
+            logger.warning(f"🖼️ Failed to load vision config from file: {e}")
+            # Fallback to default configuration
+            return {
+                'model': 'qwen2.5vl:3b',
+                'timeout': 1800,
+                'base_url': 'http://127.0.0.1:11434',
+                'fallback_model': 'bakllava:latest'
+            }

@@ -7356,10 +7356,10 @@ END OF CONTEXT
                 
                 # 🔧 STREAMING FIX: Add reasonable timeout and error handling
                 # Use a long but finite timeout to prevent infinite hangs
-                logger.info(f"🕒 PRIMARY LLM: Starting with 10 minute timeout...")
+                logger.info(f"🕒 PRIMARY LLM: Starting with 45 minute timeout...")
                 
                 try:
-                    async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=600) as response:
+                    async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=2700) as response:
                         if response.status == 200:
                             # Capture complete LLM response for post-processing
                             complete_llm_response = ""

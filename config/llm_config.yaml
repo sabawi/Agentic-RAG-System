@@ -109,3 +109,14 @@ arbitrator:
     stream: false
     api_key: ${OPENAI_API_KEY}
     base_url: https://api.openai.com/v1
+optimization:
+  enabled: true
+  rollout_percentage: 100.0
+  detailed_logging: true
+vision:
+  type: ollama
+  config:
+    model: bakllava:latest
+    timeout: 1800
+    base_url: http://127.0.0.1:11434
+    fallback_model: qwen2.5vl:3b

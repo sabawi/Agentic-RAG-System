@@ -952,7 +952,7 @@ class SecureEmailSenderTool(BaseUserTool):
                     if full_path.startswith(sandbox_base) and os.path.exists(full_path):
                         # Additional safety: Only remove common generated file types
                         if any(full_path.lower().endswith(ext) for ext in [
-                            '.html', '.txt', '.md', '.csv', '.json', '.xml', '.log'
+                            '.html', '.txt', '.md', '.csv', '.json', '.xml', '.log', '.pdf'
                         ]):
                             os.remove(full_path)
                             files_cleaned.append(os.path.basename(full_path))

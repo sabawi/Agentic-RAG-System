@@ -22,17 +22,147 @@ import aiohttp
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class AnalyticalVisualizerTool:
+try:
+    from .base_user_tool import BaseUserTool
+except ImportError:
+    from base_user_tool import BaseUserTool
+
+class AnalyticalVisualizerTool(BaseUserTool):
     """
     Intelligent visualization generator that creates relevant charts and plots
     based on user prompts to enhance analytical explanations
     """
     
     def __init__(self):
-        self.name = "analytical_visualizer"
-        self.description = "Generate analytical visualizations (plots, charts, tables) based on user prompts using LLM-driven code generation"
+        super().__init__()
+        self._name = "analytical_visualizer"
+        self._description = "Generate analytical visualizations (plots, charts, tables) based on user prompts using LLM-driven code generation"
         self.working_dir = "/home/sabawi/Development/flaskserver/sandbox_workspace"
         self.visualization_llm_config = self._load_visualization_llm_config()
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def description(self) -> str:
+        return self._description
+
+    @property
+    def parameters(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Description of the visualization to create (e.g., 'Create a bar chart of sales by quarter', 'Plot temperature trends over time')"
+                },
+                "data": {
+                    "type": "string", 
+                    "description": "Optional data to visualize in JSON, CSV, or plain text format"
+                }
+            },
+            "required": ["prompt"]
+        }
+
+    async def execute(self, **kwargs) -> Dict[str, Any]:
+        """Execute the analytical visualization request."""
+        try:
+            prompt = kwargs.get('prompt', '')
+            data = kwargs.get('data', '')
+            
+            if not prompt:
+                return "❌ **Visualization Generation Failed**: No visualization prompt provided"
+            
+            logger.info(f"🎨 Starting analytical visualization: {prompt[:100]}...")
+            logger.info(f"🔧 DEBUG: execute() method called - this should be the one in use")
+            
+            # Generate visualization code using LLM
+            result = await self._generate_and_execute_visualization(prompt, data)
+            
+            logger.info(f"🔧 DEBUG: execute() method - result keys: {list(result.keys()) if isinstance(result, dict) else 'not dict'}")
+            logger.info(f"🔧 DEBUG: execute() method - success: {result.get('success') if isinstance(result, dict) else 'N/A'}")
+            logger.info(f"🔧 DEBUG: execute() method - has base64_image: {'base64_image' in result if isinstance(result, dict) else 'N/A'}")
+            if isinstance(result, dict) and 'base64_image' in result:
+                logger.info(f"🔧 DEBUG: execute() method - base64_image length: {len(result['base64_image'])}")
+            
+            if isinstance(result, dict) and result.get("success"):
+                # Make sure base64 image data is included in the result for LLM integration
+                base64_image = result.get("base64_image")
+                
+                # Fallback to generating base64 if not available
+                if not base64_image and "output_path" in result:
+                    logger.warning(f"⚠️ DEBUG: No base64 in result, generating from path: {result.get('output_path')}")
+                    base64_image = self._image_to_base64(result['output_path'])
+                    if base64_image:
+                        result["base64_image"] = base64_image
+                
+                # Create formatted response
+                response = f"""✅ **Analytical Visualization Generated with LLM**
+
+**Figure Created**: {os.path.basename(result['output_path']) if 'output_path' in result else 'visualization_output.png'}
+**Generation Method**: {"LLM-driven dynamic code generation" if result.get('llm_generated') else "Pattern-based"}
+**Original Prompt**: {result.get('original_prompt', 'N/A')}
+
+**Execution Status**: {result.get('description', 'Visualization completed successfully')}
+"""
+                
+                # Add inline image if base64 conversion was successful
+                if base64_image:
+                    logger.info(f"✅ DEBUG: Adding base64 image to response (length: {len(base64_image)})")
+                    response += f'\n{base64_image}\n'
+                    response += "\n**📊 The visualization is displayed above and can be referenced in your analysis.**"
+                else:
+                    logger.warning(f"⚠️ DEBUG: No base64 image available for response")
+                    response += f"\n**Integration Note**: This visualization is saved as {os.path.basename(result.get('output_path', 'visualization_output.png'))} and can be referenced in your response."
+                
+                logger.info(f"🔧 DEBUG: Final response length: {len(response)}")
+                
+                # Return the result dict with the formatted response and ensure base64 is preserved
+                return {
+                    "success": True,
+                    "result": response,  # The formatted response with base64 image
+                    "response": response,
+                    "base64_image": base64_image,
+                    "output_path": result.get('output_path'),
+                    "description": response,  # Use the full response as description
+                    "llm_generated": result.get('llm_generated'),
+                    "original_prompt": result.get('original_prompt')
+                }
+            else:
+                error_msg = result.get('error', 'Unknown error') if isinstance(result, dict) else str(result)
+                logger.error(f"❌ DEBUG: Visualization failed: {error_msg}")
+                return {
+                    "success": False,
+                    "error": f"Visualization generation failed: {error_msg}",
+                    "response": f"❌ **Visualization Generation Failed**: {error_msg}"
+                }
+            
+        except Exception as e:
+            logger.error(f"🎨 Analytical visualization failed: {e}")
+            return {
+                "success": False,
+                "error": f"Visualization generation failed: {str(e)}",
+                "response": f"❌ **Visualization Generation Failed**: {str(e)}"
+            }
+    
+    async def _generate_and_execute_visualization(self, prompt: str, data: str = '') -> Dict[str, Any]:
+        """Generate and execute visualization based on prompt and optional data."""
+        try:
+            # Use the existing generate_visualization method
+            full_prompt = prompt
+            if data:
+                full_prompt = f"{prompt}\n\nData to visualize:\n{data}"
+            
+            result = await self.generate_visualization(full_prompt)
+            return result
+            
+        except Exception as e:
+            logger.error(f"🎨 Visualization generation failed: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to generate visualization: {str(e)}"
+            }
     
     def _load_visualization_llm_config(self) -> Dict[str, Any]:
         """
@@ -136,13 +266,16 @@ import numpy as np
 import pandas as pd
 # Add other imports as needed
 
+# Set figure size for consistent, manageable image sizes
+plt.figure(figsize=(12, 8))
+
 # [Generate appropriate data based on the scientific/mathematical concept]
 # [Create the visualization with proper scientific accuracy]
 # [Format professionally with labels, titles, etc.]
 
 # CRITICAL: Use full path and output success markers
 output_path = "/home/sabawi/Development/flaskserver/sandbox_workspace/visualization_output.png"
-plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
+plt.savefig(output_path, dpi=100, bbox_inches='tight', facecolor='white', edgecolor='none')
 plt.close()
 
 # REQUIRED: Output success markers for system integration
@@ -429,7 +562,22 @@ Respond with ONLY the Python code following this exact format - no explanations 
         # Step 2: Execute the LLM-generated code safely
         execution_result = await self.execute_visualization_code(code_result)
         
-        # Step 3: Return complete result with LLM-generated info
+        if not execution_result["success"]:
+            logger.error(f"❌ Code execution failed: {execution_result.get('error', 'Unknown error')}")
+            return execution_result
+        
+        # Step 3: Convert image to base64 for LLM system integration
+        if "output_path" in execution_result and os.path.exists(execution_result["output_path"]):
+            base64_image = self._image_to_base64(execution_result["output_path"])
+            if base64_image:
+                execution_result["base64_image"] = base64_image
+                logger.info(f"✅ Base64 image added to result for LLM integration")
+            else:
+                logger.warning(f"⚠️ Failed to convert image to base64: {execution_result['output_path']}")
+        else:
+            logger.warning(f"⚠️ No output file found for base64 conversion")
+        
+        # Step 4: Return complete result with LLM-generated info
         execution_result["llm_generated"] = True
         execution_result["original_prompt"] = prompt
         return execution_result
@@ -448,14 +596,25 @@ async def analytical_visualizer(prompt: str) -> str:
     tool = AnalyticalVisualizerTool()
     result = await tool.generate_visualization(prompt)
     
+    logger.info(f"🔧 DEBUG: analytical_visualizer function - result keys: {list(result.keys())}")
+    logger.info(f"🔧 DEBUG: analytical_visualizer function - success: {result.get('success')}")
+    logger.info(f"🔧 DEBUG: analytical_visualizer function - has base64_image: {'base64_image' in result}")
+    if 'base64_image' in result:
+        logger.info(f"🔧 DEBUG: analytical_visualizer function - base64_image length: {len(result['base64_image'])}")
+    
     if result["success"]:
-        # Convert image to base64 for inline display
-        tool_instance = AnalyticalVisualizerTool()
-        base64_image = tool_instance._image_to_base64(result['output_path'])
+        # Use base64 image data if already generated
+        base64_image = result.get("base64_image")
+        
+        # Fallback to generating base64 if not available
+        if not base64_image and "output_path" in result:
+            logger.warning(f"⚠️ DEBUG: No base64 in result, generating from path: {result.get('output_path')}")
+            tool_instance = AnalyticalVisualizerTool()
+            base64_image = tool_instance._image_to_base64(result['output_path'])
         
         response = f"""✅ **Analytical Visualization Generated with LLM**
 
-**Figure Created**: {os.path.basename(result['output_path'])}
+**Figure Created**: {os.path.basename(result['output_path']) if 'output_path' in result else 'visualization_output.png'}
 **Generation Method**: {"LLM-driven dynamic code generation" if result.get('llm_generated') else "Pattern-based"}
 **Original Prompt**: {result.get('original_prompt', 'N/A')}
 
@@ -464,13 +623,17 @@ async def analytical_visualizer(prompt: str) -> str:
         
         # Add inline image if base64 conversion was successful
         if base64_image:
-            response += f'\n<img src="{base64_image}" alt="Generated Visualization" style="max-width:100%; height:auto; border:1px solid #ccc; border-radius:8px; margin:10px 0;">\n'
+            logger.info(f"✅ DEBUG: Adding base64 image to response (length: {len(base64_image)})")
+            response += f'\n{base64_image}\n'
             response += "\n**📊 The visualization is displayed above and can be referenced in your analysis.**"
         else:
-            response += f"\n**Integration Note**: This visualization is saved as {os.path.basename(result['output_path'])} and can be referenced in your response."
+            logger.warning(f"⚠️ DEBUG: No base64 image available for response")
+            response += f"\n**Integration Note**: This visualization is saved as {os.path.basename(result.get('output_path', 'visualization_output.png'))} and can be referenced in your response."
         
+        logger.info(f"🔧 DEBUG: Final response length: {len(response)}")
         return response
     else:
+        logger.error(f"❌ DEBUG: Visualization failed: {result.get('error')}")
         return f"❌ **Visualization Generation Failed**: {result['error']}"
 
 if __name__ == "__main__":
