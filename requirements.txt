@@ -118,3 +118,11 @@ python-docx>=0.8.11
 openpyxl>=3.0.9
 pytesseract>=0.3.8
 watchdog>=2.1.0
+
+# OCR and Visualization Dependencies (added 2025-09-08)
+easyocr>=1.7.0
+seaborn>=0.13.0
+
+# PDF Generation Dependencies (added 2025-09-09)
+weasyprint>=62.0
+markdown-pdf>=0.1.0

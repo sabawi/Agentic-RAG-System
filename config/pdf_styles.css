@@ -1,0 +1,494 @@
+/*
+PDF Styling Configuration
+========================
+
+This CSS file controls the appearance of ALL PDF documents generated
+by the system. Modify this file to change PDF formatting without 
+touching the source code.
+
+Last Updated: 2025-09-08
+*/
+
+/* ========================================
+   DOCUMENT DEFAULTS
+   ======================================== */
+body {
+    font-family: "DejaVu Serif", "Times New Roman", serif;
+    font-size: 11pt;
+    line-height: 1.7;
+    color: #2c3e50;
+    margin: 0;  /* Margins handled by @page rules */
+    text-align: justify;
+    hyphens: auto;
+    word-spacing: 0.1em;
+    text-rendering: optimizeLegibility;
+}
+
+/* ========================================
+   HEADINGS HIERARCHY
+   ======================================== */
+h1 {
+    font-size: 22pt;
+    font-weight: bold;
+    color: #1a365d;
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 36px;
+    padding-bottom: 18px;
+    border-bottom: 3px solid #3182ce;
+    page-break-after: avoid;
+    /* Enhanced spacing for title on first page */
+    line-height: 1.3;
+    letter-spacing: 0.5pt;
+}
+
+h2 {
+    font-size: 16pt;
+    font-weight: bold;
+    color: #2c5282;
+    margin-top: 32px;
+    margin-bottom: 16px;
+    padding-left: 12px;
+    border-left: 4px solid #4299e1;
+    page-break-after: avoid;
+}
+
+h3 {
+    font-size: 13pt;
+    font-weight: bold;
+    color: #2d3748;
+    margin-top: 24px;
+    margin-bottom: 12px;
+    page-break-after: avoid;
+}
+
+h4 {
+    font-size: 12pt;
+    font-weight: bold;
+    color: #4a5568;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    page-break-after: avoid;
+}
+
+h5 {
+    font-size: 11pt;
+    font-weight: bold;
+    color: #718096;
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+h6 {
+    font-size: 10pt;
+    font-weight: bold;
+    color: #a0aec0;
+    margin-top: 12px;
+    margin-bottom: 6px;
+}
+
+/* ========================================
+   PARAGRAPHS AND TEXT FORMATTING
+   ======================================== */
+p {
+    margin-bottom: 12px;
+    text-indent: 0;
+    orphans: 2;
+    widows: 2;
+}
+
+/* Bold text */
+strong, b {
+    font-weight: bold;
+    color: #1a202c;
+}
+
+/* Italic text */
+em, i {
+    font-style: italic;
+    color: #2d3748;
+}
+
+/* Underlined text */
+u {
+    text-decoration: underline;
+}
+
+/* Strikethrough text */
+del, s {
+    text-decoration: line-through;
+    color: #a0aec0;
+}
+
+/* ========================================
+   LISTS
+   ======================================== */
+ul, ol {
+    margin-left: 24px;
+    margin-bottom: 16px;
+    margin-top: 8px;
+}
+
+li {
+    margin-bottom: 6px;
+    line-height: 1.5;
+}
+
+/* Nested lists */
+ul ul, ol ol, ul ol, ol ul {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+/* Custom bullet styles */
+ul {
+    list-style-type: disc;
+}
+
+ul ul {
+    list-style-type: circle;
+}
+
+ul ul ul {
+    list-style-type: square;
+}
+
+/* Numbered lists */
+ol {
+    list-style-type: decimal;
+}
+
+ol ol {
+    list-style-type: lower-alpha;
+}
+
+ol ol ol {
+    list-style-type: lower-roman;
+}
+
+/* ========================================
+   CODE AND PREFORMATTED TEXT
+   ======================================== */
+code {
+    font-family: "Courier New", "Consolas", "Monaco", monospace;
+    font-size: 10pt;
+    background-color: #f7fafc;
+    border: 1px solid #e2e8f0;
+    padding: 2px 4px;
+    border-radius: 3px;
+    color: #e53e3e;
+}
+
+pre {
+    font-family: "Courier New", "Consolas", "Monaco", monospace;
+    font-size: 9pt;
+    background-color: #f7fafc;
+    border: 1px solid #cbd5e0;
+    padding: 12px;
+    border-radius: 5px;
+    margin: 16px 0;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    line-height: 1.4;
+}
+
+pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #2d3748;
+    font-size: inherit;
+}
+
+/* ========================================
+   TABLES
+   ======================================== */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 10pt;
+    page-break-inside: avoid;
+}
+
+th {
+    background-color: #4299e1;
+    color: white;
+    font-weight: bold;
+    padding: 10px 8px;
+    text-align: left;
+    border: 1px solid #3182ce;
+}
+
+td {
+    padding: 8px;
+    border: 1px solid #cbd5e0;
+    vertical-align: top;
+}
+
+tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+tr:hover {
+    background-color: #e2e8f0;
+}
+
+/* ========================================
+   QUOTES AND BLOCKQUOTES
+   ======================================== */
+blockquote {
+    margin: 20px 0;
+    padding: 15px 20px;
+    background-color: #f8f9fa;
+    border-left: 5px solid #4299e1;
+    font-style: italic;
+    color: #4a5568;
+}
+
+blockquote p {
+    margin-bottom: 8px;
+}
+
+blockquote p:last-child {
+    margin-bottom: 0;
+}
+
+/* ========================================
+   HORIZONTAL RULES
+   ======================================== */
+hr {
+    border: none;
+    height: 2px;
+    background-color: #e2e8f0;
+    margin: 24px 0;
+    page-break-after: avoid;
+}
+
+/* ========================================
+   LINKS
+   ======================================== */
+a {
+    color: #3182ce;
+    text-decoration: underline;
+}
+
+a:hover {
+    color: #2c5282;
+}
+
+/* ========================================
+   PAGE LAYOUT AND BREAKS
+   ======================================== */
+
+/* Named strings for WeasyPrint attribute access */
+html {
+    string-set: date-content attr(data-date), title-content attr(data-title);
+}
+
+/* Default page setup with enhanced margins */
+@page {
+    margin-top: 1.2in;
+    margin-bottom: 1.0in;
+    margin-left: 1.0in;
+    margin-right: 1.0in;
+    size: letter portrait;
+    
+    /* Header for pages 2+ */
+    @top-left {
+        content: "Generated on " string(date-content);
+        font-family: "DejaVu Sans", Arial, sans-serif;
+        font-size: 9pt;
+        color: #718096;
+        margin-bottom: 0.3in;
+        padding-top: 0.2in;
+    }
+    
+    /* Footer with page number and title */
+    @bottom-left {
+        content: string(title-content);
+        font-family: "DejaVu Sans", Arial, sans-serif;
+        font-size: 9pt;
+        color: #718096;
+        font-weight: normal;
+    }
+    
+    @bottom-right {
+        content: "Page " counter(page);
+        font-family: "DejaVu Sans", Arial, sans-serif;
+        font-size: 9pt;
+        color: #718096;
+        font-weight: normal;
+    }
+}
+
+/* First page styling - larger top margin and no header */
+@page :first {
+    margin-top: 2.0in;
+    margin-bottom: 1.0in;
+    margin-left: 1.0in;
+    margin-right: 1.0in;
+    
+    /* No header on first page */
+    @top-left {
+        content: "";
+    }
+    
+    /* Keep footer on first page */
+    @bottom-left {
+        content: string(title-content);
+        font-family: "DejaVu Sans", Arial, sans-serif;
+        font-size: 9pt;
+        color: #718096;
+    }
+    
+    @bottom-right {
+        content: "Page " counter(page);
+        font-family: "DejaVu Sans", Arial, sans-serif;
+        font-size: 9pt;
+        color: #718096;
+    }
+}
+
+/* Left pages (even) */
+@page :left {
+    @bottom-left {
+        content: "Page " counter(page);
+    }
+    
+    @bottom-right {
+        content: string(title-content);
+    }
+}
+
+/* Right pages (odd) */  
+@page :right {
+    @bottom-left {
+        content: string(title-content);
+    }
+    
+    @bottom-right {
+        content: "Page " counter(page);
+    }
+}
+
+/* Avoid page breaks after headings */
+h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+}
+
+/* Keep lists together when possible */
+ul, ol {
+    page-break-inside: avoid;
+}
+
+/* ========================================
+   SPECIAL CONTENT TYPES
+   ======================================== */
+
+/* Date stamps */
+.date-stamp {
+    font-size: 9pt;
+    color: #718096;
+    font-style: italic;
+    text-align: right;
+    margin-bottom: 20px;
+}
+
+/* Metadata sections */
+.metadata {
+    background-color: #f8f9fa;
+    border: 1px solid #e2e8f0;
+    padding: 12px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    font-size: 10pt;
+}
+
+/* Warning/Alert boxes */
+.warning {
+    background-color: #fed7d7;
+    border: 1px solid #fc8181;
+    border-left: 5px solid #e53e3e;
+    padding: 12px;
+    margin: 16px 0;
+    border-radius: 5px;
+}
+
+.info {
+    background-color: #bee3f8;
+    border: 1px solid #90cdf4;
+    border-left: 5px solid #4299e1;
+    padding: 12px;
+    margin: 16px 0;
+    border-radius: 5px;
+}
+
+.success {
+    background-color: #c6f6d5;
+    border: 1px solid #9ae6b4;
+    border-left: 5px solid #38a169;
+    padding: 12px;
+    margin: 16px 0;
+    border-radius: 5px;
+}
+
+/* ========================================
+   CONVERSATION-SPECIFIC STYLING
+   ======================================== */
+.conversation-header {
+    text-align: center;
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.message-user {
+    margin-bottom: 20px;
+    padding-left: 20px;
+    border-left: 3px solid #4299e1;
+}
+
+.message-assistant {
+    margin-bottom: 20px;
+    padding-left: 20px;
+    border-left: 3px solid #38a169;
+}
+
+/* ========================================
+   PRINT OPTIMIZATIONS
+   ======================================== */
+@media print {
+    body {
+        font-size: 10pt;
+        line-height: 1.4;
+    }
+    
+    h1 { font-size: 18pt; }
+    h2 { font-size: 14pt; }
+    h3 { font-size: 12pt; }
+    
+    .no-print {
+        display: none;
+    }
+}
+
+/* ========================================
+   UTILITY CLASSES
+   ======================================== */
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+.text-justify { text-align: justify; }
+
+.font-small { font-size: 9pt; }
+.font-large { font-size: 13pt; }
+.font-xlarge { font-size: 15pt; }
+
+.margin-top { margin-top: 20px; }
+.margin-bottom { margin-bottom: 20px; }
+.no-margin { margin: 0; }
+
+.page-break-before { page-break-before: always; }
+.page-break-after { page-break-after: always; }
+.no-page-break { page-break-inside: avoid; }

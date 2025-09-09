@@ -218,12 +218,8 @@ simple_cache = {}
 # Simple conversation memory for OpenAI compatibility endpoint (in-memory only)
 openai_conversations = {}
 
-# Import conversation PDF export functionality
-try:
-    from user_tools._universal_pdf_generator import UniversalPDFGenerator
-    CONVERSATION_PDF_AVAILABLE = True
-except ImportError:
-    CONVERSATION_PDF_AVAILABLE = False
+# PDF PROCESSING COMPLETELY DISABLED
+CONVERSATION_PDF_AVAILABLE = False
 
 # ==============================================================================
 # LOGGING SETUP
@@ -393,8 +389,19 @@ class AsyncToolManager:
         # Load user-defined tools - defer to async initialization
         self.user_tools = []
         self.user_tools_loaded = False
+        
+        # 🖼️ IMAGE CONTEXT: Store image data for tools that need it
+        self.current_images = []
+        self.current_request_context = {}
             
         logger.info(f"AsyncToolManager initialized with {len(self.available_functions)} tools")
+    
+    def set_image_context(self, images: list, context: dict = None):
+        """🖼️ Set image context for tools that need image data"""
+        self.current_images = [img for img in images if img and img != 'noimage']
+        self.current_request_context = context or {}
+        if self.current_images:
+            logger.info(f"🖼️ Set image context: {len(self.current_images)} images available for tools")
     
     async def _load_user_tools_async(self):
         """Load user tools asynchronously"""
@@ -1417,11 +1424,39 @@ class AsyncToolManager:
             return f"Website extraction error: {str(e)}"
     
     async def safe_function_call(self, func_name: str, args: str) -> str:
-        """Safely execute a function"""
+        """Safely execute a function with automatic image injection for image_to_text"""
         if func_name not in self.available_functions:
             return f"Function {func_name} not available"
         
         try:
+            # 🖼️ SPECIAL HANDLING: Auto-inject image data for image_to_text tool
+            if func_name == 'image_to_text' and self.current_images:
+                try:
+                    # Parse existing arguments
+                    if isinstance(args, str):
+                        try:
+                            parsed_args = json.loads(args)
+                        except json.JSONDecodeError:
+                            parsed_args = {"prompt": args}
+                    else:
+                        parsed_args = args if isinstance(args, dict) else {"prompt": str(args)}
+                    
+                    # Inject first available image if not already provided
+                    if not parsed_args.get('image') or parsed_args.get('image') == '':
+                        if self.current_images:
+                            image_data = self.current_images[0]
+                            # Handle data URLs - extract base64 part if needed
+                            if image_data.startswith('data:image/'):
+                                image_data = image_data.split(',', 1)[1] if ',' in image_data else image_data
+                            parsed_args['image'] = image_data
+                            logger.info(f"🖼️ Auto-injected image data into image_to_text: {len(image_data)} chars")
+                    
+                    # Convert back to string format expected by tools
+                    args = json.dumps(parsed_args)
+                    
+                except Exception as inject_error:
+                    logger.warning(f"🖼️ Failed to inject image data: {inject_error}")
+            
             func = self.available_functions[func_name]
             result = await func(args)
             return str(result)
@@ -3086,16 +3121,17 @@ async def intelligent_retry_with_circuit_breakers(
 # 🔧 HELPER FUNCTIONS FOR LLM REGENERATION
 
 async def _build_regeneration_context(retry_candidates, user_prompt, tools_called, tools_results_list, previous_iterations=None):
-    """Build intelligent context for LLM tool regeneration with iterative accumulation"""
+    """Build intelligent context for LLM tool regeneration with CONTENT PRESERVATION"""
+    
+    # 🚨 CRITICAL FIX: Preserve original user content instead of creating system prompts
+    # The issue was that this function was creating debugging prompts instead of processing the actual user request
     
     # 🔄 ITERATIVE ACCUMULATIVE CONTEXT: Build from previous iterations
     if previous_iterations and len(previous_iterations) > 0:
-        # For iteration n: Build accumulative context from ALL previous iterations (n-1) + new errors
-        context = f"""🔄 TOOL REGENERATION REQUEST - ITERATION {len(previous_iterations) + 1}
+        # ✅ FIX: Preserve the original user prompt as the primary content
+        context = f"""{user_prompt}
 
-YOUR TASK: {user_prompt}
-
-PROBLEM: Tools failed during execution and need to be regenerated with corrected parameters.
+[SYSTEM NOTE: This is a retry iteration {len(previous_iterations) + 1} - some tools failed and are being regenerated with improved parameters.]
 
 PREVIOUS ITERATION HISTORY:
 """
@@ -3125,12 +3161,10 @@ Error: {failed_tool.get('result', 'No error details')}
 REMAINING FAILED TOOLS REQUIRING REGENERATION:
 """
     else:
-        # First iteration: Original context structure
-        context = f"""🔄 TOOL REGENERATION REQUEST - ITERATION 1
+        # ✅ FIX: First iteration - preserve original user content
+        context = f"""{user_prompt}
 
-YOUR TASK: {user_prompt}
-
-PROBLEM: Some tools failed during execution and need to be regenerated with corrected parameters.
+[SYSTEM NOTE: This is iteration 1 - some tools failed and are being regenerated with improved parameters.]
 
 FAILED TOOLS REQUIRING REGENERATION:
 """
@@ -5446,7 +5480,7 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     
                     # Generate conversation PDF
                     pdf_filename = "conversation_export.pdf"
-                    pdf_result = export_conversation_to_pdf(message_history, pdf_filename)
+                    pdf_result = await export_conversation_to_pdf(message_history, pdf_filename)
                     
                     if pdf_result.get('success'):
                         # Send email with conversation PDF attachment
@@ -5924,6 +5958,10 @@ async def llama_stream(request: Request):
         # Update the data dictionary with processed images
         data["images"] = images
         logger.info(f"🖼️ Updated data[images] with {len([img for img in images if img != 'noimage'])} processed images")
+        
+        # 🖼️ Set image context for tools that need it
+        tool_manager.set_image_context(images, {"endpoint": "native", "model": model})
+        
     except Exception as e:
         logger.error(f"🖼️ CRITICAL: Image processing failed: {e}")
         images = ['noimage']
@@ -6230,8 +6268,36 @@ The above image analysis was automatically performed on newly uploaded images. T
                                             source_lines = [line.strip() for line in sources_text.split('\n') if line.strip().startswith('•')]
                                             
                                             if source_lines:
-                                                first_source = source_lines[0].replace('•', '').strip()
-                                                logger.info(f"📧 SMART DECISION: Using source file: {first_source}")
+                                                # 🎯 BALANCED FORMAT SELECTION: Respect user's explicit format preference
+                                                user_prompt = data.get('prompt', '').lower()
+                                                
+                                                # Detect explicit format requests from user
+                                                requested_format = None
+                                                if 'pdf' in user_prompt and ('pdf version' in user_prompt or 'send pdf' in user_prompt or 'as pdf' in user_prompt or 'email the pdf' in user_prompt or 'pdf format' in user_prompt or 'convert' in user_prompt and 'pdf' in user_prompt):
+                                                    requested_format = 'pdf'
+                                                elif 'html' in user_prompt and ('html version' in user_prompt or 'send html' in user_prompt or 'as html' in user_prompt or 'email the html' in user_prompt or 'html format' in user_prompt):
+                                                    requested_format = 'html'
+                                                elif 'markdown' in user_prompt and ('markdown version' in user_prompt or 'send markdown' in user_prompt or 'as markdown' in user_prompt or 'email the markdown' in user_prompt or 'markdown format' in user_prompt or '.md' in user_prompt):
+                                                    requested_format = 'markdown'
+                                                
+                                                # Select source file based on user preference
+                                                first_source = None
+                                                if requested_format:
+                                                    # User explicitly requested a format - prioritize it
+                                                    for source_line in source_lines:
+                                                        source_name = source_line.replace('•', '').strip()
+                                                        if f'.{requested_format}' in source_name.lower() or (requested_format == 'markdown' and '.md' in source_name.lower()):
+                                                            first_source = source_name
+                                                            logger.info(f"📧 SMART DECISION: User requested {requested_format.upper()} - using source file: {first_source}")
+                                                            break
+                                                
+                                                # If no format-specific match found, use first available
+                                                if not first_source:
+                                                    first_source = source_lines[0].replace('•', '').strip()
+                                                    if requested_format:
+                                                        logger.info(f"📧 SMART DECISION: User requested {requested_format.upper()} but not available - using first source: {first_source}")
+                                                    else:
+                                                        logger.info(f"📧 SMART DECISION: No format preference - using first source: {first_source}")
                                                 
                                                 # 🔧 CRITICAL FIX: Extract full file path from document_search output
                                                 actual_file_path = first_source  # Default fallback
@@ -6242,23 +6308,13 @@ The above image analysis was automatically performed on newly uploaded images. T
                                                     paths_text = full_paths_match.group(1)
                                                     path_lines = [line.strip() for line in paths_text.split('\n') if line.strip().startswith('•')]
                                                     
-                                                    # Find path that matches the requested file format
+                                                    # Find path that matches the selected source file
                                                     for path_line in path_lines:
                                                         full_path = path_line.replace('•', '').strip()
                                                         if first_source in full_path:
                                                             actual_file_path = full_path
                                                             logger.info(f"📧 SMART DECISION: Found matching full path: {actual_file_path}")
                                                             break
-                                                    
-                                                    # If no exact match, use first available path with same extension
-                                                    if actual_file_path == first_source and path_lines:
-                                                        if '.html' in first_source:
-                                                            for path_line in path_lines:
-                                                                full_path = path_line.replace('•', '').strip()
-                                                                if '.html' in full_path:
-                                                                    actual_file_path = full_path
-                                                                    logger.info(f"📧 SMART DECISION: Using HTML path: {actual_file_path}")
-                                                                    break
                                                 
                                                 logger.info(f"📧 SMART DECISION: Using full path: {actual_file_path}")
                                                 email_args['attachments'] = actual_file_path
@@ -6331,7 +6387,7 @@ The above image analysis was automatically performed on newly uploaded images. T
                                             # 🖼️ INTERCEPT IMAGE_TO_TEXT CALLS - Replace placeholder with actual image data
                                             if function_name == "image_to_text" and data.get("images") and data.get("images")[0] != "noimage":
                                                 # Handle both "image" (singular) and "images" (plural) parameters
-                                                if "image" in function_args and function_args["image"] in ["user_provided_image_data", "<user_provided_image_data>", "<actual_base64_image_data>"]:
+                                                if "image" in function_args and function_args["image"] in ["user_provided_image_data", "<user_provided_image_data>", "<actual_base64_image_data>", "<base64_image_data>"]:
                                                     # Replace placeholder with actual base64 image data for singular parameter
                                                     actual_images = data.get("images", [])
                                                     if actual_images and actual_images[0] != "noimage":
@@ -6416,12 +6472,26 @@ The above image analysis was automatically performed on newly uploaded images. T
                                                                     break
                                                     
                                                     if found_real_files:
-                                                        logger.info(f"🚫 SMART DECISION: Skipping {function_name} file creation - real files found")
-                                                        should_execute = False
-                                                        # Create a fake success result
-                                                        result = "File creation skipped - using actual found documents instead"
-                                                        all_results.append((function_name, result, start_time, False, None))
-                                                        continue
+                                                        # 🎯 RESPECT USER'S EXPLICIT FORMAT REQUESTS
+                                                        user_prompt = data.get('prompt', '').lower()
+                                                        requested_filename = function_args_dict.get('filename', '').lower()
+                                                        
+                                                        # Check if user explicitly requested a specific format
+                                                        user_wants_pdf = ('pdf' in user_prompt and ('pdf version' in user_prompt or 'send pdf' in user_prompt or 'as pdf' in user_prompt)) or requested_filename.endswith('.pdf')
+                                                        user_wants_html = ('html' in user_prompt and ('html version' in user_prompt or 'send html' in user_prompt or 'as html' in user_prompt)) or requested_filename.endswith('.html')
+                                                        user_wants_markdown = ('markdown' in user_prompt and ('markdown version' in user_prompt or 'send markdown' in user_prompt or 'as markdown' in user_prompt)) or requested_filename.endswith(('.md', '.markdown'))
+                                                        
+                                                        if user_wants_pdf or user_wants_html or user_wants_markdown:
+                                                            format_requested = 'PDF' if user_wants_pdf else ('HTML' if user_wants_html else 'MARKDOWN')
+                                                            logger.info(f"✅ SMART DECISION: User explicitly requested {format_requested} format - allowing file creation despite existing documents")
+                                                            should_execute = True
+                                                        else:
+                                                            logger.info(f"🚫 SMART DECISION: Skipping {function_name} file creation - real files found and no explicit format request")
+                                                            should_execute = False
+                                                            # Create a fake success result
+                                                            result = "File creation skipped - using actual found documents instead"
+                                                            all_results.append((function_name, result, start_time, False, None))
+                                                            continue
                                             
                                             elif function_name == 'secure_email_sender':
                                                 # Apply smart file decisions to email attachments
@@ -6464,7 +6534,7 @@ The above image analysis was automatically performed on newly uploaded images. T
                                     # 🖼️ INTERCEPT IMAGE_TO_TEXT CALLS - Replace placeholder with actual image data
                                     if function_name == "image_to_text" and data.get("images") and data.get("images")[0] != "noimage":
                                         # Handle both "image" (singular) and "images" (plural) parameters
-                                        if "image" in function_args and function_args["image"] in ["user_provided_image_data", "<user_provided_image_data>", "<actual_base64_image_data>"]:
+                                        if "image" in function_args and function_args["image"] in ["user_provided_image_data", "<user_provided_image_data>", "<actual_base64_image_data>", "<base64_image_data>"]:
                                             # Replace placeholder with actual base64 image data for singular parameter
                                             actual_images = data.get("images", [])
                                             if actual_images and actual_images[0] != "noimage":
@@ -7168,12 +7238,22 @@ END OF CONTEXT
                     
                     # Extract base64 image data from tools_results
                     import re
+                    # Check for both HTML img tags and raw data URLs
                     img_pattern = r'<img src="(data:image/png;base64,[^"]+)"[^>]*>'
-                    img_match = re.search(img_pattern, tools_results)
+                    raw_data_pattern = r'(data:image/png;base64,[A-Za-z0-9+/=]+)'
                     
+                    img_match = re.search(img_pattern, tools_results)
+                    raw_match = re.search(raw_data_pattern, tools_results)
+                    
+                    base64_data_url = None
                     if img_match:
                         base64_data_url = img_match.group(1)
-                        logger.info(f"📊 IMAGE FOUND: Creating HTML5 Canvas with {len(base64_data_url)} chars of base64 data")
+                        logger.info(f"📊 IMAGE FOUND (HTML): {len(base64_data_url)} chars of base64 data")
+                    elif raw_match:
+                        base64_data_url = raw_match.group(1)
+                        logger.info(f"📊 IMAGE FOUND (RAW): {len(base64_data_url)} chars of base64 data")
+                    
+                    if base64_data_url:
                         
                         # Create unique canvas ID
                         canvas_id = f"viz_canvas_{int(time.time())}"
@@ -7274,15 +7354,20 @@ END OF CONTEXT
                 
                 # LLM input ready
                 
-                async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=None) as response:
-                    if response.status == 200:
-                        # Capture complete LLM response for post-processing
-                        complete_llm_response = ""
+                # 🔧 STREAMING FIX: Add reasonable timeout and error handling
+                # Use a long but finite timeout to prevent infinite hangs
+                logger.info(f"🕒 PRIMARY LLM: Starting with 10 minute timeout...")
+                
+                try:
+                    async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=600) as response:
+                        if response.status == 200:
+                            # Capture complete LLM response for post-processing
+                            complete_llm_response = ""
                         
-                        async for chunk in response.content.iter_chunked(1024):
-                            if chunk:
-                                # Stream chunk to client immediately  
-                                yield chunk
+                            async for chunk in response.content.iter_chunked(1024):
+                                if chunk:
+                                    # Stream chunk to client immediately  
+                                    yield chunk
                                 
                                 # Also capture chunk for post-processing
                                 try:
@@ -7554,9 +7639,18 @@ END OF CONTEXT
                                     "error": str(e)
                                 })
                                 yield (error_msg + '\n').encode()
-                    else:
-                        error_msg = f"Ollama error: {response.status}"
-                        yield json.dumps({"error": error_msg}).encode() + b'\n'
+                        else:
+                            error_msg = f"Ollama error: {response.status}"
+                            yield json.dumps({"error": error_msg}).encode() + b'\n'
+                            
+                except asyncio.TimeoutError:
+                    logger.error("🕒 PRIMARY LLM: Request timed out after 10 minutes")
+                    error_msg = json.dumps({"error": "Primary LLM request timed out"})
+                    yield error_msg.encode() + b'\n'
+                except Exception as http_error:
+                    logger.error(f"🔗 PRIMARY LLM: HTTP request failed: {http_error}")
+                    error_msg = json.dumps({"error": f"Primary LLM HTTP error: {str(http_error)}"})
+                    yield error_msg.encode() + b'\n'
         
         except Exception as e:
             logger.error(f"Stream generation failed: {e}")
@@ -8076,6 +8170,10 @@ async def openai_direct_stream(native_request_data: dict, model: str):
         logger.info(f"🔧 COMPARISON - This should match working native requests")
         logger.error(f"🔧 DIAGNOSTIC: OpenAI endpoint calling llama_stream with toolsInUse={native_request_data.get('toolsInUse')}")
         
+        # 🖼️ Set image context for OpenAI endpoint - extract images from request data
+        if native_request_data.get('images') and native_request_data['images'] != ['noimage']:
+            tool_manager.set_image_context(native_request_data['images'], {"endpoint": "openai", "model": model})
+        
         # Call the native llama_stream function directly
         internal_response = await llama_stream(mock_request)
         
@@ -8203,25 +8301,15 @@ async def openai_direct_stream(native_request_data: dict, model: str):
         }
         yield f"data: {json.dumps(error_chunk)}\n\n"
 
-def export_conversation_to_pdf(message_history: list, filename: str = "conversation.pdf") -> dict:
+async def export_conversation_to_pdf(message_history: list, filename: str = "conversation.pdf") -> dict:
     """
-    Export conversation history to a well-formatted PDF file
-    
-    Args:
-        message_history: List of formatted message strings (e.g., ["USER: Hello", "ASSISTANT: Hi there"])
-        filename: Output PDF filename
-        
-    Returns:
-        dict with success status and file path
+    Export conversation history to PDF using CENTRALIZED PDF SERVICE
     """
-    from datetime import datetime
+    print("🎯 ConversationExport: Routing to CENTRALIZED PDF SERVICE")
     
     try:
-        if not CONVERSATION_PDF_AVAILABLE:
-            return {
-                "success": False,
-                "error": "PDF generation not available - missing UniversalPDFGenerator"
-            }
+        # Import the centralized PDF service
+        from services.pdf_service import create_pdf
         
         if not message_history:
             return {
@@ -8240,8 +8328,7 @@ def export_conversation_to_pdf(message_history: list, filename: str = "conversat
                 
                 parsed_messages.append({
                     'role': role,
-                    'content': content,
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    'content': content
                 })
         
         if not parsed_messages:
@@ -8250,164 +8337,81 @@ def export_conversation_to_pdf(message_history: list, filename: str = "conversat
                 "error": "Could not parse conversation messages"
             }
         
-        # 🚀 NEW APPROACH: markdown → HTML → PDF (double conversion)
-        # Generate conversation content as HTML first (since HTML conversion works well)
-        html_content = _format_conversation_for_html(parsed_messages)
+        # Generate conversation content as markdown
+        markdown_content = _format_conversation_for_markdown(parsed_messages)
         
-        # Create PDF using HTML-to-PDF conversion
-        pdf_generator = UniversalPDFGenerator()
-        success = pdf_generator.create_pdf_from_html(
-            title="Conversation Export",
-            html_content=html_content,
+        # Route to centralized PDF service
+        result = create_pdf(
+            content=markdown_content,
             output_path=filename,
-            subtitle=f"Exported on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}"
+            title="Conversation Export",
+            content_type="markdown"
         )
         
-        if success:
+        if result["success"]:
             return {
                 "success": True,
                 "file_path": filename,
                 "message_count": len(parsed_messages),
+                "service": result.get("service", "CentralizedPDFService"),
                 "message": f"Conversation exported to {filename}"
             }
         else:
             return {
                 "success": False,
-                "error": "PDF generation failed"
+                "error": result.get("error", "PDF generation failed")
             }
             
     except Exception as e:
-        logger.error(f"Conversation PDF export error: {e}")
         return {
             "success": False,
             "error": f"Export failed: {str(e)}"
         }
 
-def _format_conversation_for_html(messages: list) -> str:
-    """Format conversation messages as clean HTML for PDF conversion"""
-    html_parts = []
+
+def _format_conversation_for_markdown(messages: list) -> str:
+    """Format conversation messages as clean Markdown for PDF conversion"""
+    md_parts = []
     
     # Add conversation statistics
-    html_parts.append("<h2>📊 Conversation Summary</h2>")
-    html_parts.append("<ul>")
-    html_parts.append(f"<li><strong>Total Messages:</strong> {len(messages)}</li>")
+    md_parts.append("# 💬 Conversation Export")
+    md_parts.append("")
+    md_parts.append(f"**Export Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    md_parts.append(f"**Total Messages:** {len(messages)}")
+    md_parts.append("")
     
     user_count = sum(1 for msg in messages if msg['role'] == 'user')
     assistant_count = sum(1 for msg in messages if msg['role'] == 'assistant')
     
-    html_parts.append(f"<li><strong>User Messages:</strong> {user_count}</li>")
-    html_parts.append(f"<li><strong>Assistant Messages:</strong> {assistant_count}</li>")
-    html_parts.append("</ul>")
-    html_parts.append("<br><br>")
+    md_parts.append(f"**User Messages:** {user_count}")
+    md_parts.append(f"**Assistant Messages:** {assistant_count}")
+    md_parts.append("")
+    md_parts.append("---")
+    md_parts.append("")
     
     # Add conversation content
-    html_parts.append("<h2>💬 Conversation History</h2>")
-    
     for i, message in enumerate(messages, 1):
         role = message['role'].title()
         content = message['content']
         
-        # 🔧 FIX: Don't add artificial headers - content already has its own bulleted headings
-        # Only add minimal role identification for user messages, let assistant content speak for itself
+        # Add role headers for clarity
         if role == 'User':
-            # Add simple user header for clarity
-            html_parts.append(f"<h4>👤 User</h4>")
-            formatted_content = _convert_markdown_to_html(content)
-            html_parts.append(formatted_content)
+            md_parts.append("## 👤 User")
         else:
-            # For assistant messages, just add the content without artificial headers
-            # The content already has proper headings and bullet structure
-            formatted_content = _convert_markdown_to_html(content)
-            html_parts.append(formatted_content)
+            md_parts.append("## 🤖 Assistant")
         
-        # Add separator between messages (simple spacing instead of horizontal rule)
+        md_parts.append("")
+        md_parts.append(content)
+        md_parts.append("")
+        
+        # Add separator between messages
         if i < len(messages):
-            html_parts.append("<br><br><br>")
+            md_parts.append("---")
+            md_parts.append("")
     
-    return '\n'.join(html_parts)
+    return '\n'.join(md_parts)
 
-def _convert_markdown_to_html(content: str) -> str:
-    """Convert markdown content to clean HTML"""
-    import re
-    
-    # Clean up the content
-    content = content.strip()
-    
-    # Convert headers first (before other processing)
-    content = re.sub(r'^### (.*?)$', r'<h4>\1</h4>', content, flags=re.MULTILINE)
-    content = re.sub(r'^## (.*?)$', r'<h3>\1</h3>', content, flags=re.MULTILINE)
-    content = re.sub(r'^# (.*?)$', r'<h2>\1</h2>', content, flags=re.MULTILINE)
-    
-    # Convert code blocks first (to avoid interfering with other formatting)
-    content = re.sub(r'```(\w*)\n?(.*?)```', r'<pre><code>\2</code></pre>', content, flags=re.DOTALL)
-    content = re.sub(r'`([^`]+)`', r'<code>\1</code>', content)
-    
-    # Convert lists line by line to handle bold formatting properly
-    lines = content.split('\n')
-    processed_lines = []
-    in_ul = False
-    in_ol = False
-    
-    for line in lines:
-        stripped = line.strip()
-        
-        # Handle bullet lists
-        if stripped.startswith(('- ', '* ', '+ ')):
-            if not in_ul:
-                processed_lines.append('<ul>')
-                in_ul = True
-            if in_ol:
-                processed_lines.append('</ol>')
-                in_ol = False
-            item_content = stripped[2:].strip()
-            # Apply bold/italic formatting to list item content (comprehensive patterns)
-            item_content = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', item_content)
-            item_content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', item_content, flags=re.DOTALL)
-            item_content = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', item_content)
-            processed_lines.append(f'<li>{item_content}</li>')
-        
-        # Handle numbered lists
-        elif re.match(r'^\d+\.\s+', stripped):
-            if not in_ol:
-                processed_lines.append('<ol>')
-                in_ol = True
-            if in_ul:
-                processed_lines.append('</ul>')
-                in_ul = False
-            item_content = re.sub(r'^\d+\.\s+', '', stripped)
-            # Apply bold/italic formatting to list item content (comprehensive patterns)
-            item_content = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', item_content)
-            item_content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', item_content, flags=re.DOTALL)
-            item_content = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', item_content)
-            processed_lines.append(f'<li>{item_content}</li>')
-        
-        # Regular content
-        else:
-            # Close any open lists
-            if in_ul:
-                processed_lines.append('</ul>')
-                in_ul = False
-            if in_ol:
-                processed_lines.append('</ol>')
-                in_ol = False
-            
-            if stripped:
-                # Apply bold/italic formatting to regular paragraphs (comprehensive patterns)
-                formatted_line = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', stripped)
-                formatted_line = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', formatted_line, flags=re.DOTALL)
-                formatted_line = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', formatted_line)
-                processed_lines.append(f'<p>{formatted_line}</p>')
-            else:
-                processed_lines.append('')
-    
-    # Close any remaining open lists
-    if in_ul:
-        processed_lines.append('</ul>')
-    if in_ol:
-        processed_lines.append('</ol>')
-    
-    return '\n'.join(processed_lines)
-
+# ALL PDF FORMATTING FUNCTIONS REMOVED - PDF PROCESSING COMPLETELY DISABLED
 
 async def openai_streaming_response(user_prompt: str, model: str, conversation_id: str, images: list = None):
     """Handle streaming OpenAI response with proper format - simplified implementation"""
