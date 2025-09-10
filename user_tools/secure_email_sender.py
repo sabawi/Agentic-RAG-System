@@ -318,8 +318,41 @@ class SecureEmailSenderTool(BaseUserTool):
         ready_files = []
         missing_files = []
         
-        print(f"🔄 Pre-flight check: Waiting for {len(attachment_paths)} attachment(s)...")
+        print(f"🔄 Pre-flight check: Verifying {len(attachment_paths)} attachment(s)...")
         
+        # IMMEDIATE CHECK: Fail fast if files don't exist and can't be resolved
+        immediate_missing = []
+        immediate_ready = []
+        
+        for file_path in attachment_paths:
+            resolved_path = self._resolve_attachment_path(file_path)
+            if resolved_path and self._validate_attachment(file_path):
+                immediate_ready.append(file_path)
+                print(f"✅ Found: {file_path}")
+            else:
+                immediate_missing.append(file_path)
+                print(f"❌ Missing: {file_path} - File does not exist in current directory or sandbox workspace")
+        
+        # If files are missing on immediate check, fail fast instead of hanging
+        if immediate_missing:
+            print(f"🚫 FAIL FAST: {len(immediate_missing)} attachment(s) not found - exiting immediately")
+            for missing in immediate_missing:
+                print(f"   ❌ Not found: {missing}")
+            return {
+                "all_ready": False, 
+                "ready_files": immediate_ready, 
+                "missing_files": immediate_missing, 
+                "timeout": False,
+                "fail_fast": True
+            }
+        
+        # All files found immediately - return success
+        if len(immediate_ready) == len(attachment_paths):
+            print(f"🎉 All {len(attachment_paths)} attachment(s) ready immediately!")
+            return {"all_ready": True, "ready_files": immediate_ready, "missing_files": [], "timeout": False}
+        
+        # Fallback: Enter wait loop only if some files might appear soon (this should rarely happen)
+        print(f"⏳ Entering wait loop for remaining files...")
         while time.time() - start_time < timeout_seconds:
             current_missing = []
             current_ready = []
@@ -1051,7 +1084,10 @@ class SecureEmailSenderTool(BaseUserTool):
                 wait_result = self._wait_for_all_attachments(attachment_paths, timeout_seconds=attachment_timeout)
                 
                 if not wait_result["all_ready"]:
-                    if wait_result["timeout"]:
+                    if wait_result.get("fail_fast", False):
+                        error_msg = f"🚫 FAIL FAST: Attachment files do not exist and cannot be found: {', '.join(wait_result['missing_files'])}. Checked current directory and sandbox workspace."
+                        return {"success": False, "error": error_msg, "result": None}
+                    elif wait_result["timeout"]:
                         error_msg = f"Timeout waiting for attachments after {attachment_timeout}s: {', '.join(wait_result['missing_files'])}"
                         return {"success": False, "error": error_msg, "result": None}
                     else:

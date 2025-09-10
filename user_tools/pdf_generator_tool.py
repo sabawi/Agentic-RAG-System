@@ -533,9 +533,9 @@ class PDFGeneratorTool(BaseUserTool):
             if self._looks_like_heading(line, lines, i):
                 # Convert to markdown-style heading
                 if len(line) < 30 and line.isupper():
-                    enhanced_lines.append(f'## {line.title()}')
+                    enhanced_lines.append(f'# {line.title()}')
                 else:
-                    enhanced_lines.append(f'### {line}')
+                    enhanced_lines.append(f'## {line}')
                 continue
             
             # Detect bullet points

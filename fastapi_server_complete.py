@@ -1479,6 +1479,19 @@ class AsyncToolManager:
             else:
                 parsed_args = args
             
+            # 🎯 DEFERRED EMAIL LOGIC: Check if PDF generation is involved
+            attachments = parsed_args.get('attachments', '')
+            if attachments and isinstance(attachments, str) and '.pdf' in attachments.lower():
+                # This email involves PDF attachments - defer until after Primary LLM
+                print(f"📧 INTERCEPTING secure_email_sender call - PDF attachment detected: {attachments}")
+                # Store the email parameters globally for later retrieval
+                if not hasattr(self, '_deferred_email_params'):
+                    self._deferred_email_params = {}
+                self._deferred_email_params = parsed_args.copy()
+                # Return special marker that the tool execution system will recognize
+                # This gets processed in the post-LLM phase
+                return f"Email scheduled for sending after content generation (attachment: {attachments})"
+            
             def sync_email_send():
                 try:
                     # Import the email tool
@@ -2771,7 +2784,8 @@ async def intelligent_retry_with_circuit_breakers(
     tools_called: List[str], 
     tools_results_list: List[str], 
     user_prompt: str,
-    tool_manager = None  # Add access to tool execution
+    tool_manager = None,  # Add access to tool execution
+    complete_llm_response: str = None  # Add access to original LLM response content
 ) -> Dict[str, Any]:
     """
     🔄 INTELLIGENT RETRY WITH CIRCUIT BREAKERS (Sprint 2.3)
@@ -2906,7 +2920,8 @@ async def intelligent_retry_with_circuit_breakers(
         # 🧠 BUILD REGENERATION CONTEXT (accumulative from previous iterations)
         regeneration_context = await _build_regeneration_context(
             current_retry_candidates, user_prompt, tools_called, tools_results_list, 
-            previous_iterations=previous_iterations
+            previous_iterations=previous_iterations,
+            complete_llm_response=complete_llm_response
         )
         
         logger.info(f"🧠 ITERATION {iteration} CONTEXT: {len(regeneration_context)} characters (accumulative)")
@@ -3120,16 +3135,17 @@ async def intelligent_retry_with_circuit_breakers(
 
 # 🔧 HELPER FUNCTIONS FOR LLM REGENERATION
 
-async def _build_regeneration_context(retry_candidates, user_prompt, tools_called, tools_results_list, previous_iterations=None):
+async def _build_regeneration_context(retry_candidates, user_prompt, tools_called, tools_results_list, previous_iterations=None, complete_llm_response=None):
     """Build intelligent context for LLM tool regeneration with CONTENT PRESERVATION"""
     
-    # 🚨 CRITICAL FIX: Preserve original user content instead of creating system prompts
-    # The issue was that this function was creating debugging prompts instead of processing the actual user request
+    # 🚨 CRITICAL FIX: Preserve original LLM response content instead of just user prompt
+    # The issue was that the arbitrator only had access to the email instruction but not your actual response content
     
     # 🔄 ITERATIVE ACCUMULATIVE CONTEXT: Build from previous iterations
     if previous_iterations and len(previous_iterations) > 0:
-        # ✅ FIX: Preserve the original user prompt as the primary content
-        context = f"""{user_prompt}
+        # ✅ FIX: Use complete LLM response as primary content when available
+        primary_content = complete_llm_response if complete_llm_response else user_prompt
+        context = f"""{primary_content}
 
 [SYSTEM NOTE: This is a retry iteration {len(previous_iterations) + 1} - some tools failed and are being regenerated with improved parameters.]
 
@@ -3161,8 +3177,9 @@ Error: {failed_tool.get('result', 'No error details')}
 REMAINING FAILED TOOLS REQUIRING REGENERATION:
 """
     else:
-        # ✅ FIX: First iteration - preserve original user content
-        context = f"""{user_prompt}
+        # ✅ FIX: First iteration - use complete LLM response as primary content when available
+        primary_content = complete_llm_response if complete_llm_response else user_prompt
+        context = f"""{primary_content}
 
 [SYSTEM NOTE: This is iteration 1 - some tools failed and are being regenerated with improved parameters.]
 
@@ -3511,7 +3528,7 @@ def _detect_tool_failure_pattern(tool_result: str) -> str:
     else:
         return "UNKNOWN_FAILURE"
 
-async def arbitrator_validate_tasks(tools_called: List[str], tools_results_list: List[str], user_prompt: str, tool_manager=None) -> Optional[str]:
+async def arbitrator_validate_tasks(tools_called: List[str], tools_results_list: List[str], user_prompt: str, tool_manager=None, complete_llm_response: str = None) -> Optional[str]:
     """
     🧠 ARBITRATOR TASK VALIDATION SYSTEM
     Validates tool execution results and retries failed tasks with intelligent feedback
@@ -4126,7 +4143,8 @@ Please validate each task result and respond with JSON analysis."""
             retry_result = await intelligent_retry_with_circuit_breakers(
                 error_analysis, pattern_analysis_result, 
                 tools_called, tools_results_list, user_prompt,
-                tool_manager  # Pass tool_manager for tool re-execution
+                tool_manager,  # Pass tool_manager for tool re-execution
+                complete_llm_response  # Pass original LLM response content to prevent fake content generation
             )
             
             if retry_result.get("success", False):
@@ -6615,6 +6633,18 @@ The above image analysis was automatically performed on newly uploaded images. T
                                         email_intercepted = True
                                         intercepted_email_params = email_params
                                     
+                                    # 🎯 DEFERRED EMAIL DETECTION: Check for our deferred email marker
+                                    if (function_name == "secure_email_sender" and 
+                                        result and "Email scheduled for sending after content generation" in str(result)):
+                                        email_intercepted = True
+                                        # Get stored email parameters from the tool manager
+                                        if hasattr(tool_manager, '_deferred_email_params'):
+                                            intercepted_email_params = tool_manager._deferred_email_params.copy()
+                                        else:
+                                            intercepted_email_params = {}
+                                        logger.info(f"📧 DEFERRED EMAIL DETECTED: {result}")
+                                        logger.info(f"📧 STORED EMAIL PARAMS: {intercepted_email_params}")
+                                    
                                     # Determine status and format output
                                     if result and len(str(result)) > 0:
                                         if "error" in str(result).lower() or "failed" in str(result).lower():
@@ -6782,8 +6812,10 @@ The above image analysis was automatically performed on newly uploaded images. T
                     
                     try:
                         # STEP 1: Validate current tool results
+                        # Note: complete_llm_response is not available yet since Primary LLM hasn't run
+                        # TODO: Extract original user content from request context instead of email instruction
                         validated_results = await arbitrator_validate_tasks(
-                            tools_called, tools_results_list, user_prompt, tool_manager
+                            tools_called, tools_results_list, user_prompt, tool_manager, None
                         )
                         
                         # 🔍 DEBUG: Log what arbitrator function returned

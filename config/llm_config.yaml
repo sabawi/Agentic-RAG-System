@@ -116,7 +116,7 @@ optimization:
 vision:
   type: ollama
   config:
-    model: bakllava:latest
+    model: qwen2.5vl:3b
     timeout: 1800
     base_url: http://127.0.0.1:11434
-    fallback_model: qwen2.5vl:3b
+    fallback_model: bakllava:latest

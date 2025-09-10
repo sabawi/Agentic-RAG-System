@@ -210,7 +210,7 @@ class CentralizedPDFService:
             
             # Detect headers (lines that are all caps or end with colons)
             if line.isupper() and len(line.split()) <= 8:
-                markdown_lines.append(f'## {line.title()}')
+                markdown_lines.append(f'# {line.title()}')
             elif line.endswith(':') and len(line.split()) <= 8:
                 markdown_lines.append(f'### {line[:-1]}')
             # Detect bullet points

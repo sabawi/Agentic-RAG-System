@@ -20,12 +20,19 @@
       "enabled": true,
       "description": "Story collection",
       "added_at": "2025-08-12T10:30:00"
+    },
+    {
+      "path": "/home/sabawi/Development/flaskserver/docs",
+      "recursive": true,
+      "enabled": true,
+      "description": "Agentic Server Documentations",
+      "added_at": "2025-09-8T10:30:00"
     }
   ],
-  "last_scan": "2025-09-09T12:27:31.962584",
+  "last_scan": "2025-09-09T20:48:51.461118",
   "stats": {
     "total_directories": 2,
     "active_directories": 2,
-    "last_config_update": "2025-09-09T12:27:31.962591"
+    "last_config_update": "2025-09-09T20:48:51.461151"
   }
 }
