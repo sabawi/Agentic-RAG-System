@@ -1479,19 +1479,6 @@ class AsyncToolManager:
             else:
                 parsed_args = args
             
-            # 🎯 DEFERRED EMAIL LOGIC: Check if PDF generation is involved
-            attachments = parsed_args.get('attachments', '')
-            if attachments and isinstance(attachments, str) and '.pdf' in attachments.lower():
-                # This email involves PDF attachments - defer until after Primary LLM
-                print(f"📧 INTERCEPTING secure_email_sender call - PDF attachment detected: {attachments}")
-                # Store the email parameters globally for later retrieval
-                if not hasattr(self, '_deferred_email_params'):
-                    self._deferred_email_params = {}
-                self._deferred_email_params = parsed_args.copy()
-                # Return special marker that the tool execution system will recognize
-                # This gets processed in the post-LLM phase
-                return f"Email scheduled for sending after content generation (attachment: {attachments})"
-            
             def sync_email_send():
                 try:
                     # Import the email tool
@@ -2784,8 +2771,7 @@ async def intelligent_retry_with_circuit_breakers(
     tools_called: List[str], 
     tools_results_list: List[str], 
     user_prompt: str,
-    tool_manager = None,  # Add access to tool execution
-    complete_llm_response: str = None  # Add access to original LLM response content
+    tool_manager = None  # Add access to tool execution
 ) -> Dict[str, Any]:
     """
     🔄 INTELLIGENT RETRY WITH CIRCUIT BREAKERS (Sprint 2.3)
@@ -2920,8 +2906,7 @@ async def intelligent_retry_with_circuit_breakers(
         # 🧠 BUILD REGENERATION CONTEXT (accumulative from previous iterations)
         regeneration_context = await _build_regeneration_context(
             current_retry_candidates, user_prompt, tools_called, tools_results_list, 
-            previous_iterations=previous_iterations,
-            complete_llm_response=complete_llm_response
+            previous_iterations=previous_iterations
         )
         
         logger.info(f"🧠 ITERATION {iteration} CONTEXT: {len(regeneration_context)} characters (accumulative)")
@@ -3135,17 +3120,16 @@ async def intelligent_retry_with_circuit_breakers(
 
 # 🔧 HELPER FUNCTIONS FOR LLM REGENERATION
 
-async def _build_regeneration_context(retry_candidates, user_prompt, tools_called, tools_results_list, previous_iterations=None, complete_llm_response=None):
+async def _build_regeneration_context(retry_candidates, user_prompt, tools_called, tools_results_list, previous_iterations=None):
     """Build intelligent context for LLM tool regeneration with CONTENT PRESERVATION"""
     
-    # 🚨 CRITICAL FIX: Preserve original LLM response content instead of just user prompt
-    # The issue was that the arbitrator only had access to the email instruction but not your actual response content
+    # 🚨 CRITICAL FIX: Preserve original user content instead of creating system prompts
+    # The issue was that this function was creating debugging prompts instead of processing the actual user request
     
     # 🔄 ITERATIVE ACCUMULATIVE CONTEXT: Build from previous iterations
     if previous_iterations and len(previous_iterations) > 0:
-        # ✅ FIX: Use complete LLM response as primary content when available
-        primary_content = complete_llm_response if complete_llm_response else user_prompt
-        context = f"""{primary_content}
+        # ✅ FIX: Preserve the original user prompt as the primary content
+        context = f"""{user_prompt}
 
 [SYSTEM NOTE: This is a retry iteration {len(previous_iterations) + 1} - some tools failed and are being regenerated with improved parameters.]
 
@@ -3177,9 +3161,8 @@ Error: {failed_tool.get('result', 'No error details')}
 REMAINING FAILED TOOLS REQUIRING REGENERATION:
 """
     else:
-        # ✅ FIX: First iteration - use complete LLM response as primary content when available
-        primary_content = complete_llm_response if complete_llm_response else user_prompt
-        context = f"""{primary_content}
+        # ✅ FIX: First iteration - preserve original user content
+        context = f"""{user_prompt}
 
 [SYSTEM NOTE: This is iteration 1 - some tools failed and are being regenerated with improved parameters.]
 
@@ -3528,7 +3511,7 @@ def _detect_tool_failure_pattern(tool_result: str) -> str:
     else:
         return "UNKNOWN_FAILURE"
 
-async def arbitrator_validate_tasks(tools_called: List[str], tools_results_list: List[str], user_prompt: str, tool_manager=None, complete_llm_response: str = None) -> Optional[str]:
+async def arbitrator_validate_tasks(tools_called: List[str], tools_results_list: List[str], user_prompt: str, tool_manager=None) -> Optional[str]:
     """
     🧠 ARBITRATOR TASK VALIDATION SYSTEM
     Validates tool execution results and retries failed tasks with intelligent feedback
@@ -4143,8 +4126,7 @@ Please validate each task result and respond with JSON analysis."""
             retry_result = await intelligent_retry_with_circuit_breakers(
                 error_analysis, pattern_analysis_result, 
                 tools_called, tools_results_list, user_prompt,
-                tool_manager,  # Pass tool_manager for tool re-execution
-                complete_llm_response  # Pass original LLM response content to prevent fake content generation
+                tool_manager  # Pass tool_manager for tool re-execution
             )
             
             if retry_result.get("success", False):
@@ -4694,16 +4676,14 @@ Comprehensive stock analysis completed successfully.
                         try:
                             logger.info(f"⏰ POST-LLM AUTO-EXECUTION: Starting email execution with 120s timeout...")
                             
-                            # Execute email with timeout to prevent hanging
-                            result = await asyncio.wait_for(
-                                email_tool_instance.execute(
-                                    to_email=recipient_email,
-                                    subject=email_subject, 
-                                    body=f"Please find attached the latest {email_subject.lower()} with critical updates and detailed analysis.",
-                                    attachments=attachment_path
-                                ),
-                                timeout=120  # 2 minute timeout
-                            )
+                            # Execute email using secure_email_sender with fail-fast logic
+                            email_params = {
+                                "to_email": recipient_email,
+                                "subject": email_subject, 
+                                "body": f"Please find attached the latest {email_subject.lower()} with critical updates and detailed analysis.",
+                                "attachments": attachment_path
+                            }
+                            result = await tool_manager.safe_function_call("secure_email_sender", email_params)
                             
                             logger.info(f"✅ POST-LLM AUTO-EXECUTION: Email completed successfully")
                             
@@ -4719,16 +4699,14 @@ Comprehensive stock analysis completed successfully.
                         try:
                             logger.info(f"⏰ POST-LLM AUTO-EXECUTION: Starting stock email execution with 120s timeout...")
                             
-                            # Execute email with timeout to prevent hanging
-                            result = await asyncio.wait_for(
-                                email_tool_instance.execute(
-                                    to_email=recipient_email,
-                                    subject="Stock Analysis Report",
-                                    body="Please find attached the comprehensive stock analysis report with detailed financial insights.",
-                                    attachments=attachment_path
-                                ),
-                                timeout=120  # 2 minute timeout
-                            )
+                            # Execute email using secure_email_sender with fail-fast logic
+                            email_params = {
+                                "to_email": recipient_email,
+                                "subject": "Stock Analysis Report",
+                                "body": "Please find attached the comprehensive stock analysis report with detailed financial insights.",
+                                "attachments": attachment_path
+                            }
+                            result = await tool_manager.safe_function_call("secure_email_sender", email_params)
                             
                             logger.info(f"✅ POST-LLM AUTO-EXECUTION: Stock email completed successfully")
                             
@@ -5444,16 +5422,14 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         try:
                             logger.info(f"⏰ POST-LLM HTML EMAIL: Starting email execution with 120s timeout...")
                             
-                            # Execute email with timeout to prevent hanging
-                            result = await asyncio.wait_for(
-                                email_tool_instance.execute(
-                                    to_email=html_email_request.get('to_email'),
-                                    subject=html_email_request.get('subject', 'HTML Report'),
-                                    body=f"Please find attached HTML document.",
-                                    attachments=html_filename
-                                ),
-                                timeout=120  # 2 minute timeout
-                            )
+                            # Execute email using secure_email_sender with fail-fast logic
+                            email_params = {
+                                "to_email": html_email_request.get('to_email'),
+                                "subject": html_email_request.get('subject', 'HTML Report'),
+                                "body": f"Please find attached HTML document.",
+                                "attachments": html_filename
+                            }
+                            result = await tool_manager.safe_function_call("secure_email_sender", email_params)
                             
                             logger.info(f"✅ POST-LLM HTML EMAIL: Completed successfully")
                             
@@ -5516,15 +5492,14 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                                 logger.info(f"⏰ POST-LLM CONVERSATION PDF: Starting email execution with 120s timeout...")
                                 
                                 # Execute email with timeout to prevent hanging
-                                email_result = await asyncio.wait_for(
-                                    email_tool_instance.execute(
-                                        to_email=conversation_pdf_request.get('to_email'),
-                                        subject=conversation_pdf_request.get('subject', 'Conversation Export'),
-                                        body=f"Please find attached the conversation export in PDF format.\n\nThis document contains {pdf_result.get('message_count', 0)} messages from our conversation.",
-                                        attachments=pdf_filename
-                                    ),
-                                    timeout=120  # 2 minute timeout
-                                )
+                                # Execute email using secure_email_sender with fail-fast logic
+                                email_params = {
+                                    "to_email": conversation_pdf_request.get('to_email'),
+                                    "subject": conversation_pdf_request.get('subject', 'Conversation Export'),
+                                    "body": f"Please find attached the conversation export in PDF format.\n\nThis document contains {pdf_result.get('message_count', 0)} messages from our conversation.",
+                                    "attachments": pdf_filename
+                                }
+                                email_result = await tool_manager.safe_function_call("secure_email_sender", email_params)
                                 
                                 logger.info(f"✅ POST-LLM CONVERSATION PDF: Email completed successfully")
                                 
@@ -5740,17 +5715,15 @@ AI Document Generation System"""
                         try:
                             logger.info(f"⏰ POST-LLM EMAIL: Starting email execution with 120s timeout...")
                             
-                            # Execute email with timeout to prevent hanging
-                            email_result = await asyncio.wait_for(
-                                email_tool_instance.execute(
-                                    to_email=recipient_email,
-                                    cc_emails=cc_emails_str if cc_emails_str else None,  # Don't pass empty string
-                                    subject=subject,
-                                    body=email_body,
-                                    attachments=attachments_str
-                                ),
-                                timeout=120  # 2 minute timeout
-                            )
+                            # Execute email using secure_email_sender with fail-fast logic
+                            email_params = {
+                                "to_email": recipient_email,
+                                "cc_emails": cc_emails_str if cc_emails_str else None,  # Don't pass empty string
+                                "subject": subject,
+                                "body": email_body,
+                                "attachments": attachments_str
+                            }
+                            email_result = await tool_manager.safe_function_call("secure_email_sender", email_params)
                             
                             logger.info(f"✅ POST-LLM EMAIL: Completed successfully")
                             logger.info(f"🎯 POST-LLM: Email RESULT: {email_result}")
@@ -6633,18 +6606,6 @@ The above image analysis was automatically performed on newly uploaded images. T
                                         email_intercepted = True
                                         intercepted_email_params = email_params
                                     
-                                    # 🎯 DEFERRED EMAIL DETECTION: Check for our deferred email marker
-                                    if (function_name == "secure_email_sender" and 
-                                        result and "Email scheduled for sending after content generation" in str(result)):
-                                        email_intercepted = True
-                                        # Get stored email parameters from the tool manager
-                                        if hasattr(tool_manager, '_deferred_email_params'):
-                                            intercepted_email_params = tool_manager._deferred_email_params.copy()
-                                        else:
-                                            intercepted_email_params = {}
-                                        logger.info(f"📧 DEFERRED EMAIL DETECTED: {result}")
-                                        logger.info(f"📧 STORED EMAIL PARAMS: {intercepted_email_params}")
-                                    
                                     # Determine status and format output
                                     if result and len(str(result)) > 0:
                                         if "error" in str(result).lower() or "failed" in str(result).lower():
@@ -6812,10 +6773,8 @@ The above image analysis was automatically performed on newly uploaded images. T
                     
                     try:
                         # STEP 1: Validate current tool results
-                        # Note: complete_llm_response is not available yet since Primary LLM hasn't run
-                        # TODO: Extract original user content from request context instead of email instruction
                         validated_results = await arbitrator_validate_tasks(
-                            tools_called, tools_results_list, user_prompt, tool_manager, None
+                            tools_called, tools_results_list, user_prompt, tool_manager
                         )
                         
                         # 🔍 DEBUG: Log what arbitrator function returned
@@ -7215,11 +7174,33 @@ END OF CONTEXT
                     else:
                         in_prompt = f"PROMPT: {user_prompt}"
             else:
-                # Build new format: --CONTEXT START-- + CONTEXT BLOCK + PROMPT: [USER PROMPT]
+                # 🎯 PROMPT TRANSFORMATION: Transform email requests to confirmation requests when tools already executed
+                transformed_prompt = user_prompt
+                if context_block.strip() and ("TOOLS EXECUTED:" in context_block):
+                    # Check if user is asking to email something when tools have already been executed
+                    email_keywords = ["email the above", "email this", "send the above", "send this", "email it"]
+                    if any(keyword.lower() in user_prompt.lower() for keyword in email_keywords):
+                        # Transform the prompt to ask for confirmation instead of redoing work
+                        if "secure_email_sender" in context_block:
+                            transformed_prompt = "Please confirm what work has been completed and provide a summary of what was accomplished for the user."
+                        else:
+                            transformed_prompt = user_prompt  # Keep original if no email was actually sent
+                        logger.info(f"🔄 PROMPT TRANSFORMED: Email request → Confirmation request (tools already executed)")
+                
+                # Build new format: --CONTEXT START-- + ORIGINAL CONVERSATION + CONTEXT BLOCK + PROMPT: [TRANSFORMED PROMPT]
                 if context_block.strip():
-                    in_prompt = f"--CONTEXT START--\n{context_block}\n--CONTEXT END--\n\nPROMPT: {user_prompt}"
+                    # 🔧 CRITICAL FIX: Include original conversation context so Primary LLM knows what content was processed
+                    full_context = ""
+                    if prompt_context.strip():
+                        full_context += f"{prompt_context}\n\n"
+                    full_context += context_block
+                    in_prompt = f"--CONTEXT START--\n{full_context}\n--CONTEXT END--\n\nPROMPT: {transformed_prompt}"
                 else:
-                    in_prompt = f"PROMPT: {user_prompt}"
+                    # If no tools executed, use original context only
+                    if prompt_context.strip():
+                        in_prompt = f"--CONTEXT START--\n{prompt_context}\n--CONTEXT END--\n\nPROMPT: {transformed_prompt}"
+                    else:
+                        in_prompt = f"PROMPT: {transformed_prompt}"
             
             # Core metrics for debugging
             logger.info(f"📜 Prompt: {len(in_prompt)} bytes | Context: {len(context_block)} | System: {len(enhanced_system)}")
@@ -7234,7 +7215,7 @@ END OF CONTEXT
                         "temperature": data.get('temperature', 0.7),
                         "top_k": data.get('top_k', 40),
                         "top_p": data.get('top_p', 0.9),
-                        "num_ctx": data.get('num_ctx', 4096),
+                        "num_ctx": data.get('num_ctx', 8192),
                         "low_vram": data.get('low_vram', False)
                     },
                     "think": False,  # Set to False to disable thinking
@@ -7391,7 +7372,12 @@ END OF CONTEXT
                 logger.info(f"🕒 PRIMARY LLM: Starting with 45 minute timeout...")
                 
                 try:
-                    async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=2700) as response:
+                    logger.info(f"🧾 PRIMARY LLM: Sending request to Ollama at {ServerConfig.OLLAMA_URL}")
+                    logger.info(f"🧾 PRIMARY LLM: Payload keys: {json.dumps(stream_payload, indent=2)}")
+                    # stream_payload["system"] = "You are a helpful assistant. Always respond in markdown format."
+                    logger.info(f"🧾 PRIMARY LLM: System Prompt: {stream_payload["system"]}")
+                    # async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=2700) as response:
+                    async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=1800) as response:
                         if response.status == 200:
                             # Capture complete LLM response for post-processing
                             complete_llm_response = ""

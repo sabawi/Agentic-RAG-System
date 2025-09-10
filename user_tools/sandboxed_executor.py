@@ -181,7 +181,7 @@ class SandboxedExecutorTool(BaseUserTool):
             
             # 🧠 SMART REPORT DETECTION: Auto-detect if this is a report creation scenario
             # 🧠 SMART REPORT DETECTION: Auto-detect report creation scenarios  
-            smart_report_result = await self._smart_report_detection(kwargs)
+            smart_report_result = await self._smart_report_detection(kwargs, working_dir)
             if smart_report_result:
                 return smart_report_result
             
@@ -223,7 +223,7 @@ class SandboxedExecutorTool(BaseUserTool):
                 "result": None
             }
     
-    async def _smart_report_detection(self, kwargs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _smart_report_detection(self, kwargs: Dict[str, Any], working_dir: Path) -> Optional[Dict[str, Any]]:
         """
         🧠 SMART REPORT DETECTION
         Auto-detect if this is a report creation scenario and auto-fill with comprehensive content
@@ -985,11 +985,24 @@ This is a secure sandboxed environment for code execution and system commands.
             )
             
             if result["success"]:
+                # 🔍 CRITICAL: Verify the file actually exists before claiming success
+                if not os.path.exists(file_path):
+                    print(f"❌ CentralizedPDFService claimed success but file not found: {file_path}")
+                    return {
+                        "success": False,
+                        "error": f"CentralizedPDFService claimed success but file not created at {file_path}",
+                        "result": None
+                    }
+                
+                # Get actual file size
+                actual_size = os.path.getsize(file_path)
+                print(f"✅ PDF file verified: {file_path} ({actual_size} bytes)")
+                
                 return {
                     "success": True,
                     "filename": filename,
                     "full_path": file_path,
-                    "size_bytes": result.get("size_bytes", 0),
+                    "size_bytes": actual_size,
                     "created": datetime.now().isoformat(),
                     "content_type": "application/pdf",
                     "service": result.get("service", "CentralizedPDFService"),
