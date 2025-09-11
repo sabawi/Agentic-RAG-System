@@ -7,9 +7,13 @@ set -e  # Exit on any error
 
 echo "🚀 Setting up FastAPI server environment..."
 
+# Navigate to the project root directory
+cd "$(dirname "$0")/../.."
+
 # Check if we're in the right directory
-if [ ! -f "fastapi_server.py" ]; then
-    echo "❌ Error: Please run this script from the flaskserver directory"
+if [ ! -f "fastapi_server_complete.py" ]; then
+    echo "❌ Error: Cannot find project root directory"
+    echo "Expected to find fastapi_server_complete.py in project root"
     exit 1
 fi
 
@@ -89,8 +93,8 @@ echo "🎉 FastAPI environment setup complete!"
 echo ""
 echo "📋 Next steps:"
 echo "   1. Edit .env file with your database credentials"
-echo "   2. Run migration: python migrate_data.py"
-echo "   3. Start the server: python fastapi_server.py"
+echo "   2. Run migration: python tools/migrate_data.py"
+echo "   3. Start the server: python fastapi_server_complete.py"
 echo "   4. Run tests: python -m pytest test_fastapi.py"
 echo ""
 echo "🌐 Server will be available at: http://localhost:8000"

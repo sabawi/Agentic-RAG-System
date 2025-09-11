@@ -30,7 +30,7 @@ echo "🔍 Checking if server is running..."
 if ! curl -s http://localhost:5000/health > /dev/null 2>&1; then
     echo -e "${RED}❌ Server is not running on localhost:5000${NC}"
     echo "Please start the server first:"
-    echo "  ./start_complete.sh"
+    echo "  ../../start_complete.sh"
     exit 2
 fi
 
@@ -40,8 +40,8 @@ echo -e "${GREEN}✅ Server is running${NC}"
 mkdir -p tests
 
 # Make sure the test file exists
-if [ ! -f "tests/test_arbitrator_word_count_regression.py" ]; then
-    echo -e "${RED}❌ Test file not found: tests/test_arbitrator_word_count_regression.py${NC}"
+if [ ! -f "../test_arbitrator_word_count_regression.py" ]; then
+    echo -e "${RED}❌ Test file not found: ../test_arbitrator_word_count_regression.py${NC}"
     exit 3
 fi
 
@@ -49,7 +49,7 @@ fi
 echo "🚨 Running Arbitrator regression test..."
 echo "⏱️  This may take 2-5 minutes due to Arbitrator correction processing..."
 
-if python3 tests/test_arbitrator_word_count_regression.py; then
+if python3 ../test_arbitrator_word_count_regression.py; then
     echo -e "${GREEN}✅ ARBITRATOR REGRESSION TEST PASSED${NC}"
     echo "🎉 The critical bug fix is still working correctly!"
     exit 0

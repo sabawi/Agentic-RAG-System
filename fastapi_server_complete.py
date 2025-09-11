@@ -85,7 +85,7 @@ try:
     from gnews import GNews
     import yfinance as yf
     from ddgs import DDGS
-    from webcrawler import SeleniumCrawler
+    from archive.experimental.webcrawler import SeleniumCrawler
     from text_chunker import TextChunker
     import PyPDF2
     import magic
@@ -98,12 +98,12 @@ except ImportError as e:
 
 # Import our optimization safety system
 try:
-    from optimization_safety import (
+    from archive.experimental.optimization_safety import (
         ToolOutputPreserver,
         OptimizationValidator, 
         safe_optimize_llm_input
     )
-    from optimization_controller import optimization_controller
+    from integrations.optimization_controller import optimization_controller
     OPTIMIZATION_AVAILABLE = True
 except ImportError as e:
     OPTIMIZATION_AVAILABLE = False

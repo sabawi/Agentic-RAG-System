@@ -53,19 +53,19 @@ class LLMConfigTool:
             'ollama': {
                 'name': 'Ollama (Local)',
                 'base_url': OLLAMA_DEFAULT_BASE_URL,
-                # 'api_key': None,  # Uncomment and set if authentication required
+                'api_key': None,
                 'models': ollama_models
             },
             'openai': {
                 'name': 'OpenAI (Cloud)',
                 'base_url': OPENAI_BASE_URL,
-                # 'api_key': ENV_VAR_OPENAI,  # Uncomment and set OPENAI_API_KEY environment variable
+                'api_key': ENV_VAR_OPENAI,
                 'models': openai_models
             },
             'qwen': {
                 'name': 'Qwen Cloud (Alibaba)',
                 'base_url': QWEN_BASE_URL,
-                # 'api_key': ENV_VAR_QWEN,  # Uncomment and set QWEN_API_KEY environment variable
+                'api_key': ENV_VAR_QWEN,
                 'models': {
                     'qwen-plus': 'Qwen Plus',
                     'qwen-turbo': 'Qwen Turbo',
@@ -78,7 +78,7 @@ class LLMConfigTool:
             'gemini': {
                 'name': 'Google Gemini (Cloud)',
                 'base_url': GEMINI_BASE_URL,
-                # 'api_key': ENV_VAR_GOOGLE,  # Uncomment and set GOOGLE_API_KEY environment variable
+                'api_key': ENV_VAR_GOOGLE,
                 'models': {
                     'gemini-1.5-pro': 'Gemini 1.5 Pro',
                     'gemini-1.5-flash': 'Gemini 1.5 Flash',
@@ -102,7 +102,7 @@ class LLMConfigTool:
         for idx, (key, provider) in enumerate(self.providers.items(), 1):
             print(f"{idx}. {provider['name']}")
             print(f"   Base URL: {provider['base_url']}")
-            # print(f"   Authentication: {'Required' if provider.get('auth_key') else 'Not required'}")  # Uncomment if needed
+            print(f"   API Key: {provider['api_key'] or 'Not required'}")
             print()
     
     def display_models(self, provider_key):
@@ -198,7 +198,7 @@ class LLMConfigTool:
                 }
             },
             'security': {
-                'auth_encryption': False,  # Encryption for authentication tokens
+                'api_key_encryption': False,
                 'audit_logging': True,
                 'rate_limiting': {
                     'enabled': True,
@@ -235,7 +235,7 @@ class LLMConfigTool:
                 'num_predict': OLLAMA_DEFAULT_NUM_PREDICT_PRIMARY if is_primary else OLLAMA_DEFAULT_NUM_PREDICT_SECONDARY,  # CRITICAL: Output token limit for Ollama
                 'max_tokens': DEFAULT_PRIMARY_MAX_TOKENS if is_primary else DEFAULT_SECONDARY_MAX_TOKENS,    # Backward compatibility
                 'base_url': OLLAMA_DEFAULT_BASE_URL,
-                # 'api_key': None,  # Uncomment and set if authentication required
+                'api_key': None,
                 'stream': is_primary
             })
         else:
@@ -248,17 +248,17 @@ class LLMConfigTool:
             # Provider-specific settings
             if provider_key == 'openai':
                 base_config.update({
-                    # 'api_key': ENV_VAR_OPENAI,  # Uncomment and set OPENAI_API_KEY environment variable
+                    'api_key': ENV_VAR_OPENAI,
                     'base_url': OPENAI_BASE_URL
                 })
             elif provider_key == 'qwen':
                 base_config.update({
-                    # 'api_key': ENV_VAR_QWEN,  # Uncomment and set QWEN_API_KEY environment variable
+                    'api_key': ENV_VAR_QWEN,
                     'base_url': QWEN_BASE_URL
                 })
             elif provider_key == 'gemini':
                 base_config.update({
-                    # 'api_key': ENV_VAR_GOOGLE,  # Uncomment and set GOOGLE_API_KEY environment variable
+                    'api_key': ENV_VAR_GOOGLE,
                     'base_url': GEMINI_BASE_URL
                 })
         
@@ -273,7 +273,7 @@ class LLMConfigTool:
                 'retry_delay': DEFAULT_RETRY_DELAY
             },
             'openai': {
-                # 'api_key': ENV_VAR_OPENAI,  # Uncomment and set OPENAI_API_KEY environment variable
+                'api_key': ENV_VAR_OPENAI,
                 'base_url': OPENAI_BASE_URL,
                 'organization': None,
                 'retry_attempts': DEFAULT_RETRY_ATTEMPTS,
@@ -284,7 +284,7 @@ class LLMConfigTool:
                 }
             },
             'qwen': {
-                # 'api_key': ENV_VAR_QWEN,  # Uncomment and set QWEN_API_KEY environment variable
+                'api_key': ENV_VAR_QWEN,
                 'base_url': QWEN_BASE_URL,
                 'retry_attempts': DEFAULT_RETRY_ATTEMPTS,
                 'retry_delay': DEFAULT_OPENAI_RETRY_DELAY,
@@ -294,7 +294,7 @@ class LLMConfigTool:
                 }
             },
             'gemini': {
-                # 'api_key': ENV_VAR_GOOGLE,  # Uncomment and set GOOGLE_API_KEY environment variable
+                'api_key': ENV_VAR_GOOGLE,
                 'base_url': GEMINI_BASE_URL,
                 'retry_attempts': DEFAULT_RETRY_ATTEMPTS,
                 'retry_delay': DEFAULT_OPENAI_RETRY_DELAY,
@@ -681,7 +681,7 @@ class LLMConfigTool:
                         'max_tokens': DEFAULT_IMAGE_PROCESSING_MAX_TOKENS,
                         'stream': False,
                         'base_url': OLLAMA_DEFAULT_BASE_URL,
-                        # 'auth_key': None  # Uncomment and set if authentication required
+                        'api_key': None
                     }
                 }
             else:
@@ -697,17 +697,17 @@ class LLMConfigTool:
                 
                 if provider_type == 'openai':
                     base_config.update({
-                        # 'api_key': ENV_VAR_OPENAI,  # Uncomment and set OPENAI_API_KEY environment variable
+                        'api_key': ENV_VAR_OPENAI,
                         'base_url': OPENAI_BASE_URL
                     })
                 elif provider_type == 'gemini':
                     base_config.update({
-                        # 'api_key': ENV_VAR_GOOGLE,  # Uncomment and set GOOGLE_API_KEY environment variable
+                        'api_key': ENV_VAR_GOOGLE,
                         'base_url': GEMINI_BASE_URL
                     })
                 elif provider_type == 'qwen':
                     base_config.update({
-                        # 'api_key': ENV_VAR_QWEN,  # Uncomment and set QWEN_API_KEY environment variable
+                        'api_key': ENV_VAR_QWEN,
                         'base_url': QWEN_BASE_URL
                     })
                 
@@ -974,7 +974,7 @@ class LLMConfigTool:
                     'temperature': DEFAULT_SECONDARY_TEMPERATURE,
                     'max_tokens': 1024,
                     'stream': False,
-                    # 'api_key': ENV_VAR_OPENAI,  # Uncomment and set OPENAI_API_KEY environment variable
+                    'api_key': ENV_VAR_OPENAI,
                     'base_url': OPENAI_BASE_URL
                 }
             }
@@ -989,17 +989,17 @@ class LLMConfigTool:
             # Update provider-specific config
             if provider_type == 'openai':
                 config['arbitrator']['config'].update({
-                    # 'api_key': ENV_VAR_OPENAI,  # Uncomment and set OPENAI_API_KEY environment variable
+                    'api_key': ENV_VAR_OPENAI,
                     'base_url': OPENAI_BASE_URL
                 })
             elif provider_type == 'qwen':
                 config['arbitrator']['config'].update({
-                    # 'api_key': ENV_VAR_QWEN,  # Uncomment and set QWEN_API_KEY environment variable
+                    'api_key': ENV_VAR_QWEN,
                     'base_url': QWEN_BASE_URL
                 })
             elif provider_type == 'gemini':
                 config['arbitrator']['config'].update({
-                    # 'api_key': ENV_VAR_GOOGLE,  # Uncomment and set GOOGLE_API_KEY environment variable
+                    'api_key': ENV_VAR_GOOGLE,
                     'base_url': 'https://generativelanguage.googleapis.com/v1'
                 })
         

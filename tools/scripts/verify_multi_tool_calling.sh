@@ -10,7 +10,7 @@ echo
 # Check if server is running
 if ! curl -s http://localhost:5000/health > /dev/null 2>&1; then
     echo "❌ Server is not running. Please start it first:"
-    echo "   ./start_complete.sh"
+    echo "   ../../start_complete.sh"
     exit 1
 fi
 

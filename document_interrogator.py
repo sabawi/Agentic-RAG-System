@@ -19,11 +19,11 @@ import time
 
 # Import integrity monitoring
 try:
-    from faiss_integrity_monitor import check_and_repair_faiss_integrity
+    from tools.faiss_integrity_monitor import check_and_repair_faiss_integrity
     INTEGRITY_MONITORING_AVAILABLE = True
 except ImportError:
     INTEGRITY_MONITORING_AVAILABLE = False
-    logger.warning("⚠️ FAISS integrity monitoring not available")
+    print("⚠️ FAISS integrity monitoring not available")
 
 # Document processing with multi-engine OCR support
 try:
