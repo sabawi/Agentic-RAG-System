@@ -1,6 +1,11 @@
-# Agentic-RAG Server
+# Agentic-RAG Server v1.0.0
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, and vision capabilities.
+
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.0)
+[![Python](https://img.shields.io/badge/python-3.8+-green)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
 
 ## 🚀 Features
 
@@ -14,52 +19,66 @@ An advanced AI-powered server with multi-LLM orchestration, tool calling, docume
 
 ## 📚 Documentation
 
-- **[Installation Guide](INSTALLATION.md)** - Complete setup instructions
-- **[Configuration Guide](CONFIGURATION.md)** - System configuration options
-- **[API Reference](API.md)** - Endpoint documentation  
-- **[User Tools Guide](TOOLS.md)** - Available tools and usage
-- **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Common issues and solutions
+### Production Documentation (V1.0)
+- **[Installation Guide](docs/production/INSTALLATION_GUIDE.md)** - Automated installation system
+- **[Administrator Guide](docs/production/ADMINISTRATOR_GUIDE.md)** - System administration and maintenance
+- **[User Guide](docs/production/USER_GUIDE.md)** - API usage and features
+- **[Developer Guide](docs/production/DEVELOPER_GUIDE.md)** - Development and architecture
+
+### Quick Reference
+- **[Main Documentation Hub](docs/README.md)** - Central navigation and overview
 
 ## 🚀 Quick Start
 
-1. **Install Dependencies**
-   ```bash
-   # See INSTALLATION.md for complete setup
-   pip install -r requirements.txt
-   python test_dependencies.py
-   ```
+### Automated Installation (Recommended)
+```bash
+# Clone the repository
+git clone https://github.com/sabawi/Agentic-RAG-System.git
+cd Agentic-RAG-System
 
-2. **Set up Ollama & Models**
-   ```bash
-   curl -fsSL https://ollama.com/install.sh | sh
-   ollama pull qwen3:8b
-   ollama pull qwen2.5vl:3b
-   ```
+# Run the automated installer
+./install.sh
 
-3. **Configure Environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your API keys
-   ```
+# Start the server
+./start_complete.sh
+```
 
-4. **Install as Service (Recommended)**
-   ```bash
-   ./install_service.sh
-   sudo systemctl start agentic-rag-server
-   ```
-   
-   **Or run manually:**
-   ```bash
-   ./start_complete.sh
-   ```
+### Manual Installation
+```bash
+# See docs/production/INSTALLATION_GUIDE.md for complete setup
+pip install -r requirements.txt
+python fastapi_server_complete.py
+```
 
-5. **Test API**
-   ```bash
-   curl -X POST http://localhost:5000/v1/chat/completions \
-     -H "Content-Type: application/json" \
-     -H "Authorization: Bearer <your-api-key>" \
-     -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello!"}]}'
-   ```
+## ⭐ What's New in V1.0.0
+
+### 🚀 Major Features
+- **Automated Installation System** - One-command setup with comprehensive verification
+- **Production Documentation** - Complete administrator, user, and developer guides
+- **Enhanced Architecture** - Modular design with proper separation of concerns
+- **Comprehensive Testing** - Full test coverage and verification systems
+- **Professional Deployment** - Production-ready configuration and monitoring
+
+### 📈 V1.0 Achievements
+- ✅ Complete project reorganization (47 → 3 production guides)
+- ✅ Automated installation script with system dependencies
+- ✅ Cross-platform support (Linux/macOS)
+- ✅ Comprehensive verification and testing
+- ✅ Professional documentation structure
+- ✅ Production-ready deployment
+
+## 🧪 API Testing
+
+Once installed, test the API:
+```bash
+# Test basic connectivity
+curl http://localhost:8000/health
+
+# Test chat completion
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "qwen3:8b", "messages": [{"role": "user", "content": "Hello!"}]}'
+```
 
 ## 🏗️ Architecture
 

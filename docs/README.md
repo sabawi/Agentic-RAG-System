@@ -1,6 +1,6 @@
-# 📚 Agentic RAG System - Documentation Overview
+# 📚 Agentic RAG System v1.0.0 - Documentation Overview
 
-Welcome to the comprehensive documentation for the **Agentic RAG System** - a high-performance FastAPI-based agentic system with advanced tool calling capabilities.
+Welcome to the comprehensive documentation for the **Agentic RAG System v1.0.0** - a production-ready FastAPI-based agentic system with advanced tool calling capabilities.
 
 ## 🎯 Quick Start - Choose Your Guide
 
