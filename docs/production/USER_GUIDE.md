@@ -198,7 +198,7 @@ For applications expecting OpenAI API format:
 curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-4o",
+    "model": "Agentic-RAG-Model1",
     "messages": [
       {"role": "user", "content": "What is the weather like today?"}
     ]
@@ -555,7 +555,7 @@ Process and analyze images:
 curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-4o",
+    "model": "Agentic-RAG-Model1",
     "messages": [{
       "role": "user",
       "content": [

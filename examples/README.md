@@ -129,7 +129,7 @@ Content-Type: application/json
 Authorization: Bearer test-key
 
 {
-  "model": "gpt-4o",
+  "model": "Agentic-RAG-Model1",
   "messages": [{"role": "user", "content": "Your prompt here"}],
   "stream": false
 }
@@ -154,7 +154,7 @@ The examples demonstrate sophisticated coordination of:
 
 ### Streaming (Real-time Response)
 ```python
-payload = {"model": "gpt-4o", "messages": [...], "stream": True}
+payload = {"model": "Agentic-RAG-Model1", "messages": [...], "stream": True}
 ```
 - Watch analysis happen in real-time
 - Better for long-running tasks
@@ -162,7 +162,7 @@ payload = {"model": "gpt-4o", "messages": [...], "stream": True}
 
 ### Standard (Complete Response)
 ```python  
-payload = {"model": "gpt-4o", "messages": [...], "stream": False}
+payload = {"model": "Agentic-RAG-Model1", "messages": [...], "stream": False}
 ```
 - Get complete response when finished
 - Better for automated processing
@@ -201,7 +201,7 @@ Use all available tools to [comprehensive workflow description]"
 curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer test-key" \
-  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Test multi-tool coordination: get news, search documents, create report, send email"}]}'
+  -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "Test multi-tool coordination: get news, search documents, create report, send email"}]}'
 ```
 
 ### Health Check

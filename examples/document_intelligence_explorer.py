@@ -180,7 +180,7 @@ class DocumentIntelligenceExplorer:
     def _send_request(self, prompt, mode_name):
         """Send request to the agentic server"""
         payload = {
-            "model": "gpt-4o",
+            "model": "Agentic-RAG-Model1",
             "messages": [{"role": "user", "content": prompt}],
             "stream": False
         }
@@ -229,7 +229,7 @@ curl -X POST http://localhost:5000/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer test-key" \\
   -d '{
-    "model": "gpt-4o",
+    "model": "Agentic-RAG-Model1",
     "messages": [{
       "role": "user", 
       "content": "Search our documents for any mentions of machine learning or AI. Create a summary of findings and email it to user@example.com with the subject 'AI Research Summary'"

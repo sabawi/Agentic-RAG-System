@@ -492,7 +492,7 @@ time curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer test-key" \
   -d '{
-    "model": "gpt-4o",
+    "model": "Agentic-RAG-Model1",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 
@@ -1012,7 +1012,7 @@ The system supports multiple authentication methods:
 curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your-api-key" \
-  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "Hello"}]}'
 
 # Basic API key validation
 # Configure API keys in environment or configuration files
@@ -1789,7 +1789,7 @@ POST /documents/search
 # OpenAI-compatible chat
 POST /v1/chat/completions
 {
-  "model": "gpt-4o",
+  "model": "Agentic-RAG-Model1",
   "messages": [{"role": "user", "content": "Hello"}],
   "stream": false
 }

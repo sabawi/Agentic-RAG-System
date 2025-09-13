@@ -295,7 +295,7 @@ curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer test-key" \
   -d '{
-    "model": "gpt-4o",
+    "model": "Agentic-RAG-Model1",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 
@@ -304,7 +304,7 @@ curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer test-key" \
   -d '{
-    "model": "gpt-4o",
+    "model": "Agentic-RAG-Model1",
     "messages": [{
       "role": "user",
       "content": [

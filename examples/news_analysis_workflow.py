@@ -108,7 +108,7 @@ def openai_api_example():
     """
     
     payload = {
-        "model": "gpt-4o",  # Using OpenAI model name (maps to our agentic system)
+        "model": "Agentic-RAG-Model1",  # Using OpenAI model name (maps to our agentic system)
         "messages": [
             {"role": "user", "content": market_intelligence_prompt}
         ],
@@ -170,7 +170,7 @@ def streaming_example():
     """
     
     payload = {
-        "model": "gpt-4o",
+        "model": "Agentic-RAG-Model1",
         "messages": [{"role": "user", "content": streaming_prompt}],
         "stream": True
     }
