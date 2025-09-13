@@ -209,6 +209,26 @@ install_system_dependencies() {
     fi
 }
 
+# Clear Python caches to prevent import issues
+clear_python_caches() {
+    log_step "Clearing Python caches"
+    
+    if [ "$DRY_RUN" = false ]; then
+        # Remove __pycache__ directories
+        find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+        
+        # Remove .pyc files
+        find . -name "*.pyc" -delete 2>/dev/null || true
+        
+        # Remove .pyo files  
+        find . -name "*.pyo" -delete 2>/dev/null || true
+        
+        log_success "Python caches cleared"
+    else
+        log_info "[DRY-RUN] Would clear Python cache files (__pycache__, *.pyc, *.pyo)"
+    fi
+}
+
 # Project directory setup
 setup_project_directory() {
     log_header "Project Directory Setup"
@@ -220,6 +240,7 @@ setup_project_directory() {
             exit 1
         fi
         execute_command "git pull origin main" "Pulling latest changes from GitHub"
+        clear_python_caches
     else
         # Fresh installation
         log_step "Setting up project directory"
@@ -613,6 +634,7 @@ main() {
     setup_project_directory
     setup_virtual_environment
     install_python_dependencies
+    clear_python_caches
     
     if [ "$UPGRADE_MODE" = false ]; then
         setup_ollama
