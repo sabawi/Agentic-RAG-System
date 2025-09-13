@@ -506,10 +506,9 @@ curl -X POST "http://localhost:5000/v1/chat/completions" \
 **Key Parameters:**
 - `model`: Use "Agentic-RAG-Model1" for full tool access (19-tool system)
 - `stream`: Enable real-time response streaming
-- `messages`: Array with system and user messages
+- `messages`: Array with conversation history (system, user, assistant messages)
 - `temperature`: Control randomness (0.0-1.0)
 - `max_tokens`: Limit response length
-- `conversation_id`: Enable conversation memory
 
 **Available Tools:**
 1. `get_the_secret_tool` - Current date/time
@@ -724,17 +723,21 @@ curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "Agentic-RAG-Model1",
-    "messages": [{"role": "user", "content": "Hi, I am working on a machine learning project about NLP"}],
-    "conversation_id": "ml_project_123"
+    "messages": [
+      {"role": "user", "content": "Hi, I am working on a machine learning project about NLP"}
+    ]
   }'
 
-# Follow-up message (remembers context)
+# Follow-up message with full conversation history (proper OpenAI format)
 curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "Agentic-RAG-Model1",
-    "messages": [{"role": "user", "content": "What are the latest research papers on this topic?"}],
-    "conversation_id": "ml_project_123"
+    "messages": [
+      {"role": "user", "content": "Hi, I am working on a machine learning project about NLP"},
+      {"role": "assistant", "content": "That sounds exciting! NLP is a fascinating field with many applications. What specific aspect of NLP are you focusing on in your project?"},
+      {"role": "user", "content": "What are the latest research papers on this topic?"}
+    ]
   }'
 ```
 
@@ -1560,7 +1563,7 @@ if is_meta_task:
 #### Key Features
 - **Context Persistence**: Conversations remember previous turns automatically
 - **Smart Compression**: Facts extraction and relevance scoring prevent memory bloat
-- **Multi-User Support**: Conversation isolation via conversation_id
+- **Multi-User Support**: Conversation isolation via messages array (OpenAI standard)
 - **Automatic Cleanup**: Old conversations cleaned after 7 days
 
 #### Usage
@@ -1568,12 +1571,24 @@ if is_meta_task:
 # First conversation turn
 curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "Hi, I am working on a Python project"}], "conversation_id": "my_project_123"}'
+  -d '{
+    "model": "Agentic-RAG-Model1", 
+    "messages": [
+      {"role": "user", "content": "Hi, I am working on a Python project"}
+    ]
+  }'
 
-# Follow-up turns remember context
+# Follow-up turns with conversation history (proper OpenAI format)
 curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "What was my previous question?"}], "conversation_id": "my_project_123"}'
+  -d '{
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Hi, I am working on a Python project"},
+      {"role": "assistant", "content": "Great! I'd be happy to help you with your Python project. What specific aspect are you working on or what challenges are you facing?"},
+      {"role": "user", "content": "What was my previous question?"}
+    ]
+  }'
 ```
 
 ### OpenAI API Compatibility Layer
