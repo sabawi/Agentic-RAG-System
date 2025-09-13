@@ -30,7 +30,7 @@ The Agentic RAG System is a sophisticated 2-stage LLM processing architecture th
 ### Key Features
 
 - **2-Stage LLM Architecture**: Tool calling model → Primary LLM → Post-processing
-- **11-Tool Agentic System**: Web search, stock analysis, email, file creation, calendar integration
+- **19-Tool Agentic System**: Web search, stock analysis, email, file creation, calendar integration, flight search, document processing, image analysis, and more
 - **OpenAI API Compatibility**: Full `/v1/chat/completions` and `/v1/models` support
 - **Document Processing**: FAISS-based RAG with embedding search and interrogation
 - **Conversational Memory**: Multi-turn dialogue persistence with smart compression
@@ -496,7 +496,7 @@ curl -X POST "http://localhost:5000/llama3_1b/stream" \
 ```
 
 **Key Parameters:**
-- `toolsInUse`: Enable 11-tool system (required for most functionality)
+- `toolsInUse`: Enable 19-tool system (required for most functionality)
 - `stream`: Enable real-time response streaming
 - `system`: Custom system prompt override
 - `temperature`: Control randomness (0.0-1.0)

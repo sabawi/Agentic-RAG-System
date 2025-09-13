@@ -15,7 +15,7 @@ The Agentic RAG System is a high-performance AI assistant that combines local la
 ### Key Features
 
 - **Local Processing**: Runs entirely on your hardware with Ollama integration
-- **Tool Integration**: 11+ specialized tools for different tasks
+- **Tool Integration**: 19 specialized tools for different tasks
 - **Document Management**: Advanced RAG system with semantic search
 - **Email Capabilities**: Professional email sending with multiple providers
 - **Real-time Streaming**: Live responses as the AI processes your requests
@@ -114,28 +114,45 @@ Your AI assistant has access to these specialized tools:
 3. **search_web** - Search the web using DuckDuckGo
 4. **lookup_website** - Extract content from websites and PDFs
 5. **wikipedia_query** - Search and retrieve Wikipedia information
+6. **published_papers_search** - Search academic papers and research publications
+7. **document_search** - Search through indexed documents using RAG system
 
 #### Communication & Productivity Tools
-6. **secure_email_sender** - Send professional emails with attachments
-7. **google_calendar_scheduler** - Manage calendar events and appointments
+8. **secure_email_sender** - Send professional emails with attachments
+9. **google_calendar_scheduler** - Manage calendar events and appointments
+10. **flight_search** - Search for airline flights with real-time pricing
 
 #### Analysis & Computing Tools
-8. **calculator** - Advanced mathematical calculations
-9. **stock_analyzer** - Financial analysis and stock evaluation
-10. **sandboxed_executor** - Safe code execution and file operations
-11. **get_stock_and_company_data** - Financial data retrieval
+11. **calculator** - Advanced mathematical calculations
+12. **comprehensive_stock_analyzer** - Advanced financial analysis and stock evaluation
+13. **get_stock_and_company_data** - Financial data retrieval
+14. **sandboxed_executor** - Safe code execution and file operations
+15. **process_executor** - Advanced system process execution
+
+#### Content Creation & Processing Tools
+16. **analytical_visualizer** - Create charts, graphs, and data visualizations
+17. **image_to_text** - Extract text from images using OCR
+18. **pdf_generator** - Create and generate PDF documents
+19. **[Additional tools may be available - check /v1/models endpoint]**
 
 ### Multi-Tool Intelligence
 
 The system can use multiple tools in sequence to solve complex tasks:
 
-**Example**: "Research the latest AI developments, create a summary report, and email it to my manager"
+**Example 1**: "Research the latest AI developments, create a summary report, and email it to my manager"
 
 The AI will:
 1. Use `search_web` to find recent AI news
 2. Use `lookup_website` to get full article details
 3. Use `sandboxed_executor` to create a formatted report
 4. Use `secure_email_sender` to send it to your manager
+
+**Example 2**: "Find flights from New York to Miami on December 25th for 2 people"
+
+The AI will:
+1. Use `search_web` to check current travel conditions and restrictions
+2. Use `flight_search` to find available flights with pricing
+3. Provide flight options with verification links to major booking sites
 
 ### Conversation Flow
 
@@ -234,7 +251,19 @@ curl -X POST "http://localhost:5000/llama3_1b/stream" \
   }'
 ```
 
-#### 4. Financial Analysis
+#### 4. Flight Search
+```bash
+curl -X POST "http://localhost:5000/llama3_1b/stream" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Find round-trip flights from Chicago to Miami, leaving January 15, returning January 20, for 2 people",
+    "model": "qwen3:8b",
+    "toolsInUse": true,
+    "stream": false
+  }'
+```
+
+#### 5. Financial Analysis
 ```bash
 curl -X POST "http://localhost:5000/llama3_1b/stream" \
   -H "Content-Type: application/json" \

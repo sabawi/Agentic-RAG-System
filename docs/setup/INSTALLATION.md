@@ -117,7 +117,21 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USERNAME=your-email@gmail.com
 SMTP_PASSWORD=REPLACE_WITH_YOUR_APP_PASSWORD
+
+# Flight Search API Keys (optional - enables real flight data)
+AMADEUS_API_KEY=REPLACE_WITH_YOUR_AMADEUS_API_KEY
+AMADEUS_API_SECRET=REPLACE_WITH_YOUR_AMADEUS_API_SECRET
+SKYSCANNER_API_KEY=REPLACE_WITH_YOUR_SKYSCANNER_API_KEY
+SERPAPI_API_KEY=REPLACE_WITH_YOUR_SERPAPI_KEY
+RAPIDAPI_KEY=REPLACE_WITH_YOUR_RAPIDAPI_KEY
+CHROMEDRIVER_PATH=/path/to/chromedriver  # Optional - auto-installs if not set
 ```
+
+**Flight Search API Setup Notes:**
+- **Without API keys**: Flight search uses web scraping and provides verification links
+- **With Amadeus API**: Best option - free tier (1000 calls/month), then $1/1000 calls
+- **With SerpAPI**: Good for Google Flights data - paid service ($50/month for 5000 searches)
+- **ChromeDriver**: Auto-installs if not specified, requires Chrome browser
 
 ### Step 6: Set Up Google Calendar (Optional)
 

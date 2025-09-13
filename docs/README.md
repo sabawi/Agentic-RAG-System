@@ -1,6 +1,6 @@
-# 📚 Agentic RAG System v1.0.0 - Documentation Overview
+# 📚 Agentic RAG System v1.0.1.0 - Documentation Overview
 
-Welcome to the comprehensive documentation for the **Agentic RAG System v1.0.0** - a production-ready FastAPI-based agentic system with advanced tool calling capabilities.
+Welcome to the comprehensive documentation for the **Agentic RAG System v1.0.1.0** - a production-ready FastAPI-based agentic system with advanced tool calling capabilities.
 
 ## 🎯 Quick Start - Choose Your Guide
 
@@ -67,7 +67,7 @@ Preserved for reference but not needed for daily operations:
 ## 🚀 System Overview
 
 ### **Key Features**
-- **🤖 11 AI Tools** - Complete agentic toolkit (web search, document analysis, email, calculations, etc.)
+- **🤖 19 AI Tools** - Complete agentic toolkit (web search, document analysis, email, calculations, etc.)
 - **🧠 Two-Stage LLM Processing** - Advanced tool calling with intelligent result processing
 - **📄 Enhanced RAG System** - Automatic document indexing and intelligent search
 - **⚡ High Performance** - Async processing, parallel tool execution, meta-task optimization
@@ -79,21 +79,29 @@ Preserved for reference but not needed for daily operations:
 ```
 User Request → Tool Calling LLM → Multi-Tool Execution → Primary LLM → Response
                      ↓                    ↓                    ↓
-              [11 AI Tools]        [Parallel Processing]   [Email/File Generation]
+              [19 AI Tools]        [Parallel Processing]   [Email/File Generation]
 ```
 
 ### **Available Tools**
 1. **Web Search** - DuckDuckGo search with content extraction
 2. **Website Lookup** - Enhanced webpage and PDF content extraction  
 3. **News Summaries** - Real-time news with full article content
-4. **Document Search** - RAG-powered document retrieval
-5. **Stock Analysis** - Financial data and market analysis
-6. **Image Analysis** - Computer vision with local models
-7. **Calendar Management** - Event scheduling and management
-8. **Email Communication** - Secure email sending with attachments
-9. **PDF Generation** - Professional document creation
-10. **Code Execution** - Safe sandboxed code execution
-11. **System Information** - Date, time, and system utilities
+4. **Wikipedia Query** - Search and retrieve Wikipedia information
+5. **Document Search** - RAG-powered document retrieval
+6. **Published Papers Search** - Academic paper and research publication search
+7. **Stock Analysis** - Comprehensive financial data and market analysis
+8. **Stock Data Retrieval** - Financial data and company information
+9. **Image Analysis** - Computer vision with OCR text extraction
+10. **Calendar Management** - Event scheduling and management
+11. **Email Communication** - Secure email sending with attachments
+12. **Flight Search** - Airline flight search with real-time pricing
+13. **PDF Generation** - Professional document creation
+14. **Code Execution** - Safe sandboxed code execution
+15. **Process Execution** - Advanced system process execution
+16. **Data Visualization** - Create charts, graphs, and analytics
+17. **Mathematical Calculator** - Advanced calculations
+18. **System Information** - Date, time, and system utilities
+19. **Additional Tools** - Extensible tool system for custom capabilities
 
 ---
 

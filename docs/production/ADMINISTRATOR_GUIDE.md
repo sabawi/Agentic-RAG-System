@@ -229,6 +229,14 @@ CUSTOM_SMTP_SERVER=smtp.yourcompany.com
 CUSTOM_SMTP_PORT=587
 CUSTOM_SENDER_EMAIL=agent@yourcompany.com
 CUSTOM_SMTP_PASSWORD=your-smtp-password
+
+# Flight Search API Keys (optional - enables real flight data)
+AMADEUS_API_KEY=your_amadeus_api_key_here
+AMADEUS_API_SECRET=your_amadeus_api_secret_here
+SKYSCANNER_API_KEY=your_skyscanner_api_key_here
+SERPAPI_API_KEY=your_serpapi_key_here
+RAPIDAPI_KEY=your_rapidapi_key_here
+CHROMEDRIVER_PATH=/path/to/chromedriver  # Optional - auto-installs if not set
 ```
 
 ### LLM Configuration
@@ -261,6 +269,91 @@ llm:
       model: mxbai-embed-large  # Document embeddings
       base_url: http://127.0.0.1:11434
 ```
+
+### Flight Search Tool Configuration
+
+The flight search tool supports multiple data sources and requires configuration for optimal performance:
+
+```yaml
+flight_search:
+  enabled: true
+  web_scraping:
+    enabled: true
+    timeout_seconds: 30
+    max_results: 10
+    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+  apis:
+    # Flight search API providers - Add your API keys via environment variables
+    amadeus:
+      enabled: false  # Set to true when API key is configured
+      api_key: ${AMADEUS_API_KEY}
+      api_secret: ${AMADEUS_API_SECRET}
+      base_url: "https://test.api.amadeus.com"  # Use "https://api.amadeus.com" for production
+    skyscanner:
+      enabled: false  # Set to true when API key is configured
+      api_key: ${SKYSCANNER_API_KEY}
+      base_url: "https://partners.api.skyscanner.net"
+    serpapi:
+      enabled: false  # Set to true when API key is configured
+      api_key: ${SERPAPI_API_KEY}
+      base_url: "https://serpapi.com/search.json"
+    rapidapi_skyscanner:
+      enabled: false  # Set to true when API key is configured
+      api_key: ${RAPIDAPI_KEY}
+      base_url: "https://skyscanner50.p.rapidapi.com"
+      host: "skyscanner50.p.rapidapi.com"
+  verification_links:
+    # Booking sites always included for verification
+    kayak: "https://www.kayak.com/flights"
+    expedia: "https://www.expedia.com/Flights-Search"
+    google_flights: "https://www.google.com/travel/flights"
+    priceline: "https://www.priceline.com/relax/at/flights"
+    momondo: "https://www.momondo.com/flight-search"
+  chromedriver:
+    # ChromeDriver configuration for web scraping fallback
+    path: ${CHROMEDRIVER_PATH}  # Optional - auto-installs if not specified
+    auto_install: true
+    headless: true
+    timeout: 30
+    window_size: "1920,1080"
+```
+
+#### Flight Search API Setup
+
+**Priority Order**: The tool tries API providers in this order:
+1. Amadeus API (recommended for production)
+2. Skyscanner API (partner access required)
+3. SerpAPI (Google Flights data)
+4. Web scraping fallback (always available)
+
+**Amadeus API Setup** (Recommended):
+1. Visit [Amadeus for Developers](https://developers.amadeus.com/)
+2. Create free account and application
+3. Set environment variables and enable in config:
+   ```bash
+   export AMADEUS_API_KEY="your_key"
+   export AMADEUS_API_SECRET="your_secret"
+   ```
+   ```yaml
+   amadeus:
+     enabled: true
+   ```
+
+**SerpAPI Setup** (Google Flights):
+1. Visit [SerpAPI](https://serpapi.com/) and create account
+2. Set environment variable and enable:
+   ```bash
+   export SERPAPI_API_KEY="your_key"
+   ```
+   ```yaml
+   serpapi:
+     enabled: true
+   ```
+
+**Cost Considerations**:
+- Amadeus: Free tier (1000 calls/month), then $1/1000 calls
+- SerpAPI: Paid service, $50/month for 5000 searches
+- Web scraping: Free but slower and less reliable
 
 ### System Prompts Customization
 
