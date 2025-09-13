@@ -571,19 +571,20 @@ test_server() {
     python3 fastapi_server_complete.py &
     SERVER_PID=$!
     
-    # Wait for server to start (longer timeout for upgrades that may rebuild indexes)
-    local max_wait_time=300
-    if [ "$UPGRADE_MODE" = true ]; then
-        max_wait_time=1200  # 20 minutes for upgrades (index rebuilding)
-        log_step "Waiting for server to start (20 minutes max - may include index rebuilding)"
-    else
-        log_step "Waiting for server to start (5 minutes max)"
-    fi
+    # Wait for server to start (5 minutes max for all modes)
+    local max_wait_time=300  # 5 minutes for all modes
+    log_step "Waiting for server to start (5 minutes max)"
     
     local wait_time=0
     local last_status_time=0
     while [ $wait_time -lt $max_wait_time ]; do
-        if curl -s -f http://localhost:8000/health > /dev/null 2>&1; then
+        # Check if server process is still alive
+        if ! kill -0 $SERVER_PID 2>/dev/null; then
+            log_error "Server process died unexpectedly"
+            return 1
+        fi
+        
+        if curl -s -f http://localhost:5000/health > /dev/null 2>&1; then
             log_success "Server started successfully"
             break
         fi
@@ -600,20 +601,18 @@ test_server() {
     
     if [ $wait_time -eq $max_wait_time ]; then
         local timeout_msg="5 minutes"
-        if [ "$UPGRADE_MODE" = true ]; then
-            timeout_msg="20 minutes"
-        fi
+        # Always 5 minutes now
         log_error "Server failed to start within $timeout_msg"
         kill $SERVER_PID 2>/dev/null || true
         return 1
     fi
     
-    # Test Hello World prompt
+    # Test Hello World prompt with proper OpenAI format
     log_step "Testing 'Hello World!' prompt"
-    local response=$(curl -s -X POST http://localhost:8000/api/chat \
+    local response=$(curl -s -X POST http://localhost:5000/v1/chat/completions \
         -H "Content-Type: application/json" \
-        -d '{"message": "Hello World!", "conversation_id": "test_install"}' \
-        --max-time 30 2>/dev/null || echo "")
+        -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "Hello World!"}]}' \
+        --max-time 60 2>/dev/null || echo "")
     
     if [ -n "$response" ]; then
         log_success "Hello World test: SUCCESS"
