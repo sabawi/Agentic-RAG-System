@@ -239,7 +239,9 @@ setup_project_directory() {
             log_error "Not in a valid Agentic RAG System directory"
             exit 1
         fi
-        execute_command "git pull origin main" "Pulling latest changes from GitHub"
+        # Auto-detect the default branch and pull latest changes
+        DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "master")
+        execute_command "git pull origin $DEFAULT_BRANCH" "Pulling latest changes from GitHub"
         clear_python_caches
     else
         # Fresh installation
