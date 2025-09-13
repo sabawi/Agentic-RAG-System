@@ -991,12 +991,12 @@ cd user_tools/
 python3 secure_email_sender.py
 
 # Test via API
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-key" \
   -d '{
-    "prompt": "Send a test email to test@example.com with subject Test Email",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "Send a test email to test@example.com with subject Test Email"}],
     "stream": false
   }'
 ```
@@ -1194,12 +1194,12 @@ ollama stop <unused_model>
 **Diagnosis**:
 ```bash
 # Test basic tool calling
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-key" \
   -d '{
-    "prompt": "What is the current date and time?",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "What is the current date and time?"}],
     "stream": false
   }'
 

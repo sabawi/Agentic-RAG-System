@@ -57,13 +57,11 @@ python tools/llm_config_tool.py
 curl http://localhost:5000/health
 
 # Test basic functionality
-curl -X POST http://localhost:5000/llama3_1b/stream \
+curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "What is the current date and time?",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
-    "stream": false
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "What is the current date and time?"}]
   }'
 ```
 
@@ -452,17 +450,17 @@ if is_meta_task:
 
 ### Core LLM Endpoints
 
-#### 1. Basic Prompt Processing
-**Endpoint**: `POST /llama3_1b/prompt`
+#### 1. Basic Chat Completion
+**Endpoint**: `POST /v1/chat/completions`
 
-Simple text processing without tool calling.
+Simple text processing with OpenAI-compatible format.
 
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/prompt" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "What is artificial intelligence?",
-    "model": "qwen3:8b",
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "What is artificial intelligence?"}],
     "max_tokens": 500,
     "temperature": 0.7
   }'
@@ -471,34 +469,44 @@ curl -X POST "http://localhost:5000/llama3_1b/prompt" \
 **Response Format:**
 ```json
 {
-  "response": "AI is a broad field of computer science...",
-  "model": "qwen3:8b",
-  "tokens_used": 245,
-  "processing_time": 3.2
+  "choices": [{
+    "message": {
+      "role": "assistant",
+      "content": "AI is a broad field of computer science..."
+    },
+    "finish_reason": "stop"
+  }],
+  "model": "Agentic-RAG-Model1",
+  "usage": {
+    "prompt_tokens": 12,
+    "completion_tokens": 245,
+    "total_tokens": 257
+  }
 }
 ```
 
-#### 2. Streaming with Tool Calling
-**Endpoint**: `POST /llama3_1b/stream`
+#### 2. Streaming Chat Completion with Tool Calling
+**Endpoint**: `POST /v1/chat/completions`
 
 Advanced processing with full tool calling capabilities.
 
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Get the latest news about artificial intelligence and summarize it",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
-    "stream": true,
-    "system": "You are a helpful AI assistant with access to real-time information."
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "system", "content": "You are a helpful AI assistant with access to real-time information."},
+      {"role": "user", "content": "Get the latest news about artificial intelligence and summarize it"}
+    ],
+    "stream": true
   }'
 ```
 
 **Key Parameters:**
-- `toolsInUse`: Enable 19-tool system (required for most functionality)
+- `model`: Use "Agentic-RAG-Model1" for full tool access (19-tool system)
 - `stream`: Enable real-time response streaming
-- `system`: Custom system prompt override
+- `messages`: Array with system and user messages
 - `temperature`: Control randomness (0.0-1.0)
 - `max_tokens`: Limit response length
 - `conversation_id`: Enable conversation memory
@@ -712,22 +720,20 @@ curl "http://localhost:5000/metrics"
 #### Example with Conversation Memory
 ```bash
 # First message
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Hi, I am working on a machine learning project about NLP",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "Hi, I am working on a machine learning project about NLP"}],
     "conversation_id": "ml_project_123"
   }'
 
 # Follow-up message (remembers context)
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "What are the latest research papers on this topic?",
-    "model": "qwen3:8b", 
-    "toolsInUse": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "What are the latest research papers on this topic?"}],
     "conversation_id": "ml_project_123"
   }'
 ```
@@ -902,7 +908,7 @@ async def _append_file(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
 #### Standard Email + File Request Flow
 
 ```
-User Request: "Research news and email report to sabawi@gmail.com"
+User Request: "Research news and email report to user@example.com"
     ↓
 Stage 1: Tool Calling Model (qwen3:8b)
     ├─ get_news_summaries(filter="Technology") 
@@ -942,9 +948,9 @@ Post-Processing
 #### 1. End-to-End Email Test
 ```bash
 # Test complete workflow
-curl -X POST http://localhost:5000/llama3_1b/stream \
+curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "Research latest tech news and create a report, then email it to sabawi@gmail.com", "model": "qwen3:8b", "stream": false}'
+  -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "Research latest tech news and create a report, then email it to user@example.com"}]}'
 
 # Expected Results:
 # - 2 files created: report.md + report.html  
@@ -955,9 +961,9 @@ curl -X POST http://localhost:5000/llama3_1b/stream \
 #### 2. File Append Test
 ```bash
 # Test new append_file functionality
-curl -X POST http://localhost:5000/llama3_1b/stream \
+curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "Create a test file called notes.txt with Hello, then append World to it", "model": "qwen3:8b", "stream": false}'
+  -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "Create a test file called notes.txt with Hello, then append World to it"}]}'
 
 # Expected Results:
 # - File created with "Hello"
@@ -1248,7 +1254,7 @@ Memory usage... ✅ OK (1024MB)
 - **Purpose**: Comprehensive API endpoint validation  
 - **Use Case**: API compatibility testing, endpoint regression testing  
 - **Endpoints Tested**:
-  - Core LLM endpoints (`/llama3_1b/prompt`, `/llama3_1b/stream`)
+  - Core LLM endpoints (`/v1/chat/completions`)
   - OpenAI compatibility (`/v1/models`, `/v1/chat/completions`)
   - Document processing (`/documents/*`)
   - System management (`/health`, `/metrics`)
@@ -1262,14 +1268,12 @@ curl -f "http://localhost:5000/health" && echo "✅ Server responding" || echo "
 
 **Test 2: Tool Calling System**
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "What time is it?",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
-    "stream": false
-  }' | jq '.response' | grep -q "$(date +%Y)" && echo "✅ Tool calling works" || echo "❌ Tool calling failed"
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "What time is it?"}]
+  }' | jq '.choices[0].message.content' | grep -q "$(date +%Y)" && echo "✅ Tool calling works" || echo "❌ Tool calling failed"
 ```
 
 **Test 3: Document Search**
@@ -1311,15 +1315,13 @@ curl -s "http://localhost:5000/ollama/models" | jq '.models | length' | grep -q 
 
 # Test 3: Basic Tool Calling
 echo -n "Testing tool calling system... "
-RESPONSE=$(curl -s -X POST "http://localhost:5000/llama3_1b/stream" \
+RESPONSE=$(curl -s -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "What is the current date?",
-    "model": "qwen3:8b", 
-    "toolsInUse": true,
-    "stream": false
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "What is the current date?"}]
   }')
-echo "$RESPONSE" | jq -r '.response' | grep -q "$(date +%Y)" && echo "✅ PASS" || echo "❌ FAIL"
+echo "$RESPONSE" | jq -r '.choices[0].message.content' | grep -q "$(date +%Y)" && echo "✅ PASS" || echo "❌ FAIL"
 
 # Test 4: Document System
 echo -n "Testing document search... "
@@ -1348,15 +1350,14 @@ echo "🎉 Test suite complete!"
 # Install apache bench if needed: sudo apt install apache2-utils
 
 # Test 100 requests with 10 concurrent connections
-ab -n 100 -c 10 -T "application/json" -p test_payload.json "http://localhost:5000/llama3_1b/stream"
+ab -n 100 -c 10 -T "application/json" -p test_payload.json "http://localhost:5000/v1/chat/completions"
 ```
 
 **Create test_payload.json:**
 ```json
 {
-  "prompt": "What is artificial intelligence?",
-  "model": "qwen3:8b",
-  "toolsInUse": false,
+  "model": "Agentic-RAG-Model1",
+  "messages": [{"role": "user", "content": "What is artificial intelligence?"}],
   "stream": false
 }
 ```
@@ -1565,14 +1566,14 @@ if is_meta_task:
 #### Usage
 ```bash
 # First conversation turn
-curl -X POST http://localhost:5000/llama3_1b/stream \
+curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "Hi, I am working on a Python project", "conversation_id": "my_project_123"}'
+  -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "Hi, I am working on a Python project"}], "conversation_id": "my_project_123"}'
 
 # Follow-up turns remember context
-curl -X POST http://localhost:5000/llama3_1b/stream \
+curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "What was my previous question?", "conversation_id": "my_project_123"}'
+  -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "What was my previous question?"}], "conversation_id": "my_project_123"}'
 ```
 
 ### OpenAI API Compatibility Layer
@@ -1853,7 +1854,7 @@ python -m py_compile fastapi_server_complete.py
 ./stop_complete.sh && ./start_complete.sh
 
 # 3. Multi-tool calling verification
-curl -X POST http://localhost:5000/llama3_1b/stream -H "Content-Type: application/json" -d '{"prompt": "test multiple tools", "toolsInUse": true, "stream": false}'
+curl -X POST http://localhost:5000/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "test multiple tools"}]}'
 
 # 4. Configuration validation
 grep -E "context_window_size|num_predict" config/llm_config.yaml
@@ -1872,14 +1873,14 @@ grep -E "context_window_size|num_predict" config/llm_config.yaml
 2. **Controlled Testing**: Use curl for isolated testing
    ```bash
    # Simple test (direct tool calls)
-   curl -X POST http://localhost:5000/llama3_1b/stream \
+   curl -X POST http://localhost:5000/v1/chat/completions \
      -H "Content-Type: application/json" \
-     -d '{"prompt": "Create a PDF file called test.pdf with content Hello World and email it to sabawi@gmail.com", "model": "qwen3:8b", "stream": false}'
+     -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "Create a PDF file called test.pdf with content Hello World and email it to user@example.com"}]}'
    
    # Complex test (post-LLM execution)
-   curl -X POST http://localhost:5000/llama3_1b/stream \
+   curl -X POST http://localhost:5000/v1/chat/completions \
      -H "Content-Type: application/json" \
-     -d '{"prompt": "Look up news and create a PDF report and email it to sabawi@gmail.com", "model": "qwen3:8b", "stream": false}'
+     -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "Look up news and create a PDF report and email it to user@example.com"}]}'
    ```
 
 3. **Verification Steps**:
@@ -1952,13 +1953,11 @@ tail -f server_complete.log | grep -i embed
 **Debug Steps:**
 ```bash
 # Test individual tool availability
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "What is the current date and time?",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
-    "stream": false
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "What is the current date and time?"}]
   }'
 
 # Check tool model health

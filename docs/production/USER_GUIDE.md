@@ -90,12 +90,13 @@ The server will be available at `http://localhost:5000`
 Test that everything is working:
 
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Hello! What can you help me with today?",
-    "model": "qwen3:8b",
-    "toolsInUse": false,
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Hello! What can you help me with today?"}
+    ],
     "stream": false
   }'
 ```
@@ -168,27 +169,28 @@ The AI will:
 
 #### Main Conversation Endpoint
 ```bash
-POST /llama3_1b/stream
+POST /v1/chat/completions
 ```
 
 **Basic Request:**
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Your question here",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Your question here"}
+    ],
     "stream": false
   }'
 ```
 
 **Parameters:**
-- `prompt`: Your question or request
-- `model`: AI model to use (e.g., "qwen3:8b")
-- `toolsInUse`: Enable tool calling (true/false)
+- `messages`: Array of message objects with role and content
+- `model`: AI model to use ("Agentic-RAG-Model1")
 - `stream`: Stream responses in real-time (true/false)
-- `system`: Optional system prompt to customize AI behavior
+- `temperature`: Controls randomness in responses (0.0-1.0)
+- `max_tokens`: Maximum response length
 
 #### OpenAI Compatible API
 
@@ -217,84 +219,91 @@ curl "http://localhost:5000/ollama/models"
 
 #### 1. Web Research
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Find the latest news about electric vehicles and summarize the key developments",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Find the latest news about electric vehicles and summarize the key developments"}
+    ],
     "stream": false
   }'
 ```
 
 #### 2. Document Analysis
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Analyze this research paper and explain the methodology: https://arxiv.org/pdf/2501.00139v2.pdf",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Analyze this research paper and explain the methodology: https://arxiv.org/pdf/2501.00139v2.pdf"}
+    ],
     "stream": false
   }'
 ```
 
 #### 3. Email Communication
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Send a professional email to john@company.com about our project meeting tomorrow at 2 PM, include agenda items",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Send a professional email to john@company.com about our project meeting tomorrow at 2 PM, include agenda items"}
+    ],
     "stream": false
   }'
 ```
 
 #### 4. Flight Search
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Find round-trip flights from Chicago to Miami, leaving January 15, returning January 20, for 2 people",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Find round-trip flights from Chicago to Miami, leaving January 15, returning January 20, for 2 people"}
+    ],
     "stream": false
   }'
 ```
 
 #### 5. Financial Analysis
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Analyze Apple stock performance over the last 30 days and provide investment insights",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Analyze Apple stock performance over the last 30 days and provide investment insights"}
+    ],
     "stream": false
   }'
 ```
 
 #### 5. Code Execution
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Create a Python script that calculates compound interest and run it with principal=1000, rate=5%, time=10 years",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Create a Python script that calculates compound interest and run it with principal=1000, rate=5%, time=10 years"}
+    ],
     "stream": false
   }'
 ```
 
 #### 6. Real-time Streaming
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Explain quantum computing concepts",
-    "model": "qwen3:8b",
-    "toolsInUse": false,
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Explain quantum computing concepts"}
+    ],
     "stream": true
   }'
 ```
@@ -467,23 +476,25 @@ When multiple versions of the same document exist (PDF, HTML, Markdown), you can
 
 **Request PDF format:**
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Email the quarterly report in PDF format to manager@company.com",
-    "model": "qwen3:8b",
-    "toolsInUse": true
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Email the quarterly report in PDF format to manager@company.com"}
+    ]
   }'
 ```
 
 **Request HTML format:**
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Send me the HTML version of the documentation",
-    "model": "qwen3:8b",
-    "toolsInUse": true
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Send me the HTML version of the documentation"}
+    ]
   }'
 ```
 
@@ -515,13 +526,14 @@ This shows:
 You can customize the AI's behavior for specific tasks by providing system prompts:
 
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Analyze this financial data",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
-    "system": "You are a senior financial analyst. Provide detailed technical analysis with specific recommendations. Always include risk assessment and market context."
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "system", "content": "You are a senior financial analyst. Provide detailed technical analysis with specific recommendations. Always include risk assessment and market context."},
+      {"role": "user", "content": "Analyze this financial data"}
+    ]
   }'
 ```
 
@@ -531,12 +543,13 @@ The AI can handle complex workflows involving multiple tools:
 
 **Research → Analysis → Communication:**
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Research the latest developments in renewable energy, create a comprehensive market analysis report with charts, and email it to the board of directors with high priority",
-    "model": "qwen3:8b",
-    "toolsInUse": true
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Research the latest developments in renewable energy, create a comprehensive market analysis report with charts, and email it to the board of directors with high priority"}
+    ]
   }'
 ```
 
@@ -571,12 +584,13 @@ curl -X POST "http://localhost:5000/v1/chat/completions" \
 Schedule meetings and manage your calendar:
 
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Schedule a team meeting for next Tuesday at 2 PM, invite john@company.com and sarah@company.com, set agenda for project review",
-    "model": "qwen3:8b",
-    "toolsInUse": true
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Schedule a team meeting for next Tuesday at 2 PM, invite john@company.com and sarah@company.com, set agenda for project review"}
+    ]
   }'
 ```
 
@@ -585,12 +599,13 @@ curl -X POST "http://localhost:5000/llama3_1b/stream" \
 Generate, execute, and test code:
 
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Create a Python web scraper that extracts product prices from an e-commerce site, include error handling and save results to CSV",
-    "model": "qwen3:8b",
-    "toolsInUse": true
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Create a Python web scraper that extracts product prices from an e-commerce site, include error handling and save results to CSV"}
+    ]
   }'
 ```
 
@@ -599,12 +614,13 @@ curl -X POST "http://localhost:5000/llama3_1b/stream" \
 Send professional emails with file attachments:
 
 ```bash
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Generate a quarterly sales report based on our latest data and email it to stakeholders@company.com with the raw data file attached",
-    "model": "qwen3:8b",
-    "toolsInUse": true
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Generate a quarterly sales report based on our latest data and email it to stakeholders@company.com with the raw data file attached"}
+    ]
   }'
 ```
 
@@ -628,12 +644,13 @@ If something isn't working, start with these commands:
 curl "http://localhost:5000/health"
 
 # Test basic functionality
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Hello, are you working correctly?",
-    "model": "qwen3:8b",
-    "toolsInUse": false,
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Hello, are you working correctly?"}
+    ],
     "stream": false
   }'
 
@@ -682,13 +699,13 @@ ollama list
 ollama ps
 
 # Test tool calling with simple request
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "What time is it?",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
-    "stream": false
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "What time is it?"}
+    ]
   }'
 ```
 
@@ -774,13 +791,13 @@ ping google.com
 curl -I https://duckduckgo.com
 
 # Test web tools directly
-curl -X POST "http://localhost:5000/llama3_1b/stream" \
+curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Search for today'\''s technology news",
-    "model": "qwen3:8b",
-    "toolsInUse": true,
-    "stream": false
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Search for today's technology news"}
+    ]
   }'
 
 # Update web scraping dependencies
