@@ -13,12 +13,12 @@ FastAPI server with all original Flask functionality including:
 - Database connection pooling
 - Production-ready caching layer
 
-Version: 1.0.1.4
+Version: 1.0.1.5
 Release: Production Ready
 """
 
 # Version information
-__version__ = "1.0.1.4"
+__version__ = "1.0.1.5"
 __release__ = "Production Ready"
 
 import asyncio

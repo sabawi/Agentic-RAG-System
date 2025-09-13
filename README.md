@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.1.4
+# Agentic-RAG Server v1.0.1.5
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, and vision capabilities.
 
-[![Version](https://img.shields.io/badge/version-1.0.1.4-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.1.4)
+[![Version](https://img.shields.io/badge/version-1.0.1.5-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.1.5)
 [![Python](https://img.shields.io/badge/python-3.8+-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -105,66 +105,127 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 - **🖼️ Image Analysis**: Vision processing with OCR
 - **🔍 Search**: Web search capabilities
 
-## 🚀 Usage Examples
+## 🚀 Impressive Demo Examples
 
-### Python Client
+Experience the power of autonomous AI agents! These examples showcase real agentic behavior where the AI automatically selects and uses the right tools.
+
+### 🌟 Start Simple
+
+```bash
+# Get latest news with web search
+curl -X POST http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "What is the latest news as of now?"}]
+  }'
+```
+
+### 🎓 Academic Research
+
+```bash
+# AI automatically searches academic papers and summarizes findings
+curl -X POST http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Search for the latest academic papers on Transformer enhancements in AI and summarize the key findings for me"}]
+  }'
+```
+
+### 📊 Financial Analysis & Visualization
 
 ```python
-import os
 from openai import OpenAI
 
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
-    base_url="http://localhost:5000/v1"
-)
+client = OpenAI(base_url="http://localhost:5000/v1", api_key="not-required")
 
-# Text completion
+# AI gets stock data, analyzes trends, and creates charts automatically
 response = client.chat.completions.create(
     model="gpt-4o",
-    messages=[{"role": "user", "content": "Explain quantum computing"}]
+    messages=[{"role": "user", "content": "Get Apple and Microsoft stock prices for the last month, analyze the performance, and create a comparison chart"}]
 )
+```
 
-# Image analysis
+### 🔍 Smart Document Search
+
+```python
+# AI searches through your local documents intelligently
+response = client.chat.completions.create(
+    model="gpt-4o", 
+    messages=[{"role": "user", "content": "Find documents about server configuration and summarize the key security settings I should know about"}]
+)
+```
+
+### ✈️ Travel Planning
+
+```python
+# AI searches flights, compares prices, provides booking links
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Find flights from New York to London for next month, compare prices from different airlines, and show me the best options"}]
+)
+```
+
+### 📧 Smart Communication
+
+```python
+# AI composes and sends professional emails
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Send a professional email to sarah@company.example about scheduling a project review meeting next week. Include availability options and meeting agenda."}]
+)
+```
+
+### 📅 Calendar Integration
+
+```python
+# AI manages your calendar intelligently  
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Check my calendar for next week and schedule a 2-hour team planning meeting when everyone is free. Send calendar invites to the team."}]
+)
+```
+
+### 🖼️ Image Analysis & OCR
+
+```python
+# AI analyzes images and extracts information
 response = client.chat.completions.create(
     model="gpt-4o",
     messages=[{
-        "role": "user",
+        "role": "user", 
         "content": [
-            {"type": "text", "text": "What's in this image?"},
-            {"type": "image_url", "image_url": {"url": "file:///path/to/image.jpg"}}
+            {"type": "text", "text": "Analyze this document image and extract all the key information into a structured summary"},
+            {"type": "image_url", {"image_url": {"url": "file:///path/to/document.jpg"}}}
         ]
     }]
 )
+```
 
-# Tool usage
+### 🧮 Code Execution & Analysis
+
+```python
+# AI writes and executes code to solve problems
 response = client.chat.completions.create(
-    model="gpt-4o", 
-    messages=[{"role": "user", "content": "Send an email to john@example.com with subject 'Meeting reminder'"}]
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Calculate the optimal portfolio allocation for these 5 stocks based on historical data, run a Monte Carlo simulation, and create a risk analysis report"}]
 )
 ```
 
-### Curl Examples
+## 🎯 What Makes This Special
 
-```bash
-# Basic completion
-curl -X POST http://localhost:5000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{
-    "model": "gpt-4o",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
+**🤖 Autonomous Agent Behavior**: The AI decides which tools to use and chains them together automatically
+- No manual tool specification required
+- Intelligent task decomposition
+- Multi-step reasoning and execution
 
-# Streaming response
-curl -X POST http://localhost:5000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{
-    "model": "gpt-4o",
-    "messages": [{"role": "user", "content": "Write a story"}],
-    "stream": true
-  }'
-```
+**🔗 Tool Chaining**: Watch the AI use multiple tools in sequence:
+1. Search for recent papers → Analyze findings → Summarize insights
+2. Get stock data → Perform analysis → Create visualizations → Generate report
+3. Search documents → Extract relevant info → Compose professional response
+
+**🧠 Context Awareness**: The AI maintains context across tool calls and provides coherent final answers
 
 ## ⚙️ System Requirements
 
