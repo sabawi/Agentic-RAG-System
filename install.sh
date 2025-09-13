@@ -571,20 +571,39 @@ test_server() {
     python3 fastapi_server_complete.py &
     SERVER_PID=$!
     
-    # Wait for server to start
-    log_step "Waiting for server to start (5 minutes max)"
+    # Wait for server to start (longer timeout for upgrades that may rebuild indexes)
+    local max_wait_time=300
+    if [ "$UPGRADE_MODE" = true ]; then
+        max_wait_time=1200  # 20 minutes for upgrades (index rebuilding)
+        log_step "Waiting for server to start (20 minutes max - may include index rebuilding)"
+    else
+        log_step "Waiting for server to start (5 minutes max)"
+    fi
+    
     local wait_time=0
-    while [ $wait_time -lt 300 ]; do
+    local last_status_time=0
+    while [ $wait_time -lt $max_wait_time ]; do
         if curl -s -f http://localhost:8000/health > /dev/null 2>&1; then
             log_success "Server started successfully"
             break
         fi
+        
+        # Show progress every 30 seconds
+        if [ $((wait_time % 30)) -eq 0 ] && [ $wait_time -gt $last_status_time ]; then
+            log_info "Still waiting... (${wait_time}s elapsed, may be rebuilding document index)"
+            last_status_time=$wait_time
+        fi
+        
         sleep 1
         wait_time=$((wait_time + 1))
     done
     
-    if [ $wait_time -eq 300 ]; then
-        log_error "Server failed to start within 5 minutes"
+    if [ $wait_time -eq $max_wait_time ]; then
+        local timeout_msg="5 minutes"
+        if [ "$UPGRADE_MODE" = true ]; then
+            timeout_msg="20 minutes"
+        fi
+        log_error "Server failed to start within $timeout_msg"
         kill $SERVER_PID 2>/dev/null || true
         return 1
     fi
