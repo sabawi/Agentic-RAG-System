@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.1.5
+# Agentic-RAG Server v1.0.1.6
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, and vision capabilities.
 
-[![Version](https://img.shields.io/badge/version-1.0.1.5-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.1.5)
+[![Version](https://img.shields.io/badge/version-1.0.1.6-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.1.6)
 [![Python](https://img.shields.io/badge/python-3.8+-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -83,10 +83,15 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 ## 🏗️ Architecture
 
 ### LLM Stack
-- **Primary Model**: `qwen3:8b` (Conversation & reasoning)
-- **Tool Calling**: `gpt-4o-mini` (Tool orchestration)  
-- **Vision Model**: `qwen2.5vl:3b` (Image analysis)
+- **Primary Model**: `qwen3:8b` (Local Ollama - conversation & reasoning)
+- **Tool Calling**: `gpt-4o-mini` (OpenAI API - tool orchestration)*  
+- **Vision Model**: `qwen2.5vl:3b` (Local Ollama - image analysis)
 - **Arbitrator**: Configurable (Decision making)
+
+*\* Tool calling requires OpenAI API key. See installation guide for setup.*
+
+### Model Usage in Examples
+The examples use `model="qwen3:8b"` which corresponds to the actual local model being used for conversation. The system intelligently routes tool calling to `gpt-4o-mini` when needed.
 
 ### Core Components
 - **FastAPI Server**: OpenAI-compatible REST API
@@ -116,7 +121,7 @@ Experience the power of autonomous AI agents! These examples showcase real agent
 curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-4o",
+    "model": "qwen3:8b",
     "messages": [{"role": "user", "content": "What is the latest news as of now?"}]
   }'
 ```
@@ -128,7 +133,7 @@ curl -X POST http://localhost:5000/v1/chat/completions \
 curl -X POST http://localhost:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-4o",
+    "model": "qwen3:8b",
     "messages": [{"role": "user", "content": "Search for the latest academic papers on Transformer enhancements in AI and summarize the key findings for me"}]
   }'
 ```
@@ -142,7 +147,7 @@ client = OpenAI(base_url="http://localhost:5000/v1", api_key="not-required")
 
 # AI gets stock data, analyzes trends, and creates charts automatically
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="qwen3:8b",
     messages=[{"role": "user", "content": "Get Apple and Microsoft stock prices for the last month, analyze the performance, and create a comparison chart"}]
 )
 ```
@@ -152,7 +157,7 @@ response = client.chat.completions.create(
 ```python
 # AI searches through your local documents intelligently
 response = client.chat.completions.create(
-    model="gpt-4o", 
+    model="qwen3:8b", 
     messages=[{"role": "user", "content": "Find documents about server configuration and summarize the key security settings I should know about"}]
 )
 ```
@@ -162,7 +167,7 @@ response = client.chat.completions.create(
 ```python
 # AI searches flights, compares prices, provides booking links
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="qwen3:8b",
     messages=[{"role": "user", "content": "Find flights from New York to London for next month, compare prices from different airlines, and show me the best options"}]
 )
 ```
@@ -172,7 +177,7 @@ response = client.chat.completions.create(
 ```python
 # AI composes and sends professional emails
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="qwen3:8b",
     messages=[{"role": "user", "content": "Send a professional email to sarah@company.example about scheduling a project review meeting next week. Include availability options and meeting agenda."}]
 )
 ```
@@ -182,7 +187,7 @@ response = client.chat.completions.create(
 ```python
 # AI manages your calendar intelligently  
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="qwen3:8b",
     messages=[{"role": "user", "content": "Check my calendar for next week and schedule a 2-hour team planning meeting when everyone is free. Send calendar invites to the team."}]
 )
 ```
@@ -192,7 +197,7 @@ response = client.chat.completions.create(
 ```python
 # AI analyzes images and extracts information
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="qwen3:8b",
     messages=[{
         "role": "user", 
         "content": [
@@ -208,7 +213,7 @@ response = client.chat.completions.create(
 ```python
 # AI writes and executes code to solve problems
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="qwen3:8b",
     messages=[{"role": "user", "content": "Calculate the optimal portfolio allocation for these 5 stocks based on historical data, run a Monte Carlo simulation, and create a risk analysis report"}]
 )
 ```
