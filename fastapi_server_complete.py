@@ -13,12 +13,12 @@ FastAPI server with all original Flask functionality including:
 - Database connection pooling
 - Production-ready caching layer
 
-Version: 1.0.0
+Version: 1.0.1.1
 Release: Production Ready
 """
 
 # Version information
-__version__ = "1.0.0"
+__version__ = "1.0.1.1"
 __release__ = "Production Ready"
 
 import asyncio
@@ -7733,6 +7733,112 @@ async def health_check():
         "cache_size": len(simple_cache),
         "tools_available": TOOLS_AVAILABLE
     }
+
+@app.get("/help")
+async def user_help():
+    """User help endpoint providing quick reference and documentation"""
+    help_content = {
+        "agentic_rag_system": {
+            "version": __version__,
+            "description": "High-performance AI assistant with local language models and intelligent tool calling",
+            "base_url": "http://localhost:5000"
+        },
+        
+        "quick_start": {
+            "basic_prompt": "POST /llama3_1b/stream",
+            "openai_compatible": "POST /v1/chat/completions",
+            "example_request": {
+                "url": "http://localhost:5000/llama3_1b/stream",
+                "method": "POST",
+                "headers": {"Content-Type": "application/json"},
+                "body": {
+                    "prompt": "Hello! What can you help me with today?",
+                    "model": "qwen3:8b",
+                    "toolsInUse": True,
+                    "stream": False
+                }
+            }
+        },
+        
+        "available_tools": {
+            "total_count": 19,
+            "categories": {
+                "search_and_web": [
+                    "search_web - Search the internet for current information",
+                    "get_web_content - Extract and analyze content from web pages"
+                ],
+                "document_management": [
+                    "document_search - Search through indexed documents using semantic search",
+                    "watch_directory - Monitor directories for new documents",
+                    "index_directory - Add new documents to the search index"
+                ],
+                "communication": [
+                    "send_email - Send emails with attachments",
+                    "send_mass_email - Send bulk emails to multiple recipients"
+                ],
+                "financial_and_data": [
+                    "stock_data - Get real-time stock prices and financial data",
+                    "flight_search - Search for flights with multiple booking options"
+                ],
+                "productivity": [
+                    "calendar_tools - Create and manage calendar events",
+                    "execute_code - Run code safely in sandboxed environment"
+                ],
+                "file_operations": [
+                    "file_operations - Read, write, and manage files",
+                    "process_image - Analyze images with AI vision processing"
+                ],
+                "system_utilities": [
+                    "weather_data - Get current weather and forecasts",
+                    "system_info - Retrieve system information and stats",
+                    "math_operations - Perform complex mathematical calculations",
+                    "time_operations - Work with dates and time calculations"
+                ]
+            }
+        },
+        
+        "key_endpoints": {
+            "health_check": "GET /health - Check system health and service status",
+            "help": "GET /help - This help information",
+            "models": "GET /v1/models - List available AI models",
+            "chat": "POST /v1/chat/completions - OpenAI-compatible chat completions",
+            "stream": "POST /llama3_1b/stream - Native streaming endpoint",
+            "documents": {
+                "search": "POST /documents/search - Search indexed documents",
+                "stats": "GET /documents/stats - Document index statistics",
+                "config": "GET /documents/config - View document configuration"
+            }
+        },
+        
+        "tool_usage": {
+            "how_to_enable_tools": "Set 'toolsInUse': true in your request",
+            "automatic_selection": "The AI automatically selects appropriate tools based on your query",
+            "example_queries": [
+                "Search for recent news about AI developments",
+                "Find documents about server configuration in my files",
+                "Send an email to john@example.com with project update",
+                "What's the current stock price of AAPL?",
+                "Create a calendar event for next Monday at 2 PM",
+                "What's the weather forecast for tomorrow?"
+            ]
+        },
+        
+        "getting_help": {
+            "documentation": {
+                "user_guide": "docs/production/USER_GUIDE.md",
+                "admin_guide": "docs/production/ADMINISTRATOR_GUIDE.md",
+                "developer_guide": "docs/production/DEVELOPER_GUIDE.md",
+                "installation": "docs/setup/INSTALLATION.md"
+            },
+            "support": {
+                "logs": "Check server_complete.log for error details",
+                "health": "Use GET /health to check service status",
+                "models": "Use GET /ollama/models to verify model availability"
+            }
+        }
+    }
+    
+    return help_content
 
 @app.get("/ollama/models")
 async def list_ollama_models():

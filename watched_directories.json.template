@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "config": {
+    "scan_on_startup": true,
+    "batch_size": 25,
+    "scan_interval_minutes": 60,
+    "auto_watch_enabled": true
+  },
+  "directories": [
+    {
+      "path": "{SERVER_DOCS_PATH}",
+      "recursive": true,
+      "enabled": true,
+      "description": "Agentic Server Documentation",
+      "added_at": "{INSTALL_TIMESTAMP}"
+    },
+    {
+      "path": "{USER_RAG_DOCUMENTS_PATH}",
+      "recursive": true,
+      "enabled": true,
+      "description": "User RAG Documents",
+      "added_at": "{INSTALL_TIMESTAMP}"
+    }
+  ],
+  "last_scan": null,
+  "stats": {
+    "total_directories": 2,
+    "active_directories": 2,
+    "last_config_update": "{INSTALL_TIMESTAMP}"
+  }
+}

@@ -359,6 +359,60 @@ setup_environment() {
         execute_command "touch $ENV_FILE" "Creating .env file"
     fi
     
+    # Setup RAG Documents directory
+    setup_rag_documents() {
+        log_step "Setting up RAG Documents directory"
+        
+        # Create user RAG documents directory in home directory
+        USER_RAG_DIR="$HOME/Agentic_RAG_Documents"
+        if [ ! -d "$USER_RAG_DIR" ]; then
+            execute_command "mkdir -p \"$USER_RAG_DIR\"" "Creating RAG documents directory: $USER_RAG_DIR"
+        else
+            log_success "RAG documents directory already exists: $USER_RAG_DIR"
+        fi
+        
+        # Copy server documentation to RAG directory
+        DOCS_DIR="$(pwd)/docs"
+        if [ -d "$DOCS_DIR" ] && [ "$DRY_RUN" = false ]; then
+            log_step "Copying server documentation to RAG directory"
+            cp -r "$DOCS_DIR"/* "$USER_RAG_DIR/" 2>/dev/null || true
+            
+            # Also copy README files
+            find "$(pwd)" -name "README*.md" -maxdepth 2 -exec cp {} "$USER_RAG_DIR/" \; 2>/dev/null || true
+            
+            log_success "Server documentation copied to RAG directory"
+        fi
+        
+        # Create personalized watched_directories.json from template
+        if [ -f "watched_directories.json.template" ]; then
+            log_step "Creating personalized watched_directories.json"
+            
+            # Get current timestamp
+            CURRENT_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
+            
+            # Replace placeholders in template
+            if [ "$DRY_RUN" = false ]; then
+                sed -e "s|{SERVER_DOCS_PATH}|$(pwd)/docs|g" \
+                    -e "s|{USER_RAG_DOCUMENTS_PATH}|$USER_RAG_DIR|g" \
+                    -e "s|{INSTALL_TIMESTAMP}|$CURRENT_TIMESTAMP|g" \
+                    watched_directories.json.template > watched_directories.json
+                
+                log_success "Created personalized watched_directories.json"
+                log_info "  Server docs: $(pwd)/docs"
+                log_info "  User RAG dir: $USER_RAG_DIR"
+            else
+                log_info "[DRY-RUN] Would create watched_directories.json from template"
+                log_info "  Server docs path: $(pwd)/docs"
+                log_info "  User RAG directory: $USER_RAG_DIR"
+            fi
+        else
+            log_warning "watched_directories.json.template not found, keeping existing config"
+        fi
+    }
+    
+    # Call the RAG setup function
+    setup_rag_documents
+    
     # API Keys configuration
     configure_api_keys() {
         local service="$1"
@@ -495,9 +549,9 @@ test_server() {
     SERVER_PID=$!
     
     # Wait for server to start
-    log_step "Waiting for server to start (30 seconds max)"
+    log_step "Waiting for server to start (5 minutes max)"
     local wait_time=0
-    while [ $wait_time -lt 30 ]; do
+    while [ $wait_time -lt 300 ]; do
         if curl -s -f http://localhost:8000/health > /dev/null 2>&1; then
             log_success "Server started successfully"
             break
@@ -506,8 +560,8 @@ test_server() {
         wait_time=$((wait_time + 1))
     done
     
-    if [ $wait_time -eq 30 ]; then
-        log_error "Server failed to start within 30 seconds"
+    if [ $wait_time -eq 300 ]; then
+        log_error "Server failed to start within 5 minutes"
         kill $SERVER_PID 2>/dev/null || true
         return 1
     fi
