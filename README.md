@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.1.8
+# Agentic-RAG Server v1.0.1.10
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, and vision capabilities.
 
-[![Version](https://img.shields.io/badge/version-1.0.1.8-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.1.8)
+[![Version](https://img.shields.io/badge/version-1.0.1.10-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.1.10)
 [![Python](https://img.shields.io/badge/python-3.8+-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -209,6 +209,24 @@ response = client.chat.completions.create(
         ]
     }]
 )
+```
+
+### 👤 AI-Powered Age Analysis
+
+```bash
+# AI analyzes faces and estimates age with remarkable accuracy
+curl -X POST http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Agentic-RAG-Model1",
+    "messages": [{
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Analyse this image and Guess the age of this person (no description, just guess the age only)"},
+        {"type": "image_url", {"image_url": {"url": "file:///path/to/selfie.jpg"}}}
+      ]
+    }]
+  }'
 ```
 
 ### 🧮 Code Execution & Analysis
