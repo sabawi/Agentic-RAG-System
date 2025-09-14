@@ -221,6 +221,28 @@ response = client.chat.completions.create(
 )
 ```
 
+### 📊 Mathematical Visualization
+
+```bash
+# AI creates sophisticated mathematical plots and visualizations
+curl -X POST http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "plot typical power curve and typical S-curve side by side"}]
+  }'
+```
+
+### 🎯 Custom Mathematical Functions
+
+```python
+# AI plots complex mathematical functions with automatic analysis
+response = client.chat.completions.create(
+    model="Agentic-RAG-Model1",
+    messages=[{"role": "user", "content": "plot y = 500/(1+e^-0.3*(x-200))"}]
+)
+```
+
 ## 🎯 What Makes This Special
 
 **🤖 Autonomous Agent Behavior**: The AI decides which tools to use and chains them together automatically
