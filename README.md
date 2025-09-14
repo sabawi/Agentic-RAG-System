@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.1.10
+# Agentic-RAG Server v1.0.1.11
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, and vision capabilities.
 
-[![Version](https://img.shields.io/badge/version-1.0.1.10-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.1.10)
+[![Version](https://img.shields.io/badge/version-1.0.1.11-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.1.11)
 [![Python](https://img.shields.io/badge/python-3.8+-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -153,6 +153,18 @@ response = client.chat.completions.create(
     model="Agentic-RAG-Model1",
     messages=[{"role": "user", "content": "Get Apple and Microsoft stock prices for the last month, analyze the performance, and create a comparison chart"}]
 )
+```
+
+### 💹 Comprehensive Investment Analysis
+
+```bash
+# AI performs deep financial research and provides investment recommendations
+curl -X POST http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "Using the provided research tool, look up available company and financial data on MRNA, AMGN, JNJ stocks and perform full and thorough analysis on its potential for growth and profit, and make reasoned recommendations whether to Buy, Hold, or Sell its stock for the next 6 months to 2 years investment horizon. In your conclusion, state clearly your final recommendation and why."}]
+  }'
 ```
 
 ### 🔍 Smart Document Search
