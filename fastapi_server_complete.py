@@ -727,53 +727,110 @@ class AsyncToolManager:
                 # Get the filter keyword (like original implementation)
                 newsFilter = data.get('filter', '').lower().strip()
                 
-                # Original news category mapping and URLs
+                # Enhanced news category mapping with diverse, reliable sources
                 NEWS_URLS = {
                     "world": [
+                        # Mainstream reliable sources
                         "https://apnews.com/world-news",
-                        "https://www.aljazeera.com/europe/",
-                        "https://feeds.bbci.co.uk/news/world/rss.xml"
+                        "https://feeds.bbci.co.uk/news/world/rss.xml",
+                        "https://www.aljazeera.com/xml/rss/all.xml",
+                        # International perspectives
+                        "https://www.dw.com/en/rss/xmlfeed/top_stories",  # Deutsche Welle
+                        "https://www.theguardian.com/world/rss",
+                        # Alternative viewpoints
+                        "https://theintercept.com/feed/"
                     ],
                     "national": [
+                        # Traditional sources
                         "https://apnews.com/us-news",
                         "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml",
-                        "https://www.npr.org/sections/national/"
+                        "https://www.npr.org/sections/national/",
+                        # Independent sources
+                        "https://www.propublica.org/feeds/propublica/main",
+                        "https://www.axios.com/feeds/articles.rss"
                     ],
                     "business": [
+                        # Traditional business news
                         "https://www.npr.org/sections/business/",
-                        "https://feeds.bbci.co.uk/news/business/rss.xml"
+                        "https://feeds.bbci.co.uk/news/business/rss.xml",
+                        # Alternative business perspectives
+                        "https://www.axios.com/feeds/business.rss",
+                        "https://www.zerohedge.com/fullrss2.xml",  # Direct RSS instead of FeedBurner
+                        # Additional business sources
+                        "https://feeds.bloomberg.com/markets/news.rss",
+                        "https://www.businessinsider.com/rss"
                     ],
                     "finance": [
+                        # Traditional financial sources
                         "https://www.cnbc.com/id/100003114/device/rss/rss.html",
-                        "https://www.cnbc.com/economy/",
-                        "https://finance.yahoo.com/topic/stock-market-news/",
+                        "https://finance.yahoo.com/news/rssindex",
                         "https://feeds.bbci.co.uk/news/business/rss.xml",
-                        "https://finance.yahoo.com/topic/latest-news/"
+                        # Cryptocurrency and alternative finance
+                        "https://www.coindesk.com/arc/outboundfeeds/rss/",
+                        "https://decrypt.co/feed",
+                        "https://www.theblock.co/rss.xml"
+                    ],
+                    "technology": [
+                        # Independent tech sources (reliable direct feeds)
+                        "https://arstechnica.com/feed/",
+                        "https://thehackernews.com/feeds/posts/default?alt=rss",  # Direct RSS instead of FeedBurner
+                        "https://techcrunch.com/feed/",  # Direct RSS instead of FeedBurner
+                        # Alternative tech perspectives  
+                        "https://www.techdirt.com/feed/",
+                        "https://www.theregister.com/headlines.atom",
+                        # Additional reliable tech sources
+                        "https://www.wired.com/feed/rss",
+                        "https://www.zdnet.com/news/rss.xml"
+                    ],
+                    "crypto": [
+                        # Specialized cryptocurrency sources
+                        "https://www.coindesk.com/arc/outboundfeeds/rss/",
+                        "https://decrypt.co/feed",
+                        "https://www.theblock.co/rss.xml",
+                        "https://cointelegraph.com/rss"
                     ],
                     "science": [
+                        # Traditional science sources
                         "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
-                        "https://www.sciencenews.org/all-stories",
-                        "https://www.npr.org/sections/science/"
+                        "https://www.sciencenews.org/feed",
+                        "https://www.npr.org/sections/science/",
+                        # Independent science sources
+                        "https://arstechnica.com/science/feed/"
+                    ],
+                    "politics": [
+                        # Political news with diverse perspectives
+                        "https://www.politico.com/rss/politicopicks.xml",
+                        "https://thehill.com/news/feed/",
+                        "https://www.propublica.org/feeds/propublica/main",
+                        "https://theintercept.com/feed/"
                     ],
                     "news": [        
+                        # Mainstream sources
                         "https://apnews.com/hub/ap-top-news",
                         "https://feeds.bbci.co.uk/news/rss.xml",
-                        "https://www.npr.org/sections/news/"
+                        "https://www.npr.org/sections/news/",
+                        # Independent sources
+                        "https://www.axios.com/feeds/articles.rss",
+                        "https://www.propublica.org/feeds/propublica/main"
                     ],
                     "default": [
                         "https://apnews.com/hub/ap-top-news",
-                        "https://feeds.bbci.co.uk/news/rss.xml"
+                        "https://feeds.bbci.co.uk/news/rss.xml",
+                        "https://www.axios.com/feeds/articles.rss"
                     ]
                 }
                 
-                # Original synonyms mapping
+                # Enhanced synonyms mapping for new categories
                 SYNONYMS = {
-                    "world": {"world", "global", "international"},
-                    "national": {"national", "nation", "domestic", "us", "usa", "american"},
-                    "business": {"business", "trade", "commerce", "commercial", "retail"},
+                    "world": {"world", "global", "international", "foreign", "abroad", "europe", "asia", "africa"},
+                    "national": {"national", "nation", "domestic", "us", "usa", "american", "homeland", "united states"},
+                    "business": {"business", "trade", "commerce", "commercial", "retail", "enterprise", "corporate"},
                     "financial": {"financial", "trade", "commerce", "commercial", "retail", "macroeconomics", "microeconomics", "business cycle"},
-                    "finance": {"finance", "financial","stocks" ,"market" ,"markets", "stock" ,"stock market", "securities", "inflation", "financing", "stock trading", "bonds", "interest rates", "fed rates", "us economy", "economy","economic","federal reserve"},
-                    "science": {"science","scientific","physics","chemistry","biology","technology","nasa", "space"}
+                    "finance": {"finance", "financial", "stocks", "market", "markets", "stock", "stock market", "securities", "inflation", "financing", "stock trading", "bonds", "interest rates", "fed rates", "us economy", "economy", "economic", "federal reserve", "wall street", "nasdaq", "dow jones"},
+                    "technology": {"technology", "tech", "software", "hardware", "ai", "artificial intelligence", "machine learning", "computer", "digital", "internet", "cybersecurity", "startup", "innovation", "gadgets", "devices"},
+                    "crypto": {"crypto", "cryptocurrency", "bitcoin", "ethereum", "blockchain", "defi", "nft", "digital currency", "altcoin", "mining", "wallet", "exchange"},
+                    "science": {"science", "scientific", "physics", "chemistry", "biology", "nasa", "space", "research", "study", "discovery", "experiment"},
+                    "politics": {"politics", "political", "government", "congress", "senate", "house", "election", "campaign", "policy", "legislation", "democrat", "republican", "biden", "trump", "washington"}
                 }
                 
                 # Find category function (from original)
@@ -839,30 +896,80 @@ class AsyncToolManager:
                         res += f"Error from Google news: {e}\n"
                     return res
                 
-                # Web content extraction (simplified version)
+                # Enhanced web content extraction with improved RSS/XML parsing
                 def get_text_from_url(url):
                     try:
-                        response = requests_compatible_get(url, timeout=10, headers={
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        response = requests_compatible_get(url, timeout=15, headers={
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
                         })
                         response.raise_for_status()
                         
                         from bs4 import BeautifulSoup
-                        soup = BeautifulSoup(response.text, 'html.parser')
                         
-                        # Remove unwanted tags
-                        for tag_name in ['footer', 'nav', 'script', 'style', 'aside', 'header']:
-                            for tag in soup.find_all(tag_name):
-                                tag.decompose()
+                        # Determine if this is RSS/XML content
+                        content_type = response.headers.get('content-type', '').lower()
+                        is_rss_xml = (
+                            'xml' in content_type or 
+                            'rss' in content_type or
+                            url.endswith('.xml') or 
+                            url.endswith('.rss') or
+                            'feed' in url.lower() or
+                            response.text.strip().startswith('<?xml')
+                        )
                         
-                        # Extract text from paragraphs and headers
-                        texts = []
-                        for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-                            text = tag.get_text().strip()
-                            if text and len(text) > 20:  # Only meaningful content
-                                texts.append(text)
+                        if is_rss_xml:
+                            # Use XML parser for RSS feeds to avoid warnings
+                            try:
+                                soup = BeautifulSoup(response.text, 'xml')
+                            except:
+                                # Fallback to lxml if available, then html.parser
+                                try:
+                                    soup = BeautifulSoup(response.text, 'lxml')
+                                except:
+                                    soup = BeautifulSoup(response.text, 'html.parser')
+                            
+                            # Extract RSS items
+                            texts = []
+                            items = soup.find_all(['item', 'entry'])
+                            for item in items[:5]:  # Limit to 5 recent articles
+                                title = item.find(['title'])
+                                description = item.find(['description', 'summary', 'content'])
+                                
+                                if title:
+                                    title_text = title.get_text().strip()
+                                    if title_text:
+                                        texts.append(f"Title: {title_text}")
+                                
+                                if description:
+                                    desc_text = description.get_text().strip()
+                                    if desc_text and len(desc_text) > 20:
+                                        # Clean up description
+                                        desc_text = desc_text.replace('\n', ' ').replace('\r', ' ')
+                                        if len(desc_text) > 200:
+                                            desc_text = desc_text[:200] + "..."
+                                        texts.append(f"Content: {desc_text}")
+                                
+                                texts.append("---")  # Separator
+                            
+                            return '\n'.join(texts) if texts else "RSS feed processed but no content extracted"
                         
-                        return '\n\n'.join(texts[:10])  # Limit to first 10 meaningful paragraphs
+                        else:
+                            # Regular HTML parsing
+                            soup = BeautifulSoup(response.text, 'html.parser')
+                            
+                            # Remove unwanted tags
+                            for tag_name in ['footer', 'nav', 'script', 'style', 'aside', 'header']:
+                                for tag in soup.find_all(tag_name):
+                                    tag.decompose()
+                            
+                            # Extract text from paragraphs and headers
+                            texts = []
+                            for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+                                text = tag.get_text().strip()
+                                if text and len(text) > 20:  # Only meaningful content
+                                    texts.append(text)
+                            
+                            return '\n\n'.join(texts[:10])  # Limit to first 10 meaningful paragraphs
                         
                     except Exception as e:
                         return f"Error fetching {url}: {str(e)}"
@@ -884,13 +991,63 @@ class AsyncToolManager:
                 google_results = get_news_from_google(newsFilter)
                 res += google_results
                 
-                # Fetch content from each URL (limit to 2 URLs to avoid timeout)
-                for newsURL in urls[:2]:
+                # Fetch content from each URL with improved error handling and fallbacks
+                successful_sources = 0
+                attempted_sources = 0
+                max_sources = 4  # Try up to 4 sources for better coverage
+                
+                for newsURL in urls[:max_sources]:
+                    attempted_sources += 1
                     try:
+                        print(f"Attempting to fetch news from: {newsURL}", flush=True)
                         url_content = get_text_from_url(newsURL)
-                        res += f"\n\nFrom Source: {newsURL}\n{url_content}\n\n"
+                        
+                        # Only add if we got meaningful content
+                        if url_content and not url_content.startswith("Error fetching"):
+                            res += f"\n\nFrom Source: {newsURL}\n{url_content}\n\n"
+                            successful_sources += 1
+                            print(f"Successfully fetched from: {newsURL} ({len(url_content)} chars)", flush=True)
+                        else:
+                            print(f"No meaningful content from: {newsURL}", flush=True)
+                            
                     except Exception as e:
-                        res += f"Error fetching {newsURL}: {e}\n"
+                        print(f"Error fetching {newsURL}: {e}", flush=True)
+                        # Don't include error in response to keep it clean
+                        continue
+                
+                # Add fallback sources if we didn't get enough successful sources
+                if successful_sources < 2 and category in ["technology", "finance", "crypto"]:
+                    print(f"Only got {successful_sources} sources, trying fallback sources...", flush=True)
+                    fallback_sources = {
+                        "technology": [
+                            "https://www.engadget.com/rss.xml",
+                            "https://feeds.arstechnica.com/arstechnica/index"
+                        ],
+                        "finance": [
+                            "https://www.marketwatch.com/rss/topstories",
+                            "https://feeds.finance.yahoo.com/rss/2.0/headline"
+                        ],
+                        "crypto": [
+                            "https://coinjournal.net/feed/",
+                            "https://www.coinspeaker.com/feed/"
+                        ]
+                    }
+                    
+                    for fallback_url in fallback_sources.get(category, [])[:2]:
+                        if successful_sources >= 3:  # Stop if we have enough
+                            break
+                        try:
+                            print(f"Trying fallback source: {fallback_url}", flush=True)
+                            url_content = get_text_from_url(fallback_url)
+                            if url_content and not url_content.startswith("Error fetching"):
+                                res += f"\n\nFrom Fallback Source: {fallback_url}\n{url_content}\n\n"
+                                successful_sources += 1
+                                print(f"Fallback source successful: {fallback_url}", flush=True)
+                        except Exception as e:
+                            print(f"Fallback source failed {fallback_url}: {e}", flush=True)
+                            continue
+                
+                print(f"News fetch complete: {successful_sources}/{attempted_sources} primary sources successful", flush=True)
                 
                 return res
             
