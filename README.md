@@ -372,4 +372,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Quick Links**: [Installation](INSTALLATION.md) | [Configuration](CONFIGURATION.md) | [API Docs](API.md) | [Tools](TOOLS.md) | [Troubleshooting](TROUBLESHOOTING.md)
+**Quick Links**: [Installation](docs/production/INSTALLATION_GUIDE.md) | [User Guide](docs/production/USER_GUIDE.md) | [Admin Guide](docs/production/ADMINISTRATOR_GUIDE.md) | [Developer Guide](docs/production/DEVELOPER_GUIDE.md) | [Docs Hub](docs/README.md)
