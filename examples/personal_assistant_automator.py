@@ -244,28 +244,36 @@ class PersonalAssistantAutomator:
             return None
     
     def _send_native_request(self, prompt, workflow_name):
-        """Send request using native endpoint"""
+        """Send request using OpenAI Compatible API"""
         payload = {
-            "prompt": prompt,
-            "model": "qwen3:8b",
-            "stream": False,
-            "tools": True,
-            "conversation_id": f"{workflow_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            "model": "Agentic-RAG-Model1",
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "stream": False
         }
         
         try:
-            print(f"📡 Sending {workflow_name} request to native API...")
+            print(f"📡 Sending {workflow_name} request to OpenAI-compatible API...")
             response = requests.post(
-                f"{self.server_url}/llama3_1b/stream",
+                f"{self.server_url}/v1/chat/completions",
                 json=payload,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.api_key}"
+                },
                 timeout=600
             )
             
             if response.status_code == 200:
                 result = response.json()
                 print(f"✅ {workflow_name} completed!")
-                print("🎯 Tools used:", result.get('tools_called', []))
+                
+                # Extract response from OpenAI format
+                if 'choices' in result and result['choices']:
+                    content = result['choices'][0]['message']['content']
+                    print(f"📝 Response preview: {content[:100]}...")
+                    
                 return result
             else:
                 print(f"❌ Error: {response.status_code} - {response.text}")
@@ -300,12 +308,15 @@ curl -X POST http://localhost:5000/v1/chat/completions \\
     # Calendar + Email workflow
     calendar_workflow = '''
 # Calendar + Email Workflow  
-curl -X POST http://localhost:5000/llama3_1b/stream \\
+curl -X POST http://localhost:5000/v1/chat/completions \\
   -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer test-key" \\
   -d '{
-    "prompt": "Schedule a calendar event for tomorrow at 2 PM called Team Meeting, then send an email to user@example.com with meeting agenda and recent project updates from our documents",
-    "model": "qwen3:8b",
-    "tools": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [{
+      "role": "user",
+      "content": "Schedule a calendar event for tomorrow at 2 PM called Team Meeting, then send an email to user@example.com with meeting agenda and recent project updates from our documents"
+    }],
     "stream": false
   }'
 '''

@@ -239,12 +239,15 @@ curl -X POST http://localhost:5000/v1/chat/completions \\
     
     # Advanced document analysis
     advanced_analysis = '''
-curl -X POST http://localhost:5000/llama3_1b/stream \\
+curl -X POST http://localhost:5000/v1/chat/completions \\
   -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer test-key" \\
   -d '{
-    "prompt": "I need a comprehensive analysis! Search all documents for business strategies, extract key insights, cross-reference with current market data, create a strategic report PDF called business_intelligence.pdf, and email it to user@example.com",
-    "model": "qwen3:8b",
-    "tools": true,
+    "model": "Agentic-RAG-Model1",
+    "messages": [{
+      "role": "user",
+      "content": "I need a comprehensive analysis! Search all documents for business strategies, extract key insights, cross-reference with current market data, create a strategic report PDF called business_intelligence.pdf, and email it to user@example.com"
+    }],
     "stream": false
   }'
 '''

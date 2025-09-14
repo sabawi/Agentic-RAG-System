@@ -9,7 +9,7 @@ This example demonstrates a complex news gathering and analysis workflow that:
 3. Creates a detailed PDF report
 4. Sends email with the report attached
 
-Both Native API and OpenAI Compatible endpoints are shown.
+Uses the OpenAI Compatible API for seamless integration with existing OpenAI client libraries.
 """
 
 import requests
@@ -20,13 +20,13 @@ from datetime import datetime
 SERVER_URL = "http://localhost:5000"
 API_KEY = "test-key"  # Any value works for our server
 
-def native_api_example():
+def standard_api_example():
     """
-    🌟 NATIVE API: Advanced News Analysis Workflow
+    🌟 STANDARD API: Advanced News Analysis Workflow
     
-    This uses the native Agentic-RAG endpoint with full control.
+    This uses the OpenAI-compatible endpoint for seamless integration.
     """
-    print("🚀 Starting Native API News Analysis Workflow...")
+    print("🚀 Starting Standard API News Analysis Workflow...")
     
     # Creative prompt that will trigger multiple tools
     creative_prompt = """
@@ -48,28 +48,37 @@ def native_api_example():
     """
     
     payload = {
-        "prompt": creative_prompt,
-        "model": "qwen3:8b",
-        "stream": False,
-        "tools": True,
-        "conversation_id": f"news_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        "model": "Agentic-RAG-Model1",
+        "messages": [
+            {"role": "user", "content": creative_prompt}
+        ],
+        "stream": False
     }
     
     try:
-        print("📡 Sending request to native endpoint...")
+        print("📡 Sending request to OpenAI-compatible endpoint...")
         response = requests.post(
-            f"{SERVER_URL}/llama3_1b/stream",
+            f"{SERVER_URL}/v1/chat/completions",
             json=payload,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {API_KEY}"
+            },
             timeout=600  # 10 minutes for complex analysis
         )
         
         if response.status_code == 200:
             result = response.json()
-            print("✅ Native API Response received!")
-            print("🎯 Tools used:", result.get('tools_called', []))
-            print("📝 Response preview:", result.get('response', '')[:200] + "...")
-            return result
+            print("✅ Standard API Response received!")
+            
+            # Extract response from OpenAI format
+            if 'choices' in result and result['choices']:
+                content = result['choices'][0]['message']['content']
+                print("📝 Response preview:", content[:200] + "...")
+                return result
+            else:
+                print("⚠️ Unexpected response format")
+                return result
         else:
             print(f"❌ Error: {response.status_code} - {response.text}")
             return None
@@ -78,13 +87,13 @@ def native_api_example():
         print(f"🚫 Request failed: {e}")
         return None
 
-def openai_api_example():
+def market_intelligence_example():
     """
-    🌐 OPENAI COMPATIBLE API: News & Market Intelligence
+    🌐 MARKET INTELLIGENCE: News & Market Intelligence
     
-    This uses OpenAI-compatible endpoint for seamless integration.
+    This demonstrates a different workflow using the same API.
     """
-    print("\n🌐 Starting OpenAI Compatible API Workflow...")
+    print("\n🌐 Starting Market Intelligence Workflow...")
     
     # Another creative scenario with different focus
     market_intelligence_prompt = """
@@ -108,7 +117,7 @@ def openai_api_example():
     """
     
     payload = {
-        "model": "Agentic-RAG-Model1",  # Using OpenAI model name (maps to our agentic system)
+        "model": "Agentic-RAG-Model1",
         "messages": [
             {"role": "user", "content": market_intelligence_prompt}
         ],
@@ -117,7 +126,7 @@ def openai_api_example():
     }
     
     try:
-        print("📡 Sending request to OpenAI compatible endpoint...")
+        print("📡 Sending request to OpenAI-compatible endpoint...")
         response = requests.post(
             f"{SERVER_URL}/v1/chat/completions",
             json=payload,
@@ -130,7 +139,7 @@ def openai_api_example():
         
         if response.status_code == 200:
             result = response.json()
-            print("✅ OpenAI API Response received!")
+            print("✅ Market Intelligence Response received!")
             
             # Extract response from OpenAI format
             if 'choices' in result and result['choices']:
@@ -229,14 +238,14 @@ def main():
     print("• 📄 PDF report generation")
     print("• 📧 Automated email delivery")
     print("• 🔍 Document search and cross-referencing")
-    print("• 🌊 Both REST and streaming APIs")
+    print("• 🌊 Both standard and streaming responses")
     
     print(f"\n⚙️ Server: {SERVER_URL}")
     print("🚀 Starting demonstrations...")
     
     # Run examples
-    native_result = native_api_example()
-    openai_result = openai_api_example() 
+    standard_result = standard_api_example()
+    market_result = market_intelligence_example() 
     streaming_example()
     
     print("\n🎊 All examples completed!")

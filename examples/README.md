@@ -1,6 +1,6 @@
 # 🚀 Agentic-RAG Server Examples
 
-This directory contains comprehensive examples showcasing the full power of the Agentic-RAG server. These examples demonstrate creative, real-world scenarios using both Native API and OpenAI-compatible endpoints with sophisticated multi-tool coordination.
+This directory contains comprehensive examples showcasing the full power of the Agentic-RAG server. These examples demonstrate creative, real-world scenarios using OpenAI-compatible endpoints with sophisticated multi-tool coordination.
 
 ## 📁 Examples Overview
 
@@ -15,7 +15,7 @@ Demonstrates sophisticated news gathering, stock analysis, and automated reporti
 - 🌊 Both REST and streaming API examples
 
 **Key Features:**
-- Native API and OpenAI compatible endpoints
+- OpenAI-compatible API for seamless integration
 - Creative prompts that trigger multiple tools simultaneously  
 - Real-time market intelligence briefings
 - Professional-grade analysis suitable for executives
@@ -106,21 +106,7 @@ Examples use only standard Python libraries:
 - `json` - JSON processing  
 - `datetime` - Time/date handling
 
-## 📊 API Endpoints Demonstrated
-
-### Native Agentic-RAG API
-```bash
-POST http://localhost:5000/llama3_1b/stream
-Content-Type: application/json
-
-{
-  "prompt": "Your creative prompt here",
-  "model": "qwen3:8b", 
-  "tools": true,
-  "stream": false,
-  "conversation_id": "optional_conversation_id"
-}
-```
+## 📊 API Endpoint Used
 
 ### OpenAI Compatible API
 ```bash
@@ -134,6 +120,8 @@ Authorization: Bearer test-key
   "stream": false
 }
 ```
+
+**All examples use this OpenAI-compatible format for seamless integration with existing OpenAI client libraries.**
 
 ## 🎯 Tools Showcased
 
@@ -251,6 +239,6 @@ Experiment with the prompts, modify the workflows, and discover new ways to leve
 
 **Quick Links:**
 - [Main Documentation](../README.md)
-- [Installation Guide](../docs/setup/INSTALLATION.md)  
-- [API Reference](../docs/api/)
-- [Tools Documentation](../TOOLS.md)
+- [Installation Guide](../docs/production/INSTALLATION_GUIDE.md)  
+- [User Guide](../docs/production/USER_GUIDE.md)
+- [Developer Guide](../docs/production/DEVELOPER_GUIDE.md)

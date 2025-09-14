@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Example: Using Image-to-Text Tool with Native API
+Example: Using Image-to-Text Tool with OpenAI Compatible API
 """
 
 import requests
 import json
 import base64
 
-# Server configuration
+# Server configuration  
 SERVER_URL = "http://localhost:5000"
+API_KEY = "test-key"  # Any value works for our server
 
 def encode_image_file(image_path):
     """Encode local image file to base64."""
@@ -20,112 +21,125 @@ def example_file_analysis():
     """Analyze local image files."""
     
     payload = {
-        "prompt": "Analyze these images using the image_to_text tool",
-        "tools": True,
-        "model": "qwen3:8b",
-        "stream": False,
-        "tool_calls": [
+        "model": "Agentic-RAG-Model1",
+        "messages": [
             {
-                "function": {
-                    "name": "image_to_text",
-                    "arguments": {
-                        "images": [
-                            {
-                                "type": "file",
-                                "path": "/home/user/screenshot.png"
-                            },
-                            {
-                                "type": "file", 
-                                "path": "/home/user/chart.jpg"
-                            }
-                        ],
-                        "processing_mode": "batch",
-                        "include_context": True
-                    }
-                }
+                "role": "user", 
+                "content": "Please analyze these two image files: /home/user/screenshot.png and /home/user/chart.jpg. Use the image_to_text tool in batch processing mode with context included."
             }
-        ]
+        ],
+        "stream": False
     }
     
-    response = requests.post(f"{SERVER_URL}/llama3_1b/stream", 
-                           json=payload, 
-                           headers={"Content-Type": "application/json"})
+    response = requests.post(
+        f"{SERVER_URL}/v1/chat/completions", 
+        json=payload, 
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer test-key"
+        }
+    )
     
     print("File Analysis Response:")
-    print(response.json())
+    if response.status_code == 200:
+        result = response.json()
+        if 'choices' in result and result['choices']:
+            print(result['choices'][0]['message']['content'])
+        else:
+            print(result)
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
 
 # Example 2: Base64 image analysis  
 def example_base64_analysis():
     """Analyze base64 encoded images."""
     
-    # Encode your image
-    image_b64 = encode_image_file("/path/to/your/image.jpg")
+    # Note: Update this path to point to your actual image file
+    try:
+        image_b64 = encode_image_file("/path/to/your/image.jpg")
+    except FileNotFoundError:
+        print("Please update the image path to point to an actual image file")
+        return
     
     payload = {
-        "prompt": "Please analyze this image in detail",
-        "tools": True,
-        "model": "qwen3:8b", 
-        "stream": False,
-        "tool_calls": [
+        "model": "Agentic-RAG-Model1",
+        "messages": [
             {
-                "function": {
-                    "name": "image_to_text",
-                    "arguments": {
-                        "images": [
-                            {
-                                "type": "base64",
-                                "data": f"data:image/jpeg;base64,{image_b64}",
-                                "quality": "high"
-                            }
-                        ],
-                        "processing_mode": "sequential"
-                    }
-                }
+                "role": "user",
+                "content": f"Please analyze this base64 encoded image in detail using the image_to_text tool with high quality processing: data:image/jpeg;base64,{image_b64}"
             }
-        ]
+        ],
+        "stream": False
     }
     
-    response = requests.post(f"{SERVER_URL}/llama3_1b/stream", json=payload)
+    response = requests.post(
+        f"{SERVER_URL}/v1/chat/completions", 
+        json=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer test-key"
+        }
+    )
+    
     print("Base64 Analysis Response:")
-    print(response.json())
+    if response.status_code == 200:
+        result = response.json()
+        if 'choices' in result and result['choices']:
+            print(result['choices'][0]['message']['content'])
+        else:
+            print(result)
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
 
 # Example 3: URL-based image analysis
 def example_url_analysis():
     """Analyze images from URLs."""
     
     payload = {
-        "prompt": "Analyze this online image",
-        "tools": True,
-        "stream": False,
-        "tool_calls": [
+        "model": "Agentic-RAG-Model1",
+        "messages": [
             {
-                "function": {
-                    "name": "image_to_text",
-                    "arguments": {
-                        "images": [
-                            {
-                                "type": "url",
-                                "url": "https://example.com/sample-chart.png",
-                                "quality": "auto"
-                            }
-                        ]
-                    }
-                }
+                "role": "user",
+                "content": "Please analyze this online image using the image_to_text tool: https://example.com/sample-chart.png with automatic quality detection."
             }
-        ]
+        ],
+        "stream": False
     }
     
-    response = requests.post(f"{SERVER_URL}/llama3_1b/stream", json=payload)
+    response = requests.post(
+        f"{SERVER_URL}/v1/chat/completions", 
+        json=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer test-key"
+        }
+    )
+    
     print("URL Analysis Response:")
-    print(response.json())
+    if response.status_code == 200:
+        result = response.json()
+        if 'choices' in result and result['choices']:
+            print(result['choices'][0]['message']['content'])
+        else:
+            print(result)
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
 
 if __name__ == "__main__":
-    print("🖼️ Image-to-Text Tool API Examples")
-    print("=" * 50)
+    print("🖼️ Image-to-Text Tool OpenAI Compatible API Examples")
+    print("=" * 60)
+    
+    print("These examples use the OpenAI Compatible API endpoint:")
+    print(f"POST {SERVER_URL}/v1/chat/completions")
+    print("")
     
     # Run examples (comment out as needed)
-    # example_file_analysis()
-    # example_base64_analysis() 
-    # example_url_analysis()
-    
-    print("Update the file paths and URLs to test with real images!")
+    print("Uncomment the examples below to test:")
+    print("# example_file_analysis()")
+    print("# example_base64_analysis()")
+    print("# example_url_analysis()")
+    print("")
+    print("Remember to:")
+    print("1. Update file paths to point to real image files")
+    print("2. Ensure your Agentic-RAG server is running on http://localhost:5000")
+    print("3. Configure image processing models using: python llm_config_tool.py")
