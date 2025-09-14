@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.1.11
+# Agentic-RAG Server v1.0.1.12
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, and vision capabilities.
 
-[![Version](https://img.shields.io/badge/version-1.0.1.11-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.1.11)
+[![Version](https://img.shields.io/badge/version-1.0.1.12-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.1.12)
 [![Python](https://img.shields.io/badge/python-3.8+-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -112,6 +112,25 @@ The system automatically handles multi-model orchestration internally, using loc
 - **🗂️ File Operations**: Local file management
 - **🖼️ Image Analysis**: Vision processing with OCR
 - **🔍 Search**: Web search capabilities
+
+## 🏆 Competitive Advantages
+
+| Feature | **Agentic-RAG-System v1.0** | **LangChain** | **LlamaIndex** | **Haystack** |
+|---------|------------------------------|---------------|----------------|--------------|
+| **Multi-Model Orchestration** | 🟢 Built-in arbitrator + multi-LLM routing | ⚪ Manual routing/dev-built | ⚪ Index-focused | ⚪ Single-LLM default |
+| **Autonomous Tool Planning** | 🟢 19-tool system + GPT-4o orchestration | 🟢 ReAct/agent patterns | ⚪ Limited | ⚪ Static pipelines |
+| **Production-Ready Setup** | 🟢 Automated install.sh + deployment | ⚪ Dev assembly required | ⚪ Dev assembly required | 🟢 Deployment guidance |
+| **OpenAI API Compatibility** | 🟢 Full compatibility (drop-in replacement) | ⚪ SDK/API only | ⚪ SDK/API only | ⚪ API & tooling |
+| **Multimodal RAG** | 🟢 Vision/OCR + multimodal built-in | ⚪ Glue code required | ⚪ Some loaders | ⚪ Limited multimodal |
+| **Real-time Document Processing** | 🟢 Background scanning + auto-indexing | ⚪ Custom implementation | ⚪ Custom implementation | ⚪ Pipeline-based |
+| **Built-in Monitoring** | 🟢 Arbitrator validation + integrity checks | ⚪ Needs LangSmith/3rd party | ⚪ Limited eval hooks | ⚪ Some Studio monitoring |
+| **Enterprise Ready** | ⚪ Foundations (logging) - hardening recommended | ⚪ Dev responsibility | ⚪ Not core | ⚪ Limited enterprise features |
+
+**Key Differentiators:**
+- ✅ **Zero-Config Agentic Behavior**: Works out-of-the-box with autonomous tool selection
+- ✅ **Hybrid Local+Cloud**: Best of both worlds - privacy + power
+- ✅ **True OpenAI Drop-in**: Existing OpenAI code works immediately
+- ✅ **Production Focus**: From prototype to production in minutes
 
 ## 🚀 Impressive Demo Examples
 
