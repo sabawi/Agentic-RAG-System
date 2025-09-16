@@ -126,3 +126,9 @@ seaborn>=0.13.0
 # PDF Generation Dependencies (added 2025-09-09)
 weasyprint>=62.0
 markdown-pdf>=0.1.0
+reportlab>=4.0.0
+
+# Google Calendar API Dependencies (added 2025-09-16)
+google-auth>=2.30.0
+google-auth-oauthlib>=1.2.0
+google-api-python-client>=2.90.0

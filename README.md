@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.2.0
+# Agentic-RAG Server v1.0.2.1
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, and vision capabilities.
 
-[![Version](https://img.shields.io/badge/version-1.0.2.0-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.2.0)
+[![Version](https://img.shields.io/badge/version-1.0.2.1-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.2.1)
 [![Python](https://img.shields.io/badge/python-3.8+-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -49,6 +49,13 @@ cd Agentic-RAG-System
 pip install -r requirements.txt
 python fastapi_server_complete.py
 ```
+
+## ⭐ What's New in V1.0.2.1
+
+### 🔧 Dependency Hotfix
+- **Fixed PDF Generator Tool** - Added missing reportlab dependency
+- **Fixed Google Calendar Integration** - Added missing google-auth dependencies
+- **Enhanced Requirements** - Updated requirements.txt for fresh installations
 
 ## ⭐ What's New in V1.0.2.0
 

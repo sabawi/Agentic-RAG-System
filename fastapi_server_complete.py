@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Agentic-RAG Server v1.0.2.0 - Complete FastAPI Server with Ollama LLM Integration
+Agentic-RAG Server v1.0.2.1 - Complete FastAPI Server with Ollama LLM Integration
 =============================================================================
 
 FastAPI server with all original Flask functionality including:
@@ -13,7 +13,7 @@ FastAPI server with all original Flask functionality including:
 - Database connection pooling
 - Production-ready caching layer
 
-Version: 1.0.2.0
+Version: 1.0.2.1
 Release: Production Ready
 """
 
