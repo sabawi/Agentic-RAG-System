@@ -25,7 +25,7 @@ class FAISSIntegrityMonitor:
         self.store = document_store
         self.metadata_db = document_store.metadata_db
         self.faiss_index = document_store.faiss_index
-        self.corruption_threshold = 0.05  # 5% mismatch triggers rebuild
+        self.corruption_threshold = 0.05  # 5% mismatch triggers rebuild (applies to both count sync and lookup corruption)
         self.max_sample_size = 100  # Sample size for integrity checks
         
     async def comprehensive_integrity_check(self) -> Dict[str, any]:
@@ -119,11 +119,19 @@ class FAISSIntegrityMonitor:
         # Get FAISS count
         faiss_total = self.faiss_index.ntotal
         
+        # Calculate count mismatch percentage (use max to avoid division by zero)
+        total_count = max(sqlite_indexed, faiss_total, 1)
+        mismatch_percentage = abs(sqlite_indexed - faiss_total) / total_count
+        
+        # Consider synchronized if mismatch is within tolerance (5%)
+        synchronized = mismatch_percentage <= self.corruption_threshold
+        
         return {
             'sqlite_total_chunks': sqlite_total,
             'sqlite_indexed_chunks': sqlite_indexed,
             'faiss_total_vectors': faiss_total,
-            'synchronized': sqlite_indexed == faiss_total,
+            'synchronized': synchronized,
+            'mismatch_percentage': mismatch_percentage,
             'missing_in_faiss': max(0, sqlite_indexed - faiss_total),
             'orphaned_in_faiss': max(0, faiss_total - sqlite_indexed)
         }

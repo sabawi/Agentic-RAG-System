@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.1.12
+# Agentic-RAG Server v1.0.2.0
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, and vision capabilities.
 
-[![Version](https://img.shields.io/badge/version-1.0.1.12-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.1.12)
+[![Version](https://img.shields.io/badge/version-1.0.2.0-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.2.0)
 [![Python](https://img.shields.io/badge/python-3.8+-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -50,7 +50,7 @@ pip install -r requirements.txt
 python fastapi_server_complete.py
 ```
 
-## ⭐ What's New in V1.0.0
+## ⭐ What's New in V1.0.2.0
 
 ### 🚀 Major Features
 - **Automated Installation System** - One-command setup with comprehensive verification

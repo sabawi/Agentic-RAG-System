@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Agentic-RAG Server v1.0.1.0 - Complete FastAPI Server with Ollama LLM Integration
+Agentic-RAG Server v1.0.2.0 - Complete FastAPI Server with Ollama LLM Integration
 =============================================================================
 
 FastAPI server with all original Flask functionality including:
@@ -13,12 +13,12 @@ FastAPI server with all original Flask functionality including:
 - Database connection pooling
 - Production-ready caching layer
 
-Version: 1.0.1.8
+Version: 1.0.2.0
 Release: Production Ready
 """
 
 # Version information
-__version__ = "1.0.1.14"
+__version__ = "1.0.2.0"
 __release__ = "Production Ready"
 
 import asyncio
@@ -297,7 +297,20 @@ def load_primary_model_system_prompt() -> str:
     """Load the primary model system prompt from external file"""
     try:
         with open('primary_model_system_prompt.txt', 'r', encoding='utf-8') as f:
-            return f.read()
+            content = f.read()
+            # Debug: Log if anti-hallucination rules are present
+            if "🚨 ANTI-HALLUCINATION RULE" in content:
+                logger.info("✅ PRIMARY SYSTEM PROMPT: Anti-hallucination rules FOUND")
+            else:
+                logger.warning("⚠️ PRIMARY SYSTEM PROMPT: Anti-hallucination rules MISSING")
+            
+            if "🔗 MANDATORY CITATION URL:" in content:
+                logger.info("✅ PRIMARY SYSTEM PROMPT: Enhanced source block format FOUND")
+            else:
+                logger.warning("⚠️ PRIMARY SYSTEM PROMPT: Enhanced source block format MISSING")
+                
+            logger.info(f"📋 PRIMARY SYSTEM PROMPT LOADED: {len(content)} chars, first 150 chars: {content[:150]}")
+            return content
     except FileNotFoundError:
         logger.error("primary_model_system_prompt.txt not found, using fallback prompt")
         return "You are a helpful AI assistant. Provide comprehensive responses based on the context provided."
@@ -471,13 +484,13 @@ class AsyncToolManager:
                 "type": "function",
                 "function": {
                     "name": "get_news_summaries",
-                    "description": "Get current news headlines and summaries with optional keyword filtering.",  # 🚨 PROTECTED: No aggressive language
+                    "description": "Get latest news headlines and summaries from diverse RSS sources. Use for ANY news request including world news, breaking news, current events, political news, financial news, technology news, cryptocurrency news, business news, international news, national news, local news, sports news, and entertainment news.",  # 🚨 PROTECTED: Enhanced routing description
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "filter": {
                                 "type": "string",
-                                "description": "The input filter is a string type that helps narrow down the choices of headlines. Examples: \"National\", \"Middle East\", \"World\", \"Technology\""
+                                            "description": "IMPORTANT: Analyze the user's prompt and select the most specific category that matches their request. For financial/economic/stock market queries, use 'finance' or 'economy'. For cryptocurrency queries, use 'crypto'. For general business news, use 'business'. For international events, use 'world'. For US domestic news, use 'national'. Available categories: 'world', 'national', 'business', 'finance', 'economy', 'technology', 'crypto', 'sports', 'local'. Example: User asks 'stock market news' → use 'finance'. User asks 'cryptocurrency developments' → use 'crypto'. User asks 'economic indicators' → use 'economy'."
                             }
                         },
                         "required": ["filter"]
@@ -657,14 +670,33 @@ class AsyncToolManager:
                 query = str(args)
             
             def sync_wikipedia_query():
+                from datetime import datetime
+                
                 wiki = wikipediaapi.Wikipedia(
                     language='en',
                     user_agent='FastAPIServer/1.0 (https://github.com/user/project)'
                 )
                 page = wiki.page(query)
+                
                 if page.exists():
-                    return page.summary[:1000] + "..." if len(page.summary) > 1000 else page.summary
-                return f"No Wikipedia page found for: {query}"
+                    # Truncate summary if too long
+                    summary = page.summary[:2000] + "..." if len(page.summary) > 2000 else page.summary
+                    
+                    # Get current timestamp
+                    timestamp = datetime.now().strftime('%A, %B %d, %Y %I:%M:%S %p')
+                    
+                    # Use enhanced source block formatting
+                    formatted_result = _format_source_block(
+                        source_url=page.fullurl,
+                        title=page.title,
+                        content=f"Wikipedia Summary:\n\n{summary}",
+                        source_num=1,
+                        timestamp=timestamp
+                    )
+                    
+                    return f"\nAs of [Current Date and Time: {timestamp}] here are the Wikipedia query results:\n{formatted_result}"
+                else:
+                    return f"No Wikipedia page found for: {query}"
             
             return await asyncio.get_event_loop().run_in_executor(
                 thread_pool, sync_wikipedia_query
@@ -761,14 +793,35 @@ class AsyncToolManager:
                         "https://www.businessinsider.com/rss"
                     ],
                     "finance": [
-                        # Traditional financial sources
+                        # Major Financial News Outlets
                         "https://www.cnbc.com/id/100003114/device/rss/rss.html",
                         "https://finance.yahoo.com/news/rssindex",
+                        "https://feeds.bloomberg.com/markets/news.rss",
+                        "https://www.marketwatch.com/rss/topstories",
+                        "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",  # Wall Street Journal
+                        # Economic and Federal Reserve News
                         "https://feeds.bbci.co.uk/news/business/rss.xml",
-                        # Cryptocurrency and alternative finance
-                        "https://www.coindesk.com/arc/outboundfeeds/rss/",
-                        "https://decrypt.co/feed",
-                        "https://www.theblock.co/rss.xml"
+                        "https://www.cnbc.com/id/20910258/device/rss/rss.html",  # Economics
+                        "https://www.federalreserve.gov/feeds/press_all.xml",
+                        # Stock Market and Trading
+                        "https://www.investing.com/rss/news.rss",
+                        "https://seekingalpha.com/feed.xml",
+                        "https://www.fool.com/feeds/index.aspx",  # Motley Fool
+                        # Alternative Financial News
+                        "https://www.zerohedge.com/fullrss2.xml",
+                        "https://finance.yahoo.com/rss/topstories",
+                        "https://www.reuters.com/business/finance/"
+                    ],
+                    "economy": [
+                        # Economic Policy and Data
+                        "https://www.cnbc.com/id/20910258/device/rss/rss.html",  # Economics
+                        "https://www.federalreserve.gov/feeds/press_all.xml",
+                        "https://feeds.bbci.co.uk/news/business/rss.xml",
+                        "https://www.reuters.com/business/",
+                        # Economic Analysis
+                        "https://www.bloomberg.com/economics",
+                        "https://www.economist.com/finance-and-economics/rss.xml",
+                        "https://www.wsj.com/xml/rss/3_7085.xml"  # WSJ Economics
                     ],
                     "technology": [
                         # Independent tech sources (reliable direct feeds)
@@ -813,6 +866,33 @@ class AsyncToolManager:
                         "https://www.axios.com/feeds/articles.rss",
                         "https://www.propublica.org/feeds/propublica/main"
                     ],
+                    "national": [
+                        # US National News Sources
+                        "https://apnews.com/hub/ap-top-news",
+                        "https://www.npr.org/sections/news/",
+                        "https://www.usatoday.com/rss/news/",
+                        "https://www.cbsnews.com/latest/rss/main",
+                        "https://www.nbcnews.com/feeds/",
+                        "https://abcnews.go.com/abcnews/topstories"
+                    ],
+                    "world": [
+                        # International News Sources
+                        "https://feeds.bbci.co.uk/news/world/rss.xml",
+                        "https://www.aljazeera.com/xml/rss/all.xml",
+                        "https://www.dw.com/en/rss/all/rss.xml",
+                        "https://www.france24.com/en/rss",
+                        "https://www.euronews.com/rss?level=vertical&name=news",
+                        "https://www.scmp.com/rss"
+                    ],
+                    "local": [
+                        # Regional/Local News Sources
+                        "https://www.latimes.com/rss2.0.xml",
+                        "https://www.sfgate.com/rss/feed/Chronicle-News-940.php",
+                        "https://www.chicagotribune.com/arcio/rss/",
+                        "https://www.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+                        "https://www.washingtonpost.com/rss/",
+                        "https://www.dallasnews.com/feed/"
+                    ],
                     "default": [
                         "https://apnews.com/hub/ap-top-news",
                         "https://feeds.bbci.co.uk/news/rss.xml",
@@ -820,32 +900,350 @@ class AsyncToolManager:
                     ]
                 }
                 
-                # Enhanced synonyms mapping for new categories
-                SYNONYMS = {
-                    "world": {"world", "global", "international", "foreign", "abroad", "europe", "asia", "africa"},
-                    "national": {"national", "nation", "domestic", "us", "usa", "american", "homeland", "united states"},
-                    "business": {"business", "trade", "commerce", "commercial", "retail", "enterprise", "corporate"},
-                    "financial": {"financial", "trade", "commerce", "commercial", "retail", "macroeconomics", "microeconomics", "business cycle"},
-                    "finance": {"finance", "financial", "stocks", "market", "markets", "stock", "stock market", "securities", "inflation", "financing", "stock trading", "bonds", "interest rates", "fed rates", "us economy", "economy", "economic", "federal reserve", "wall street", "nasdaq", "dow jones"},
-                    "technology": {"technology", "tech", "software", "hardware", "ai", "artificial intelligence", "machine learning", "computer", "digital", "internet", "cybersecurity", "startup", "innovation", "gadgets", "devices"},
-                    "crypto": {"crypto", "cryptocurrency", "bitcoin", "ethereum", "blockchain", "defi", "nft", "digital currency", "altcoin", "mining", "wallet", "exchange"},
-                    "science": {"science", "scientific", "physics", "chemistry", "biology", "nasa", "space", "research", "study", "discovery", "experiment"},
-                    "politics": {"politics", "political", "government", "congress", "senate", "house", "election", "campaign", "policy", "legislation", "democrat", "republican", "biden", "trump", "washington"}
+                # 🎯 ENHANCED INTELLIGENT CATEGORY DETECTION SYSTEM
+                # Multi-factor analysis with phrase detection, weights, and intent recognition
+                
+                ENHANCED_CATEGORY_MAPPING = {
+                    "crypto": {
+                        "primary_terms": {"crypto", "cryptocurrency", "bitcoin", "btc", "ethereum", "eth", "blockchain"},
+                        "secondary_terms": {"defi", "nft", "altcoin", "mining", "wallet", "exchange", "digital currency", "web3", "solana", "cardano", "polygon", "binance", "coinbase"},
+                        "compound_phrases": {"crypto news", "bitcoin price", "ethereum update", "blockchain technology", "digital assets", "crypto market", "defi protocol"},
+                        "financial_crossover": {"crypto stocks", "bitcoin etf", "cryptocurrency investment", "digital asset trading"},
+                        "tech_crossover": {"blockchain development", "smart contracts", "cryptocurrency technology"},
+                        "weight": 1.0,
+                        "fallback_categories": ["finance", "technology"]
+                    },
+                    "finance": {
+                        "primary_terms": {"finance", "financial", "stocks", "market", "markets", "stock"},
+                        "secondary_terms": {"securities", "financing", "bonds", "wall street", "nasdaq", "dow jones", "trading", "investment", "earnings"},
+                        "compound_phrases": {"stock market", "financial news", "market update", "earnings report", "market analysis", "stock trading"},
+                        "business_crossover": {"corporate earnings", "business finance", "company stocks"},
+                        "weight": 0.9,
+                        "fallback_categories": ["business"]
+                    },
+                    "economy": {
+                        "primary_terms": {"economy", "economic", "inflation", "recession", "gdp", "unemployment"},
+                        "secondary_terms": {"interest rates", "fed rates", "federal reserve", "monetary policy", "fiscal policy", "economic growth", "economic indicators", "consumer price index", "cpi"},
+                        "compound_phrases": {"economic news", "fed meeting", "economic indicators", "monetary policy", "economic growth", "inflation report", "unemployment rate"},
+                        "finance_crossover": {"economic market", "financial economy", "market economy"},
+                        "weight": 0.9,
+                        "fallback_categories": ["finance"]
+                    },
+                    "technology": {
+                        "primary_terms": {"technology", "tech", "ai", "artificial intelligence", "software", "hardware", "digital"},
+                        "secondary_terms": {"machine learning", "computer", "internet", "cybersecurity", "startup", "innovation", "gadgets", "devices", "cloud", "data", "programming", "app", "platform"},
+                        "compound_phrases": {"tech news", "ai development", "software update", "tech startup", "digital transformation", "cyber attack", "tech earnings"},
+                        "business_crossover": {"tech companies", "software business", "tech industry"},
+                        "weight": 0.8,
+                        "fallback_categories": ["business"]
+                    },
+                    "business": {
+                        "primary_terms": {"business", "trade", "commerce", "commercial", "corporate", "company", "companies"},
+                        "secondary_terms": {"retail", "enterprise", "industry", "sector", "revenue", "profit", "ceo", "merger", "acquisition", "ipo"},
+                        "compound_phrases": {"business news", "corporate earnings", "company update", "industry analysis", "market sector"},
+                        "weight": 0.7,
+                        "fallback_categories": ["finance"]
+                    },
+                    "world": {
+                        "primary_terms": {"world", "global", "international", "foreign", "abroad"},
+                        "secondary_terms": {"europe", "asia", "africa", "china", "russia", "uk", "japan", "india", "brazil", "canada", "mexico"},
+                        "compound_phrases": {"world news", "international affairs", "global economy", "foreign policy", "international relations"},
+                        "geo_specific": {"european union", "middle east", "south america", "southeast asia"},
+                        "weight": 0.9,
+                        "fallback_categories": ["national"]
+                    },
+                    "national": {
+                        "primary_terms": {"national", "nation", "domestic", "us", "usa", "american", "homeland", "united states"},
+                        "secondary_terms": {"congress", "senate", "house", "washington", "federal", "state", "local", "governor", "mayor"},
+                        "compound_phrases": {"national news", "us news", "american politics", "domestic policy", "homeland security"},
+                        "weight": 0.8,
+                        "fallback_categories": ["politics"]
+                    },
+                    "politics": {
+                        "primary_terms": {"politics", "political", "government", "election", "campaign", "policy", "legislation"},
+                        "secondary_terms": {"democrat", "republican", "biden", "trump", "vote", "voting", "ballot", "candidate", "senator", "representative"},
+                        "compound_phrases": {"political news", "election update", "campaign news", "government policy", "political analysis"},
+                        "weight": 0.8,
+                        "fallback_categories": ["national"]
+                    },
+                    "science": {
+                        "primary_terms": {"science", "scientific", "research", "study", "discovery", "experiment"},
+                        "secondary_terms": {"physics", "chemistry", "biology", "nasa", "space", "medicine", "health", "climate", "environment"},
+                        "compound_phrases": {"scientific breakthrough", "research findings", "space exploration", "medical research", "climate change"},
+                        "weight": 0.6,
+                        "fallback_categories": ["technology"]
+                    },
+                    "local": {
+                        "primary_terms": {"local", "regional", "city", "town", "community", "neighborhood"},
+                        "secondary_terms": {"metro", "county", "municipal", "downtown", "suburb", "district", "area", "vicinity", "nearby"},
+                        "compound_phrases": {"local news", "regional update", "city news", "community events", "metro area", "local government"},
+                        "geo_indicators": {"california", "texas", "new york", "florida", "chicago", "los angeles", "houston", "phoenix", "philadelphia", "san antonio"},
+                        "weight": 0.7,
+                        "fallback_categories": ["national"]
+                    }
                 }
                 
-                # Find category function (from original)
-                def find_category(newsFilter):
+                # 🧠 INTELLIGENT CATEGORY DETECTION ENGINE
+                def find_category_intelligent(newsFilter):
+                    """
+                    Advanced category detection using multi-factor analysis:
+                    - Phrase detection (compound phrases get priority)
+                    - Weight-based scoring system
+                    - Primary vs secondary term hierarchy
+                    - Crossover detection for mixed topics
+                    - Fuzzy matching for typos/variations
+                    """
                     import re
-                    filter_words = re.split(r'[,\.;:!?\-]+', newsFilter.lower())
-                    for category, synonyms in SYNONYMS.items():
-                        if any(word in synonyms for word in filter_words):
-                            return category
+                    from collections import defaultdict
+                    
+                    # Normalize and prepare the filter text
+                    original_filter = newsFilter.lower().strip()
+                    
+                    # Remove common stop words that don't contribute to categorization
+                    stop_words = {"the", "get", "latest", "current", "recent", "update", "updates", "news", "information", "about", "on", "for", "and", "or"}
+                    words = [w for w in re.findall(r'\b\w+\b', original_filter) if w not in stop_words]
+                    clean_filter = ' '.join(words)
+                    
+                    print(f"🎯 Category Detection: '{newsFilter}' -> '{clean_filter}'", flush=True)
+                    
+                    # Scoring system for each category
+                    category_scores = defaultdict(float)
+                    
+                    for category, config in ENHANCED_CATEGORY_MAPPING.items():
+                        score = 0.0
+                        matches = []
+                        
+                        # 1. COMPOUND PHRASES (highest priority - exact phrase matching)
+                        compound_phrases = config.get("compound_phrases", set())
+                        for phrase in compound_phrases:
+                            if phrase in original_filter:
+                                score += 3.0 * config["weight"]  # High score for exact phrase matches
+                                matches.append(f"phrase:'{phrase}'")
+                        
+                        # 2. PRIMARY TERMS (high weight)
+                        primary_terms = config.get("primary_terms", set())
+                        for term in primary_terms:
+                            if term in clean_filter:
+                                score += 2.0 * config["weight"]
+                                matches.append(f"primary:'{term}'")
+                        
+                        # 3. SECONDARY TERMS (medium weight)  
+                        secondary_terms = config.get("secondary_terms", set())
+                        for term in secondary_terms:
+                            if term in clean_filter:
+                                score += 1.0 * config["weight"]
+                                matches.append(f"secondary:'{term}'")
+                        
+                        # 4. CROSSOVER TERMS (for mixed topics)
+                        for crossover_type in ["financial_crossover", "tech_crossover", "business_crossover", "geo_specific", "finance_crossover"]:
+                            crossover_terms = config.get(crossover_type, set())
+                            for term in crossover_terms:
+                                if term in original_filter:
+                                    score += 1.5 * config["weight"]
+                                    matches.append(f"{crossover_type}:'{term}'")
+                        
+                        # 4.5. GEO INDICATORS (for local/regional detection)
+                        geo_indicators = config.get("geo_indicators", set())
+                        for geo_term in geo_indicators:
+                            if geo_term in original_filter:
+                                score += 2.0 * config["weight"]  # High score for geographic indicators
+                                matches.append(f"geo:'{geo_term}'")
+                        
+                        # 5. PARTIAL MATCHING (for typos/variations)
+                        for word in words:
+                            # Check if any word is a substring of category terms (fuzzy matching)
+                            for term in primary_terms.union(secondary_terms):
+                                if len(word) > 3 and (word in term or term in word):
+                                    score += 0.5 * config["weight"]
+                                    matches.append(f"fuzzy:'{word}'-'{term}'")
+                        
+                        if score > 0:
+                            category_scores[category] = score
+                            print(f"   {category}: {score:.2f} points - {matches}", flush=True)
+                    
+                    # Find the best category
+                    if category_scores:
+                        best_category = max(category_scores.items(), key=lambda x: x[1])
+                        category_name, final_score = best_category
+                        
+                        print(f"🎯 Selected Category: '{category_name}' with score {final_score:.2f}", flush=True)
+                        
+                        # If score is very low, consider fallbacks
+                        if final_score < 1.0:
+                            fallbacks = ENHANCED_CATEGORY_MAPPING[category_name].get("fallback_categories", ["default"])
+                            print(f"🔄 Low confidence, considering fallbacks: {fallbacks}", flush=True)
+                            # For now, stick with the detected category but log the fallback consideration
+                        
+                        return category_name
+                    
+                    print(f"🔄 No category detected, using 'default'", flush=True)
                     return "default"
                 
-                # Enhanced Google News function with FULL ARTICLE CONTENT
-                def get_news_from_google(keyword):
+                # Wrapper function to maintain compatibility
+                def find_category(newsFilter):
+                    return find_category_intelligent(newsFilter)
+                
+                # 🎯 ENHANCED MULTI-SOURCE UNION SYSTEM
+                def find_categories_ranked(newsFilter):
+                    """
+                    Returns ranked list of relevant categories based on query
+                    Example: "stock market finance economic" -> ["finance", "economy", "business"]
+                    """
+                    import re
+                    from collections import defaultdict
+                    
+                    # Normalize the filter text
+                    original_filter = newsFilter.lower().strip()
+                    stop_words = {"the", "get", "latest", "current", "recent", "update", "updates", "news", "information", "about", "on", "for", "and", "or"}
+                    words = [w for w in re.findall(r'\b\w+\b', original_filter) if w not in stop_words]
+                    clean_filter = ' '.join(words)
+                    
+                    print(f"🎯 Multi-Category Detection: '{newsFilter}' -> '{clean_filter}'", flush=True)
+                    
+                    # Score ALL categories (not just the top one)
+                    category_scores = defaultdict(float)
+                    
+                    for category, config in ENHANCED_CATEGORY_MAPPING.items():
+                        score = 0.0
+                        matches = []
+                        
+                        # Compound phrases (highest priority)
+                        compound_phrases = config.get("compound_phrases", set())
+                        for phrase in compound_phrases:
+                            if phrase in original_filter:
+                                score += 3.0 * config["weight"]
+                                matches.append(f"phrase:'{phrase}'")
+                        
+                        # Primary terms
+                        primary_terms = config.get("primary_terms", set())
+                        for term in primary_terms:
+                            if term in clean_filter:
+                                score += 2.0 * config["weight"]
+                                matches.append(f"primary:'{term}'")
+                        
+                        # Secondary terms
+                        secondary_terms = config.get("secondary_terms", set())
+                        for term in secondary_terms:
+                            if term in clean_filter:
+                                score += 1.0 * config["weight"]
+                                matches.append(f"secondary:'{term}'")
+                        
+                        # Crossover terms
+                        for crossover_type in ["financial_crossover", "tech_crossover", "business_crossover", "geo_specific", "finance_crossover"]:
+                            crossover_terms = config.get(crossover_type, set())
+                            for term in crossover_terms:
+                                if term in original_filter:
+                                    score += 1.5 * config["weight"]
+                                    matches.append(f"{crossover_type}:'{term}'")
+                        
+                        # Geo indicators
+                        geo_indicators = config.get("geo_indicators", set())
+                        for geo_term in geo_indicators:
+                            if geo_term in original_filter:
+                                score += 2.0 * config["weight"]
+                                matches.append(f"geo:'{geo_term}'")
+                        
+                        if score > 0:
+                            category_scores[category] = score
+                            print(f"   {category}: {score:.2f} points - {matches}", flush=True)
+                    
+                    # Return ranked categories (threshold: score > 0.5)
+                    ranked_categories = []
+                    if category_scores:
+                        # Sort by score descending
+                        sorted_categories = sorted(category_scores.items(), key=lambda x: x[1], reverse=True)
+                        
+                        # Include categories with meaningful scores
+                        for cat_name, score in sorted_categories:
+                            if score >= 0.5:  # Meaningful threshold
+                                ranked_categories.append(cat_name)
+                    
+                    if not ranked_categories:
+                        ranked_categories = ["default"]
+                    
+                    print(f"🎯 Ranked Categories: {ranked_categories}", flush=True)
+                    return ranked_categories
+                
+                def find_keyword_sources(newsFilter):
+                    """
+                    Extract specific keywords that map to specialized sources
+                    Example: "stock market" -> stock market specific RSS feeds
+                    """
+                    keyword_mappings = {
+                        "stock market": ["finance", "economy"],
+                        "federal reserve": ["economy"],
+                        "fed rates": ["economy"],
+                        "inflation": ["economy"],
+                        "gdp": ["economy"],
+                        "unemployment": ["economy"],
+                        "earnings": ["finance"],
+                        "nasdaq": ["finance"],
+                        "dow jones": ["finance"],
+                        "s&p 500": ["finance"],
+                        "cryptocurrency": ["crypto"],
+                        "bitcoin": ["crypto"],
+                        "florida": ["local"],
+                        "california": ["local"],
+                        "texas": ["local"],
+                        "new york": ["local"]
+                    }
+                    
+                    filter_lower = newsFilter.lower()
+                    keyword_categories = []
+                    detected_keywords = []
+                    
+                    for keyword, categories in keyword_mappings.items():
+                        if keyword in filter_lower:
+                            detected_keywords.append(keyword)
+                            keyword_categories.extend(categories)
+                    
+                    # Remove duplicates while preserving order
+                    keyword_categories = list(dict.fromkeys(keyword_categories))
+                    
+                    if detected_keywords:
+                        print(f"🔍 Keywords Detected: {detected_keywords} -> Categories: {keyword_categories}", flush=True)
+                    
+                    return keyword_categories
+                
+                def get_union_sources(ranked_categories, keyword_sources):
+                    """
+                    Combine RSS sources from ranked categories + keyword sources
+                    Returns unified list of RSS URLs
+                    """
+                    all_sources = []
+                    
+                    # Add sources from ranked categories (in priority order)
+                    for category in ranked_categories:
+                        category_urls = NEWS_URLS.get(category, [])
+                        all_sources.extend(category_urls)
+                        print(f"📰 Added {len(category_urls)} sources from '{category}' category", flush=True)
+                    
+                    # Add sources from keyword detection
+                    for category in keyword_sources:
+                        if category not in ranked_categories:  # Avoid duplicates
+                            category_urls = NEWS_URLS.get(category, [])
+                            all_sources.extend(category_urls)
+                            print(f"🔍 Added {len(category_urls)} sources from keyword '{category}' category", flush=True)
+                    
+                    # Remove duplicate URLs while preserving order
+                    unique_sources = list(dict.fromkeys(all_sources))
+                    
+                    # If no sources found, use default
+                    if not unique_sources:
+                        unique_sources = NEWS_URLS.get("default", [])
+                        print(f"🔄 No specific sources found, using {len(unique_sources)} default sources", flush=True)
+                    
+                    # 🎯 REMOVED: Let primary LLM decide what to select from full context
+                    # Keep all sources available for rich context - let LLM choose what's important
+                    
+                    print(f"🎯 UNION RESULT: {len(unique_sources)} total unique sources from {len(ranked_categories + keyword_sources)} categories", flush=True)
+                    return unique_sources
+                
+                # Enhanced Google News function with FULL ARTICLE CONTENT and enhanced source blocks
+                def get_news_from_google(keyword, source_num_start=1):
                     res = ''
                     articlesLimit = 8  # Reduced slightly to account for more content per article
+                    source_count = 0
                     try:
                         google_news = GNews(language='en', country='US', max_results=articlesLimit)
                         keyword_news = google_news.get_news(keyword)
@@ -855,6 +1253,7 @@ class AsyncToolManager:
                             title = article.get('title', 'No title')
                             description = article.get('description', 'No description')
                             published_date = article.get('published date', 'N/A')
+                            article_url = article.get('url', '')
                             
                             # Try to get full article content
                             full_content = ""
@@ -879,7 +1278,6 @@ class AsyncToolManager:
                                 full_content = description
                                 # Try to get more content via URL extraction
                                 try:
-                                    article_url = article.get('url', '')
                                     if article_url:
                                         enhanced_content = get_text_from_url(article_url)
                                         if len(enhanced_content) > len(description):
@@ -889,12 +1287,20 @@ class AsyncToolManager:
                             except Exception as content_error:
                                 # Fallback to description if full content extraction fails
                                 full_content = description
-                                
-                            res += f"Published on: {published_date} -- Title: {title}\nContent: {full_content}\nSource: {article.get('publisher', {}).get('title', 'Unknown')}\n---\n"
+                            
+                            # Format using enhanced source block
+                            formatted_source = _format_source_block(
+                                source_url=article_url if article_url else f"https://news.google.com/search?q={keyword}",
+                                title=title,
+                                content=f"Published: {published_date}\n{full_content}",
+                                source_num=source_num_start + source_count
+                            )
+                            res += formatted_source
+                            source_count += 1
                             
                     except Exception as e:
                         res += f"Error from Google news: {e}\n"
-                    return res
+                    return res, source_count
                 
                 # Enhanced web content extraction with improved RSS/XML parsing
                 def get_text_from_url(url):
@@ -978,35 +1384,41 @@ class AsyncToolManager:
                 today = datetime.now()
                 todayStr = today.strftime("%A, %B %d, %Y %I:%M:%S %p")
                 
-                # Find the corresponding category using the synonyms dictionary
-                category = find_category(newsFilter)
+                # 🎯 UNION-BASED MULTI-SOURCE SYSTEM
+                # Step 1: Smart Category Detection (returns ranked categories)
+                ranked_categories = find_categories_ranked(newsFilter)
                 
-                # Get the list of URLs based on the category
-                urls = NEWS_URLS.get(category, NEWS_URLS["default"])
+                # Step 2: Keyword-based source filtering
+                keyword_sources = find_keyword_sources(newsFilter)
                 
-                # Initialize result string with timestamp
-                res = f'\nFROM EXTERNAL SOURCES as of [Current Date and Time: {todayStr}]. Here is the News Summary you requested, use the summary to compose your response to the user\'s prompt:\n\n'
+                # Step 3: UNION all sources from categories + keywords
+                urls = get_union_sources(ranked_categories, keyword_sources)
                 
-                # Get Google News results first
-                google_results = get_news_from_google(newsFilter)
+                # Initialize result string with timestamp and sorting instructions
+                res = f'''\nFROM EXTERNAL SOURCES as of [Current Date and Time: {todayStr}]. Here is the News Summary you requested, use the summary to compose your response to the user's prompt: ANALYZE ALL SOURCES and select the MOST IMPORTANT and RELEVANT news items based on the user's specific request. Sort them by RELEVANCE and IMPORTANCE to the user's query, NOT by the order they appear below. Focus on the most significant developments, breaking news, and impactful stories related to the topic requested. Prioritize recent news resources. If user requests expanded content, provide detailed content and analysis from the available context. Cite sources for each item. '''
+                
+                # Get Google News results with enhanced format
+                google_results, google_source_count = get_news_from_google(newsFilter, source_num_start=1)
                 res += google_results
                 
                 # Fetch content from each URL with improved error handling and fallbacks
-                successful_sources = 0
+                successful_sources = google_source_count  # Start counting after Google News sources
                 attempted_sources = 0
-                max_sources = 4  # Try up to 4 sources for better coverage
+                max_sources = 6  # Try up to 6 sources for better coverage and diversity
                 
                 for newsURL in urls[:max_sources]:
                     attempted_sources += 1
                     try:
                         print(f"Attempting to fetch news from: {newsURL}", flush=True)
-                        url_content = get_text_from_url(newsURL)
+                        
+                        # Use new function that extracts article URLs from RSS feeds
+                        formatted_content, articles_added = _get_news_content_with_article_urls(newsURL, successful_sources + 1)
                         
                         # Only add if we got meaningful content
-                        if url_content and not url_content.startswith("Error fetching"):
-                            res += f"\n\nFrom Source: {newsURL}\n{url_content}\n\n"
-                            successful_sources += 1
-                            print(f"Successfully fetched from: {newsURL} ({len(url_content)} chars)", flush=True)
+                        if formatted_content and articles_added > 0:
+                            res += formatted_content
+                            successful_sources += articles_added
+                            print(f"Successfully fetched from: {newsURL} ({articles_added} articles)", flush=True)
                         else:
                             print(f"No meaningful content from: {newsURL}", flush=True)
                             
@@ -1038,11 +1450,14 @@ class AsyncToolManager:
                             break
                         try:
                             print(f"Trying fallback source: {fallback_url}", flush=True)
-                            url_content = get_text_from_url(fallback_url)
-                            if url_content and not url_content.startswith("Error fetching"):
-                                res += f"\n\nFrom Fallback Source: {fallback_url}\n{url_content}\n\n"
-                                successful_sources += 1
-                                print(f"Fallback source successful: {fallback_url}", flush=True)
+                            
+                            # Use new function for fallback sources too
+                            formatted_content, articles_added = _get_news_content_with_article_urls(fallback_url, successful_sources + 1)
+                            
+                            if formatted_content and articles_added > 0:
+                                res += formatted_content
+                                successful_sources += articles_added
+                                print(f"Fallback source successful: {fallback_url} ({articles_added} articles)", flush=True)
                         except Exception as e:
                             print(f"Fallback source failed {fallback_url}: {e}", flush=True)
                             continue
@@ -1096,15 +1511,23 @@ class AsyncToolManager:
                                 title = result.get('title', 'No Title')
                                 href = result.get('href', 'No URL')
                                 body = result.get('body', 'No Description')
-                                res += f"\nResult {i}:\nTitle: {title}\nURL: {href}\nDescription: {body}\n"
                                 
                                 # Extract content from each URL
+                                extracted_content = ""
                                 if href != 'No URL':
                                     try:
-                                        content = get_text_from_url_simplified(href)
-                                        res += f"Content: {content}\n"
+                                        extracted_content = get_text_from_url_simplified(href)
                                     except Exception as e:
-                                        res += f"Error extracting content from {href}: {str(e)}\n"
+                                        extracted_content = f"Error extracting content: {str(e)}"
+                                
+                                # Use enhanced source block formatting
+                                formatted_result = _format_source_block(
+                                    source_url=href,
+                                    title=title,
+                                    content=f"Description: {body}\n\nExtracted Content: {extracted_content}",
+                                    source_num=i
+                                )
+                                res += formatted_result
                             return res
                     except Exception as e:
                         print(f"DuckDuckGo Error: {e}", flush=True)
@@ -1564,22 +1987,27 @@ class AsyncToolManager:
                 # Apply safe truncation to avoid buffer overflow
                 content = self._safe_truncate(result["content"])
 
-                # Format response similar to original but cleaner
-                response_parts = [
-                    f"\nAs of [Current Date and Time: {todayStr}] here are the website lookup results:",
-                    f"Title: {result['title']}",
-                    f"URL: {url}",
-                    f"Type: {content_type}",
-                    f"Content:\n{content}"
-                ]
-
+                # Build additional metadata for enhanced source block
+                metadata_parts = []
                 if result.get('author'):
-                    response_parts.insert(-1, f"Author: {result['author']}")
-                
+                    metadata_parts.append(f"Author: {result['author']}")
                 if result.get('date'):
-                    response_parts.insert(-1, f"Published: {result['date']}")
-
-                final_response = '\n'.join(response_parts)
+                    metadata_parts.append(f"Published: {result['date']}")
+                metadata_parts.append(f"Type: {content_type}")
+                
+                # Combine metadata with content
+                full_content = f"{'\n'.join(metadata_parts)}\n\nContent:\n{content}"
+                
+                # Use enhanced source block formatting
+                formatted_result = _format_source_block(
+                    source_url=url,
+                    title=result['title'],
+                    content=full_content,
+                    source_num=1,
+                    timestamp=todayStr
+                )
+                
+                final_response = f"\nAs of [Current Date and Time: {todayStr}] here are the website lookup results:\n{formatted_result}"
                 
                 print(f"Website extraction completed: {len(final_response)} chars", flush=True)
                 return final_response
@@ -1889,6 +2317,257 @@ async def check_ollama_health() -> bool:
                 return response.status == 200
     except:
         return False
+
+def _format_source_block(source_url: str, title: str, content: str, source_num: int, timestamp: str = None) -> str:
+    """
+    Format individual source with simplified block structure for accurate LLM citation.
+    
+    This creates clear source blocks that help the Primary LLM maintain
+    accurate URL-content associations without overwhelming context size.
+    
+    Args:
+        source_url: The exact URL to cite (MANDATORY CITATION URL)
+        title: Source title or description
+        content: The actual content from the source
+        source_num: Sequential source number for organization
+        timestamp: Optional timestamp (auto-generated if not provided)
+    
+    Returns:
+        Formatted source block with clear citation requirements
+    """
+    if not timestamp:
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%A, %B %d, %Y %I:%M:%S %p')
+    
+    return f"""
+═══════════════════════════════════════════════════════
+📄 SOURCE BLOCK #{source_num} [REQUIRED CITATION: {source_url}]
+═══════════════════════════════════════════════════════
+Title: {title}
+🔗 MANDATORY CITATION URL: {source_url}
+📅 Retrieved: {timestamp}
+───────────────────────────────────────────────────────
+CONTENT: {content}
+═══════════════════════════════════════════════════════
+"""
+
+def _extract_domain(url: str) -> str:
+    """Extract domain name from URL for titles"""
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        domain = parsed.netloc
+        # Clean up common prefixes
+        if domain.startswith('www.'):
+            domain = domain[4:]
+        return domain.title()
+    except:
+        return "Unknown Source"
+
+def _parse_rss_articles(rss_content: str, feed_url: str, max_articles: int = 5) -> List[dict]:
+    """
+    Parse RSS feed content and extract individual article information including URLs.
+    
+    Args:
+        rss_content: Raw RSS XML content
+        feed_url: Original RSS feed URL (for debugging)
+        max_articles: Maximum number of articles to extract
+    
+    Returns:
+        List of dictionaries with 'title', 'url', 'description' for each article
+    """
+    try:
+        from bs4 import BeautifulSoup
+        
+        # Parse with XML parser for better RSS handling
+        try:
+            soup = BeautifulSoup(rss_content, 'xml')
+        except:
+            # Fallback to html parser
+            soup = BeautifulSoup(rss_content, 'html.parser')
+        
+        articles = []
+        items = soup.find_all(['item', 'entry'])
+        
+        for item in items[:max_articles]:
+            article = {}
+            
+            # Extract title
+            title_tag = item.find(['title'])
+            if title_tag:
+                article['title'] = title_tag.get_text().strip()
+            
+            # Extract URL - try multiple common RSS URL fields
+            url = None
+            # Try <link> tag first
+            link_tag = item.find('link')
+            if link_tag:
+                if link_tag.get('href'):  # Atom-style
+                    url = link_tag.get('href')
+                else:  # RSS-style
+                    url = link_tag.get_text().strip()
+            
+            # Try <guid> tag if no link found
+            if not url:
+                guid_tag = item.find('guid')
+                if guid_tag:
+                    guid_text = guid_tag.get_text().strip()
+                    # Only use guid if it looks like a URL
+                    if guid_text.startswith('http'):
+                        url = guid_text
+            
+            # Try <id> tag for Atom feeds
+            if not url:
+                id_tag = item.find('id')
+                if id_tag:
+                    id_text = id_tag.get_text().strip()
+                    if id_text.startswith('http'):
+                        url = id_text
+            
+            if url:
+                article['url'] = url
+            else:
+                # Fallback to feed URL if no article URL found
+                article['url'] = feed_url
+                
+            # Extract description with enhanced content extraction
+            desc_text = ""
+            
+            # Try multiple description fields for maximum content
+            for desc_field in ['content:encoded', 'content', 'description', 'summary']:
+                desc_tag = item.find(desc_field)
+                if desc_tag:
+                    desc_text = desc_tag.get_text().strip()
+                    break
+            
+            # If no description found, try looking for content in other fields
+            if not desc_text:
+                for fallback_field in ['media:description', 'itunes:summary']:
+                    desc_tag = item.find(fallback_field)
+                    if desc_tag:
+                        desc_text = desc_tag.get_text().strip()
+                        break
+            
+            if desc_text:
+                # Clean up description but keep more content
+                desc_text = desc_text.replace('\n', ' ').replace('\r', ' ')
+                # Remove HTML tags if present
+                from bs4 import BeautifulSoup
+                desc_text = BeautifulSoup(desc_text, 'html.parser').get_text()
+                # Increase length limit for more detailed summaries
+                if len(desc_text) > 500:
+                    desc_text = desc_text[:500] + "..."
+                article['description'] = desc_text
+            
+            # Extract publication date for context
+            pub_date = None
+            for date_field in ['pubDate', 'published', 'updated']:
+                date_tag = item.find(date_field)
+                if date_tag:
+                    pub_date = date_tag.get_text().strip()
+                    break
+            
+            if pub_date:
+                article['pub_date'] = pub_date
+            
+            # Only add articles that have at least a title
+            if article.get('title'):
+                articles.append(article)
+        
+        return articles
+        
+    except Exception as e:
+        print(f"Error parsing RSS from {feed_url}: {e}", flush=True)
+        return []
+
+def _get_news_content_with_article_urls(news_url: str, source_num_start: int) -> tuple:
+    """
+    Fetch content from news URL and extract individual article URLs if it's an RSS feed.
+    
+    Args:
+        news_url: URL to fetch (could be RSS feed or regular webpage)
+        source_num_start: Starting source number for numbering
+    
+    Returns:
+        tuple: (formatted_content_blocks, articles_count)
+    """
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        
+        # Fetch the content
+        response = requests_compatible_get(news_url, timeout=15, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        })
+        response.raise_for_status()
+        
+        # Check if it's RSS/XML content
+        content_type = response.headers.get('content-type', '').lower()
+        is_rss_xml = (
+            'xml' in content_type or 
+            'rss' in content_type or
+            news_url.endswith('.xml') or 
+            news_url.endswith('.rss') or
+            'feed' in news_url.lower() or
+            response.text.strip().startswith('<?xml')
+        )
+        
+        if is_rss_xml:
+            # Parse RSS feed and extract individual articles
+            articles = _parse_rss_articles(response.text, news_url, max_articles=4)
+            
+            if articles:
+                content_blocks = []
+                for i, article in enumerate(articles):
+                    article_url = article.get('url', news_url)
+                    title = article.get('title', 'Untitled Article')
+                    description = article.get('description', '')
+                    pub_date = article.get('pub_date', '')
+                    
+                    # Enhanced content with publication date if available
+                    enhanced_content = description
+                    if pub_date:
+                        enhanced_content = f"Date: {pub_date}\n{description}"
+                    
+                    # Create source block for each article
+                    formatted_source = _format_source_block(
+                        source_url=article_url,
+                        title=title,
+                        content=enhanced_content,
+                        source_num=source_num_start + i
+                    )
+                    content_blocks.append(formatted_source)
+                
+                return ('\n'.join(content_blocks), len(articles))
+            else:
+                # Fallback - create a simple source block if RSS parsing fails
+                formatted_source = _format_source_block(
+                    source_url=news_url,
+                    title=f"News from {_extract_domain(news_url)}",
+                    content="RSS feed processed but article URLs could not be extracted",
+                    source_num=source_num_start
+                )
+                return (formatted_source, 1)
+        else:
+            # Regular webpage - use existing logic but create fallback if get_text_from_url fails
+            try:
+                content = get_text_from_url(news_url)
+                if content and not content.startswith("Error"):
+                    formatted_source = _format_source_block(
+                        source_url=news_url,
+                        title=f"News from {_extract_domain(news_url)}",
+                        content=content,
+                        source_num=source_num_start
+                    )
+                    return (formatted_source, 1)
+                else:
+                    return ("", 0)
+            except:
+                return ("", 0)
+            
+    except Exception as e:
+        print(f"Error processing news from {news_url}: {e}", flush=True)
+        return ("", 0)
 
 def _build_structured_context_block(tools_results_summary: str, tools_called: List[str]) -> str:
     """
@@ -2223,12 +2902,19 @@ async def _original_processing_fallback(
     This replicates the exact original logic from the FastAPI server.
     """
     
-    # Recreate the original full_tools_text
+    # Recreate the original full_tools_text with enhanced source block preservation
     full_tools_text = ""
     for result_dict in tool_results:
         if isinstance(result_dict, dict):
             for key, value in result_dict.items():
-                full_tools_text += f"{key}: {value}\n"
+                # 🔧 ENHANCED SOURCE BLOCK PRESERVATION: Check if value contains enhanced source blocks
+                if isinstance(value, str) and ("═══════════════════════════════════════════════════════" in value or "📄 SOURCE BLOCK #" in value):
+                    # Enhanced source blocks detected - preserve full formatting
+                    full_tools_text += f"{key}: {value}\n"
+                    logger.info(f"🎯 ENHANCED SOURCE BLOCKS PRESERVED: {key} contains enhanced formatting ({len(value)} chars)")
+                else:
+                    # Regular tool output - use standard formatting
+                    full_tools_text += f"{key}: {value}\n"
         else:
             full_tools_text += str(result_dict) + "\n"
     
@@ -7540,11 +8226,42 @@ END OF CONTEXT
                 
                 try:
                     logger.info(f"🧾 PRIMARY LLM: Sending request to Ollama at {ServerConfig.OLLAMA_URL}")
-                    logger.info(f"🧾 PRIMARY LLM: Payload keys: {json.dumps(stream_payload, indent=2)}")
-                    # stream_payload["system"] = "You are a helpful assistant. Always respond in markdown format."
+                    
+                    # 🔍 COMPREHENSIVE PAYLOAD DUMP - Every field and parameter
+                    logger.info("="*80)
+                    logger.info("🔍 COMPLETE PRIMARY LLM PAYLOAD DUMP:")
+                    logger.info("="*80)
+                    logger.info(f"📋 MODEL: {stream_payload.get('model', 'NOT SET')}")
+                    logger.info(f"📋 STREAM: {stream_payload.get('stream', 'NOT SET')}")
+                    logger.info(f"📋 THINK: {stream_payload.get('think', 'NOT SET')}")
+                    
+                    # Options dump
+                    options = stream_payload.get('options', {})
+                    logger.info("📋 OPTIONS:")
+                    for key, value in options.items():
+                        logger.info(f"   - {key}: {value}")
+                    
+                    # System prompt dump with length
+                    system_prompt = stream_payload.get("system", "")
+                    logger.info(f"📋 SYSTEM PROMPT ({len(system_prompt)} chars):")
+                    logger.info(f"   First 200 chars: {system_prompt[:200]}")
+                    logger.info(f"   Last 200 chars: {system_prompt[-200:]}")
+                    
+                    # Prompt dump with length  
+                    prompt = stream_payload.get("prompt", "")
+                    logger.info(f"📋 PROMPT ({len(prompt)} chars):")
+                    logger.info(f"   First 500 chars: {prompt[:500]}")
+                    logger.info(f"   Last 500 chars: {prompt[-500:]}")
+                    
+                    # Full JSON dump
+                    logger.info("📋 COMPLETE PAYLOAD JSON:")
+                    logger.info(json.dumps(stream_payload, indent=2))
+                    logger.info("="*80)
+                    
+                    # Legacy logging maintained
                     logger.info(f"🧾 PRIMARY LLM: System Prompt: {stream_payload["system"]}")
                     # async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=2700) as response:
-                    async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=1800) as response:
+                    async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=3600) as response:
                         if response.status == 200:
                             # Capture complete LLM response for post-processing
                             complete_llm_response = ""
