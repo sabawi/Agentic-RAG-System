@@ -259,7 +259,7 @@ logging.basicConfig(
     level=log_level,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('fastapi_complete.log'),
+        logging.FileHandler('logs/fastapi_complete.log'),
         logging.StreamHandler(sys.stdout)
     ]
 )

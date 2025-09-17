@@ -50,14 +50,14 @@ fi
 
 # Start server with optimized environment variables
 echo "🔧 Starting server with optimizations: Performance ✅ Streamlined Logging ✅ API Control ✅"
-nohup env $ENV_VARS python3 fastapi_server_complete.py > server_complete.log 2>&1 &
+nohup env $ENV_VARS python3 fastapi_server_complete.py > logs/server_complete.log 2>&1 &
 
 # Get the PID
 SERVER_PID=$!
-echo $SERVER_PID > server_complete.pid
+echo $SERVER_PID > runtime/server_complete.pid
 
 echo "✅ Server started with PID: $SERVER_PID"
-echo "📋 Logs: tail -f server_complete.log"
+echo "📋 Logs: tail -f logs/server_complete.log"
 echo "🛑 Stop: ./stop_complete.sh"
 echo "🌐 Server: http://localhost:5000"
 echo "📚 API Docs: http://localhost:5000/docs"
@@ -90,11 +90,11 @@ if ps -p $SERVER_PID > /dev/null; then
     echo ""
     
     echo "📊 Monitor logs in real-time:"
-    echo "   tail -f server_complete.log                    # All logs"
-    echo "   tail -f server_complete.log | grep -E 'TOOL.*:.*chars'  # Tool summaries only"
-    echo "   tail -f server_complete.log | grep -E '🎯.*chars'       # Context summaries only"
+    echo "   tail -f logs/server_complete.log                    # All logs"
+    echo "   tail -f logs/server_complete.log | grep -E 'TOOL.*:.*chars'  # Tool summaries only"
+    echo "   tail -f logs/server_complete.log | grep -E '🎯.*chars'       # Context summaries only"
 else
-    echo "❌ Server failed to start. Check server_complete.log for details."
+    echo "❌ Server failed to start. Check logs/server_complete.log for details."
     echo "Last 10 lines of log:"
-    tail -10 server_complete.log 2>/dev/null || echo "No log file found"
+    tail -10 logs/server_complete.log 2>/dev/null || echo "No log file found"
 fi

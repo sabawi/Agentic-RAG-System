@@ -4,8 +4,8 @@
 cd "$(dirname "$0")"
 
 # Check if PID file exists
-if [ ! -f "server_complete.pid" ]; then
-    echo "❌ No PID file found (server_complete.pid)"
+if [ ! -f "runtime/server_complete.pid" ]; then
+    echo "❌ No PID file found (runtime/server_complete.pid)"
     echo "Checking for running processes..."
     
     # Try to find and kill any running server processes
@@ -30,7 +30,7 @@ if [ ! -f "server_complete.pid" ]; then
 fi
 
 # Read PID from file
-SERVER_PID=$(cat server_complete.pid)
+SERVER_PID=$(cat runtime/server_complete.pid)
 
 echo "🛑 Stopping FastAPI Complete Server (PID: $SERVER_PID)..."
 
@@ -61,6 +61,6 @@ else
 fi
 
 # Clean up PID file
-rm -f server_complete.pid
+rm -f runtime/server_complete.pid
 
 echo "🧹 Cleanup complete"

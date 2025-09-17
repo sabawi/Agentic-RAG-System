@@ -3,7 +3,7 @@
 # Monitor server logs
 cd "$(dirname "$0")"
 
-LOG_FILE="server_complete.log"
+LOG_FILE="logs/server_complete.log"
 
 if [ ! -f "$LOG_FILE" ]; then
     echo "❌ Log file not found: $LOG_FILE"
