@@ -10,8 +10,10 @@ from pathlib import Path
 
 try:
     from .base_user_tool import BaseUserTool
+    from .citation_mastery import format_multiple_sources
 except ImportError:
     from base_user_tool import BaseUserTool
+    from citation_mastery import format_multiple_sources
 
 logger = logging.getLogger(__name__)
 
@@ -120,57 +122,46 @@ class DocumentSearchTool(BaseUserTool):
                     "error": None
                 }
             
-            # Format results
-            result_parts = [
-                f"📚 Found {chunks_found} relevant document chunks for: '{query}'",
-                "",
-                "📄 Document Excerpts:"
-            ]
-            
+            # 🎯 FORMAT RESULTS WITH CITATION MASTERY
             chunks = search_results.get('chunks', [])
             
-            for i, chunk in enumerate(chunks):
+            # Convert chunks to Citation Mastery format
+            sources_data = []
+            for chunk in chunks:
                 doc_path = chunk.get('document_path', 'Unknown')
                 doc_name = Path(doc_path).name if doc_path != 'Unknown' else 'Unknown Document'
                 content = chunk.get('content', '')
                 similarity_score = chunk.get('similarity', 0)
                 
-                result_parts.extend([
-                    f"\n--- Document {i+1}: {doc_name} (Score: {similarity_score:.3f}) ---",
-                    content[:500] + ("..." if len(content) > 500 else "")
-                ])
+                # Create file:// URL for local documents
+                file_url = f"file://{doc_path}" if doc_path != 'Unknown' else None
+                
+                sources_data.append({
+                    "url": file_url,
+                    "title": f"{doc_name} (Score: {similarity_score:.3f})",
+                    "content": content
+                })
             
-            # Add sources summary
-            unique_docs = set()
-            for chunk in chunks:
-                doc_path = chunk.get('document_path', 'Unknown')
-                if doc_path != 'Unknown':
-                    unique_docs.add(Path(doc_path).name)
+            # Use Citation Mastery formatting
+            formatted_result = format_multiple_sources(sources_data)
             
-            if unique_docs:
-                result_parts.extend([
-                    "",
-                    "📋 Sources:",
-                    *[f"• {doc}" for doc in sorted(unique_docs)]
-                ])
+            # Add header and summary
+            header = f"📚 Found {chunks_found} relevant document chunks for: '{query}'\n\n"
             
-            # 🔧 CRITICAL FIX: Add full file paths for email attachment system
+            # Add file paths for attachment system
             unique_paths = set()
             for chunk in chunks:
                 doc_path = chunk.get('document_path', 'Unknown')
                 if doc_path != 'Unknown':
                     unique_paths.add(doc_path)
             
+            footer = ""
             if unique_paths:
-                result_parts.extend([
-                    "",
-                    "📎 Full File Paths (for attachments):",
-                    *[f"• {path}" for path in sorted(unique_paths)]
-                ])
+                footer = "\n\n📎 Full File Paths (for attachments):\n" + "\n".join([f"• {path}" for path in sorted(unique_paths)])
             
             return {
                 "success": True,
-                "result": "\n".join(result_parts),
+                "result": header + formatted_result + footer,
                 "error": None
             }
             
@@ -230,24 +221,26 @@ class DocumentSearchTool(BaseUserTool):
                         rows = cursor.fetchall()
                         
                         if rows:
-                            # Format results similar to semantic search
-                            result_parts = [
-                                f"📚 Found {len(rows)} document chunks by filename match: '{filename}'",
-                                "",
-                                "📄 Document Content:"
-                            ]
-                            
-                            for i, (doc_path, content) in enumerate(rows):
+                            # 🎯 FORMAT FILENAME RESULTS WITH CITATION MASTERY
+                            sources_data = []
+                            for doc_path, content in rows:
                                 doc_name = Path(doc_path).name
-                                result_parts.extend([
-                                    f"\\n--- Document {i+1}: {doc_name} (Filename Match) ---",
-                                    content[:500] + ("..." if len(content) > 500 else "")
-                                ])
+                                file_url = f"file://{doc_path}"
+                                
+                                sources_data.append({
+                                    "url": file_url,
+                                    "title": f"{doc_name} (Filename Match)",
+                                    "content": content
+                                })
+                            
+                            # Use Citation Mastery formatting
+                            formatted_result = format_multiple_sources(sources_data)
+                            header = f"📚 Found {len(rows)} document chunks by filename match: '{filename}'\n\n"
                             
                             logger.info(f"✅ Filename lookup successful for: {filename}")
                             return {
                                 "success": True,
-                                "result": "\\n".join(result_parts),
+                                "result": header + formatted_result,
                                 "error": None
                             }
             
@@ -299,28 +292,31 @@ class DocumentSearchTool(BaseUserTool):
                 search_results = await interrogator.search_documents(term, max_results)
                 
                 if search_results.get('chunks_found', 0) > 0:
-                    # Found results with this term
+                    # 🎯 FORMAT FALLBACK RESULTS WITH CITATION MASTERY
                     chunks = search_results.get('chunks', [])
-                    result_parts = [
-                        f"📚 Found {len(chunks)} documents using search term: '{term}' (extracted from your query)",
-                        "",
-                        "📄 Document Excerpts:"
-                    ]
+                    sources_data = []
                     
-                    for i, chunk in enumerate(chunks):
+                    for chunk in chunks:
                         doc_path = chunk.get('document_path', 'Unknown')
                         doc_name = Path(doc_path).name if doc_path != 'Unknown' else 'Unknown Document'
                         content = chunk.get('content', '')
                         
-                        result_parts.extend([
-                            f"\\n--- Document {i+1}: {doc_name} (Term Match: '{term}') ---",
-                            content[:500] + ("..." if len(content) > 500 else "")
-                        ])
+                        file_url = f"file://{doc_path}" if doc_path != 'Unknown' else None
+                        
+                        sources_data.append({
+                            "url": file_url,
+                            "title": f"{doc_name} (Term Match: '{term}')",
+                            "content": content
+                        })
+                    
+                    # Use Citation Mastery formatting
+                    formatted_result = format_multiple_sources(sources_data)
+                    header = f"📚 Found {len(chunks)} documents using search term: '{term}' (extracted from your query)\n\n"
                     
                     logger.info(f"✅ Fallback search successful with term: {term}")
                     return {
                         "success": True,
-                        "result": "\\n".join(result_parts),
+                        "result": header + formatted_result,
                         "error": None
                     }
             
