@@ -423,6 +423,19 @@ setup_environment() {
     setup_rag_documents() {
         log_step "Setting up RAG Documents directory"
         
+        # Create required project directories
+        log_step "Creating required project directories"
+        
+        # Create directories for organized file structure
+        PROJECT_DIRS=("logs" "runtime" "tests/results")
+        for dir in "${PROJECT_DIRS[@]}"; do
+            if [ ! -d "$dir" ]; then
+                execute_command "mkdir -p \"$dir\"" "Creating directory: $dir"
+            else
+                log_success "Directory already exists: $dir"
+            fi
+        done
+        
         # Create user RAG documents directory in home directory
         USER_RAG_DIR="$HOME/Agentic_RAG_Documents"
         if [ ! -d "$USER_RAG_DIR" ]; then
