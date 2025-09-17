@@ -27,8 +27,10 @@ except ImportError:
 
 try:
     from .base_user_tool import BaseUserTool
+    from .citation_mastery import format_source_block, extract_domain
 except ImportError:
     from base_user_tool import BaseUserTool
+    from citation_mastery import format_source_block, extract_domain
 
 logger = logging.getLogger(__name__)
 
@@ -222,15 +224,92 @@ class PublishedPapersSearchTool(BaseUserTool):
         return all_papers
     
     def _format_final_results(self, papers: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Format final results for the LLM"""
+        """Format final results using Citation Mastery for LLM accuracy"""
+        if not papers:
+            return {
+                "success": True,
+                "result": "No research papers found for the given query.",
+                "error": None
+            }
+        
+        # Format papers using Citation Mastery
+        formatted_blocks = []
+        for i, paper in enumerate(papers, 1):
+            # Create comprehensive content for each paper
+            content_parts = []
+            
+            # Add title and authors
+            if paper.get("title"):
+                content_parts.append(f"Title: {paper['title']}")
+            
+            if paper.get("authors"):
+                authors = paper["authors"]
+                if isinstance(authors, list):
+                    authors = ", ".join(authors)
+                content_parts.append(f"Authors: {authors}")
+            
+            # Add publication info
+            if paper.get("published"):
+                content_parts.append(f"Published: {paper['published']}")
+            if paper.get("year"):
+                content_parts.append(f"Year: {paper['year']}")
+            if paper.get("source"):
+                content_parts.append(f"Source Database: {paper['source']}")
+            
+            # Add abstract
+            if paper.get("abstract"):
+                content_parts.append(f"Abstract: {paper['abstract']}")
+            
+            # Add DOI and PDF links if available
+            if paper.get("doi"):
+                content_parts.append(f"DOI: {paper['doi']}")
+            if paper.get("pdf_link"):
+                content_parts.append(f"PDF: {paper['pdf_link']}")
+            
+            # Get URL for citation (required for Citation Mastery)
+            source_url = paper.get("url")
+            if not source_url:
+                # Fallback to PDF link or DOI if no direct URL
+                source_url = paper.get("pdf_link") or (f"https://doi.org/{paper['doi']}" if paper.get("doi") else None)
+            
+            if source_url:  # Only include papers with valid citation URLs
+                title = paper.get("title", f"Research Paper {i}")
+                content = "\n".join(content_parts)
+                
+                formatted_block = format_source_block(
+                    source_url=source_url,
+                    title=title,
+                    content=content,
+                    source_num=i
+                )
+                formatted_blocks.append(formatted_block)
+        
+        if not formatted_blocks:
+            return {
+                "success": True,
+                "result": "No papers found with valid citation URLs.",
+                "error": None
+            }
+        
+        # Combine all formatted blocks
+        combined_result = "\n".join(formatted_blocks)
+        
+        # Add summary header
+        sources_searched = list(set(paper.get("source", "Unknown") for paper in papers))
+        summary_header = f"""
+🔬 ACADEMIC RESEARCH PAPERS SEARCH RESULTS
+═══════════════════════════════════════════════════════
+Total Papers Found: {len(formatted_blocks)}
+Sources Searched: {', '.join(sources_searched)}
+Search Timestamp: {datetime.now().strftime('%A, %B %d, %Y %I:%M:%S %p')}
+═══════════════════════════════════════════════════════
+"""
+        
+        final_result = summary_header + combined_result
+        
         return {
             "success": True,
-            "result": {
-                "total_papers": len(papers),
-                "papers": papers,
-                "search_timestamp": datetime.now().isoformat(),
-                "sources_searched": list(set(paper.get("source", "Unknown") for paper in papers))
-            },
+            "result": final_result,
             "error": None
         }
     
@@ -300,12 +379,16 @@ class PublishedPapersSearchTool(BaseUserTool):
             if len(abstract) > 200:
                 abstract = abstract[:200] + "..."
             
+            # Create URL for citation
+            arxiv_url = f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else None
+            
             return {
                 "source": "arXiv",
                 "title": title,
                 "authors": authors,
                 "published": published,
                 "arxiv_id": arxiv_id,
+                "url": arxiv_url,  # Added for Citation Mastery
                 "pdf_link": pdf_link,
                 "abstract": abstract
             }
@@ -349,15 +432,20 @@ class PublishedPapersSearchTool(BaseUserTool):
             if abstract and len(abstract) > 200:
                 abstract = abstract[:200] + "..."
             
+            # Create URL for citation
+            paper_id = paper.get("paperId")
+            semantic_url = f"https://www.semanticscholar.org/paper/{paper_id}" if paper_id else None
+            
             results.append({
                 "source": "Semantic Scholar",
                 "title": paper.get("title", "No title"),
                 "authors": authors,
                 "year": paper.get("year"),
                 "published": paper.get("publicationDate", "Unknown"),
+                "url": semantic_url,  # Added for Citation Mastery
                 "abstract": abstract or "No abstract",
                 "pdf_link": pdf_link,
-                "paper_id": paper.get("paperId")
+                "paper_id": paper_id
             })
         
         return results
@@ -466,15 +554,25 @@ class PublishedPapersSearchTool(BaseUserTool):
             
             authors = article.get("authorString", "").split(", ") if article.get("authorString") else []
             
+            # Create URL for citation
+            pmcid = article.get("pmcid")
+            doi = article.get("doi")
+            europe_url = None
+            if pmcid:
+                europe_url = f"https://europepmc.org/article/MED/{pmcid}"
+            elif doi:
+                europe_url = f"https://doi.org/{doi}"
+            
             results.append({
                 "source": "Europe PMC",
                 "title": article.get("title", "No title"),
                 "authors": authors,
                 "published": article.get("firstPublicationDate"),
+                "url": europe_url,  # Added for Citation Mastery
                 "abstract": abstract or "No abstract",
                 "pdf_link": pdf_link,
-                "pmcid": article.get("pmcid"),
-                "doi": article.get("doi")
+                "pmcid": pmcid,
+                "doi": doi
             })
         
         return results
@@ -582,13 +680,18 @@ class PublishedPapersSearchTool(BaseUserTool):
                 if abstract_text and len(abstract_text) > 200:
                     abstract_text = abstract_text[:200] + "..."
                 
+                # Create URL for citation
+                doi = article.get("doi")
+                biorxiv_url = f"https://www.biorxiv.org/content/{doi}" if doi else None
+                
                 results.append({
                     "source": "bioRxiv/medRxiv",
                     "title": article.get("title", "No title"),
                     "authors": article.get("authors", "Unknown authors"),
                     "published": article.get("date"),
-                    "doi": article.get("doi"),
-                    "pdf_link": f"https://www.biorxiv.org/content/{article.get('doi', '')}.full.pdf",
+                    "url": biorxiv_url,  # Added for Citation Mastery
+                    "doi": doi,
+                    "pdf_link": f"https://www.biorxiv.org/content/{doi}.full.pdf" if doi else None,
                     "abstract": abstract_text or "No abstract"
                 })
         
