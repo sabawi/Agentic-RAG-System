@@ -280,6 +280,17 @@ setup_project_directory() {
         
         # Capture new version after upgrade
         TO_VERSION=$(get_current_version)
+        
+        # Ensure required directories exist for upgraded installations
+        log_step "Ensuring required directories exist"
+        PROJECT_DIRS=("logs" "runtime" "tests/results")
+        for dir in "${PROJECT_DIRS[@]}"; do
+            if [ ! -d "$dir" ]; then
+                execute_command "mkdir -p \"$dir\"" "Creating directory: $dir"
+            else
+                log_success "Directory already exists: $dir"
+            fi
+        done
     else
         # Fresh installation
         log_step "Setting up project directory"
