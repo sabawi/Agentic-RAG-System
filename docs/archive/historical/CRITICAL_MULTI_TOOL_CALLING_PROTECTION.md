@@ -81,7 +81,7 @@ curl -X POST http://localhost:5000/llama3_1b/stream -H "Content-Type: applicatio
 curl -X POST http://localhost:5000/llama3_1b/stream -H "Content-Type: application/json" -d '{"prompt": "Get current time, search for Apple stock data, look up Apple company info on Wikipedia, and get recent tech news", "model": "llama3.2:3b", "tools_calling_model": "qwen3:8b", "stream": false}' 2>/dev/null | head -10
 
 # Check logs for tool call count
-grep "TOOL CALLS DETECTED" /home/sabawi/Development/flaskserver/server_complete.log | tail -3
+grep "TOOL CALLS DETECTED" /home/sabawi/Development/flaskserver/logs/server_complete.log | tail -3
 ```
 
 **EXPECTED RESULTS:** 

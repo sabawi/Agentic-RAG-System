@@ -52,7 +52,7 @@ curl -X POST "http://localhost:5000/llama3_1b/prompt" \
 **Debugging**:
 - Check Ollama service: `ollama ps`
 - Verify model availability: `ollama list`
-- View server logs: `tail -f server_complete.log`
+- View server logs: `tail -f logs/server_complete.log`
 
 ---
 
@@ -660,7 +660,7 @@ curl -X POST "http://localhost:5000/documents/search" \
   }'
 
 # Check server logs for embedding errors
-tail -f server_complete.log | grep -i embed
+tail -f logs/server_complete.log | grep -i embed
 ```
 
 **Common Solutions**:
@@ -889,4 +889,4 @@ export TESSDATA_PREFIX="/usr/share/tesseract-ocr/4.00/tessdata/"
 
 ---
 
-This completes the comprehensive API reference. For additional support, check the troubleshooting section or review server logs at `server_complete.log`.
+This completes the comprehensive API reference. For additional support, check the troubleshooting section or review server logs at `logs/server_complete.log`.

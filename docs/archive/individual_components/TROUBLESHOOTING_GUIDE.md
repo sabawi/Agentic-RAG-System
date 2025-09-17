@@ -35,7 +35,7 @@ ps aux | grep fastapi_server_complete.py
 netstat -tlnp | grep :5000
 
 # Check server logs
-tail -f server_complete.log
+tail -f logs/server_complete.log
 ```
 
 **Solutions:**
@@ -144,7 +144,7 @@ curl -X POST "http://localhost:5000/llama3_1b/stream" \
   }'
 
 # Check server logs for tool errors
-tail -f server_complete.log | grep -i tool
+tail -f logs/server_complete.log | grep -i tool
 ```
 
 **Solutions:**
@@ -161,7 +161,7 @@ cat pre_tool_model_system_prompt.txt | head -10
 ./start_complete.sh
 
 # Check tool initialization in logs
-tail -f server_complete.log | grep -i "tool.*loaded"
+tail -f logs/server_complete.log | grep -i "tool.*loaded"
 ```
 
 **C. Test individual tools:**
@@ -348,7 +348,7 @@ curl -X POST "http://localhost:5000/documents/index-directory" \
   }'
 
 # Check document processing logs
-tail -f server_complete.log | grep -i "processing\|document\|pdf"
+tail -f logs/server_complete.log | grep -i "processing\|document\|pdf"
 ```
 
 **Solutions:**
@@ -581,23 +581,23 @@ curl -X POST "http://localhost:5000/documents/index-directory" \
 ### Log Analysis
 
 **Key log locations:**
-- **Main server**: `server_complete.log`
+- **Main server**: `logs/server_complete.log`
 - **Ollama service**: `sudo journalctl -u ollama -f`
 - **System logs**: `/var/log/syslog`
 
 **Important log patterns to search for:**
 ```bash
 # Errors
-grep -i "error\|failed\|exception" server_complete.log
+grep -i "error\|failed\|exception" logs/server_complete.log
 
 # Tool calling issues
-grep -i "tool.*call\|tool.*error" server_complete.log
+grep -i "tool.*call\|tool.*error" logs/server_complete.log
 
 # Performance issues
-grep -i "timeout\|slow\|memory" server_complete.log
+grep -i "timeout\|slow\|memory" logs/server_complete.log
 
 # Embedding issues  
-grep -i "embed\|faiss\|document" server_complete.log
+grep -i "embed\|faiss\|document" logs/server_complete.log
 ```
 
 ### Performance Profiling
@@ -635,7 +635,7 @@ When reporting issues, include:
 
 3. **Recent logs:**
    ```bash
-   tail -100 server_complete.log > recent_logs.txt
+   tail -100 logs/server_complete.log > recent_logs.txt
    ```
 
 4. **Configuration:**

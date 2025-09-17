@@ -415,7 +415,7 @@ cd testing/
 
 #### Key Log Locations
 
-- **Main Server**: `server_complete.log`
+- **Main Server**: `logs/server_complete.log`
 - **Ollama Service**: `sudo journalctl -u ollama -f`
 - **System Service**: `sudo journalctl -u agentic-rag-server -f`
 - **System Logs**: `/var/log/syslog`
@@ -424,19 +424,19 @@ cd testing/
 
 ```bash
 # Real-time server logs
-tail -f server_complete.log
+tail -f logs/server_complete.log
 
 # Filter for errors
-grep -i "error\|failed\|exception" server_complete.log
+grep -i "error\|failed\|exception" logs/server_complete.log
 
 # Monitor tool calling
-tail -f server_complete.log | grep -i "tool.*call\|tool.*error"
+tail -f logs/server_complete.log | grep -i "tool.*call\|tool.*error"
 
 # Performance monitoring
-tail -f server_complete.log | grep -i "timeout\|slow\|memory"
+tail -f logs/server_complete.log | grep -i "timeout\|slow\|memory"
 
 # Embedding service logs
-tail -f server_complete.log | grep -i "embed\|faiss\|document"
+tail -f logs/server_complete.log | grep -i "embed\|faiss\|document"
 ```
 
 ---
@@ -619,7 +619,7 @@ curl -X POST "http://localhost:5000/documents/index-directory" \
 
 ```bash
 # Watch server logs during processing
-tail -f server_complete.log | grep -E "(Processing|Embedding|FAISS|document)"
+tail -f logs/server_complete.log | grep -E "(Processing|Embedding|FAISS|document)"
 ```
 
 **Expected Log Flow**:
@@ -831,7 +831,7 @@ else:
 
 ```bash
 # Monitor scanning activity
-tail -f server_complete.log | grep -E "(Safe scan|Periodic scan)"
+tail -f logs/server_complete.log | grep -E "(Safe scan|Periodic scan)"
 
 # Startup Scanning
 🔍 Safe scan: Starting scan of 2 configured directories
@@ -884,7 +884,7 @@ tail -f server_complete.log | grep -E "(Safe scan|Periodic scan)"
 cat watched_directories.json
 
 # Monitor scanning activity
-tail -f server_complete.log | grep -E "(Safe scan|Periodic scan)"
+tail -f logs/server_complete.log | grep -E "(Safe scan|Periodic scan)"
 
 # Check database records
 sqlite3 document_store/metadata.db "SELECT COUNT(*) FROM documents;"
@@ -980,7 +980,7 @@ chmod 600 email_config.json
 chmod 700 /secure/path/
 
 # Monitor email sending
-tail -f server_complete.log | grep -i "email\|smtp"
+tail -f logs/server_complete.log | grep -i "email\|smtp"
 ```
 
 #### Testing Email Configuration
@@ -1069,7 +1069,7 @@ chmod 755 /path/to/documents/
 chmod 644 /path/to/documents/*
 
 # Monitor document access
-tail -f server_complete.log | grep -E "(Processing|document)"
+tail -f logs/server_complete.log | grep -E "(Processing|document)"
 ```
 
 ---
@@ -1109,7 +1109,7 @@ ps aux | grep fastapi_server_complete.py
 netstat -tlnp | grep :5000
 
 # Check server logs
-tail -f server_complete.log
+tail -f logs/server_complete.log
 ```
 
 **Solutions**:
@@ -1204,7 +1204,7 @@ curl -X POST "http://localhost:5000/v1/chat/completions" \
   }'
 
 # Check server logs for tool errors
-tail -f server_complete.log | grep -i tool
+tail -f logs/server_complete.log | grep -i tool
 ```
 
 **Solutions**:
@@ -1221,7 +1221,7 @@ cat pre_tool_model_system_prompt.txt | head -10
 ./start_complete.sh
 
 # Check tool initialization in logs
-tail -f server_complete.log | grep -i "tool.*loaded"
+tail -f logs/server_complete.log | grep -i "tool.*loaded"
 ```
 
 #### 4. Document Processing Failures
@@ -1242,7 +1242,7 @@ curl -X POST "http://localhost:5000/documents/index-directory" \
   }'
 
 # Check document processing logs
-tail -f server_complete.log | grep -i "processing\|document\|pdf"
+tail -f logs/server_complete.log | grep -i "processing\|document\|pdf"
 ```
 
 **Solutions**:
@@ -1527,7 +1527,7 @@ echo "✅ Restoration completed"
 Create `/etc/logrotate.d/agentic-rag`:
 
 ```bash
-/path/to/agentic-rag/server_complete.log {
+/path/to/agentic-rag/logs/server_complete.log {
     daily
     missingok
     rotate 30
@@ -1760,7 +1760,7 @@ fi
 | Main Configuration | `config/llm_config.yaml` | LLM and service configuration |
 | Environment Variables | `.env` | API keys and secrets |
 | Document Store | `document_store/` | FAISS index and metadata |
-| Logs | `server_complete.log` | Main application logs |
+| Logs | `logs/server_complete.log` | Main application logs |
 | Watch Config | `watched_directories.json` | Directory monitoring settings |
 | System Prompts | `config/*.txt` | AI model instructions |
 
@@ -1890,7 +1890,7 @@ Email Issues?
 
 This Administrator Guide provides comprehensive coverage of the Agentic RAG System's operational aspects. For additional support:
 
-- **System Logs**: Always check `server_complete.log` first
+- **System Logs**: Always check `logs/server_complete.log` first
 - **Health Checks**: Use provided testing scripts regularly
 - **Community**: Refer to project documentation and issues
 - **Updates**: Follow semantic versioning for updates

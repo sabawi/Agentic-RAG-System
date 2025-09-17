@@ -405,7 +405,7 @@ Customize AI behavior by editing:
 
 ### Getting Help
 
-- Check logs in `server_complete.log`
+- Check logs in `logs/server_complete.log`
 - Run `python tests/test_dependencies.py` to verify setup
 - Ensure all required models are downloaded with `ollama list`
 - Verify API keys are set correctly in `.env`

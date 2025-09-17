@@ -136,7 +136,7 @@ curl http://localhost:8000/metrics
 
 ### Logs
 ```bash
-tail -f fastapi_server.log
+tail -f logs/fastapi_server.log
 # or with Docker
 docker-compose logs -f fastapi-server
 ```
@@ -208,7 +208,7 @@ await cache_set("my_key", "my_value", ttl=300)
 
 ## 📞 Support
 
-- **Issues**: Check logs in `fastapi_server.log`
+- **Issues**: Check logs in `logs/fastapi_server.log`
 - **Performance**: Monitor `/metrics` endpoint
 - **Database**: Use phpMyAdmin at http://localhost:8080
 - **Cache**: Use Redis Commander at http://localhost:8081

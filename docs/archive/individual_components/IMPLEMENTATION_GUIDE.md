@@ -304,7 +304,7 @@ curl -X POST http://localhost:5000/llama3_1b/stream \
 ### 3. Log Verification
 ```bash
 # Check server logs for successful processing
-tail -f server_complete.log | grep -E "(INTERCEPTING|POST-LLM|File creation|Email sent)"
+tail -f logs/server_complete.log | grep -E "(INTERCEPTING|POST-LLM|File creation|Email sent)"
 ```
 
 ## Debugging Checklist

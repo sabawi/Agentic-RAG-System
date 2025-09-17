@@ -364,7 +364,7 @@ DELETE FROM documents WHERE processed_at < '2025-01-01';
 cat watched_directories.json
 
 # Monitor scanning activity
-tail -f server_complete.log | grep -E "(Safe scan|Periodic scan)"
+tail -f logs/server_complete.log | grep -E "(Safe scan|Periodic scan)"
 
 # Check database records
 sqlite3 document_store/metadata.db "SELECT COUNT(*) FROM documents;"
@@ -394,7 +394,7 @@ curl http://localhost:5000/documents/stats
 ## 📞 Support
 
 For issues, enhancements, or questions regarding the Automatic Directory Watching System, refer to:
-- System logs: `server_complete.log`
+- System logs: `logs/server_complete.log`
 - Configuration file: `watched_directories.json`
 - API documentation: `http://localhost:5000/docs`
 - Database inspection: SQLite tools for `document_store/metadata.db`

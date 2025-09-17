@@ -288,10 +288,10 @@ logger.info(f"🎯 Total tools_results length: {len(tools_results)} chars")
 ./run_arbitrator_regression_test.sh
 
 # Monitor correction success rate
-grep "ARBITRATOR FIX: Applied corrected results" server_complete.log | wc -l
+grep "ARBITRATOR FIX: Applied corrected results" logs/server_complete.log | wc -l
 
 # Check for circuit breaker activations  
-grep "CIRCUIT BREAKER" server_complete.log | tail -10
+grep "CIRCUIT BREAKER" logs/server_complete.log | tail -10
 ```
 
 ### **Performance Optimization**

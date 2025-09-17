@@ -341,7 +341,7 @@ curl http://localhost:5000/health
 ### Manual Mode
 ```bash
 # Server logs
-tail -f server_complete.log
+tail -f logs/server_complete.log
 
 # Ollama service
 journalctl -u ollama -f
@@ -438,7 +438,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Documentation**: Check the guides above
 - **Issues**: Report bugs via GitHub Issues
 - **Discussions**: Use GitHub Discussions for questions
-- **Logs**: Always check `server_complete.log` first
+- **Logs**: Always check `logs/server_complete.log` first
 
 ## 🙏 Acknowledgments
 

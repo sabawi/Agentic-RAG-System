@@ -408,7 +408,7 @@ curl -X POST "http://localhost:5000/v1/chat/completions" \
 }'
 
 # Monitor logs for our enhancements
-tail -f server_complete.log | grep -E "🎯 Multi-Category Detection|UNION RESULT|CRITICAL INSTRUCTION"
+tail -f logs/server_complete.log | grep -E "🎯 Multi-Category Detection|UNION RESULT|CRITICAL INSTRUCTION"
 ```
 
 ### **🎯 Success Criteria for Each Tool**

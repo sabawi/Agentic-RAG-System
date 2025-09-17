@@ -679,7 +679,7 @@ netstat -tlnp | grep :5000
 ./start_complete.sh
 
 # Monitor startup logs
-tail -f server_complete.log
+tail -f logs/server_complete.log
 ```
 
 #### 2. Tools Not Working
@@ -873,16 +873,16 @@ curl "http://localhost:5000/health"
 Check logs for specific issues:
 ```bash
 # General errors
-grep -i "error\|failed\|exception" server_complete.log | tail -20
+grep -i "error\|failed\|exception" logs/server_complete.log | tail -20
 
 # Tool-specific issues  
-grep -i "tool.*error\|tool.*failed" server_complete.log | tail -10
+grep -i "tool.*error\|tool.*failed" logs/server_complete.log | tail -10
 
 # Email issues
-grep -i "email\|smtp" server_complete.log | tail -10
+grep -i "email\|smtp" logs/server_complete.log | tail -10
 
 # Document processing issues
-grep -i "document\|embed\|faiss" server_complete.log | tail -10
+grep -i "document\|embed\|faiss" logs/server_complete.log | tail -10
 ```
 
 #### System Information
@@ -905,12 +905,12 @@ ollama ps
 env | grep -E "(OLLAMA|GMAIL|DATABASE)" | sed 's/=.*PASSWORD.*/=<HIDDEN>/'
 
 # Recent logs
-tail -50 server_complete.log
+tail -50 logs/server_complete.log
 ```
 
 ### Support Resources
 
-- **Log Files**: Check `server_complete.log` for detailed error messages
+- **Log Files**: Check `logs/server_complete.log` for detailed error messages
 - **Health Check**: Run `curl "http://localhost:5000/health"` to verify system status
 - **Model Status**: Use `ollama list` and `ollama ps` to check AI models
 - **System Resources**: Monitor with `htop`, `free -h`, and `df -h`

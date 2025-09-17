@@ -169,7 +169,7 @@ python fastapi_server_complete.py
 ### Configuration Files
 - **LLM Config:** `config/llm_config.yaml`
 - **Environment:** `.env`
-- **Server Logs:** `server_complete.log`
+- **Server Logs:** `logs/server_complete.log`
 
 ## Troubleshooting
 

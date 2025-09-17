@@ -38,7 +38,7 @@
 **3 issues found:**
 
 - **Line 64** `relative_dot_paths`: 1. **Restart server**: `./stop_complete.sh && ./start_complete.sh`
-- **Line 84** `absolute_project_paths`: grep "TOOL CALLS DETECTED" /home/sabawi/Development/flaskserver/server_complete.log | tail -3
+- **Line 84** `absolute_project_paths`: grep "TOOL CALLS DETECTED" /home/sabawi/Development/flaskserver/logs/server_complete.log | tail -3
 - **Line 103** `relative_dot_paths`: 4. **Restart Server**: `./stop_complete.sh && ./start_complete.sh`
 
 ### 🟡 `DEVELOPER_API_REFERENCE.md`
@@ -136,8 +136,8 @@
 ### 🔴 `config/arbitrator_logging_config.py`
 **2 issues found:**
 
-- **Line 28** `absolute_project_paths`: log_file = Path("/home/sabawi/Development/flaskserver/arbitrator.log")
-- **Line 28** `pathlib_paths`: log_file = Path("/home/sabawi/Development/flaskserver/arbitrator.log")
+- **Line 28** `absolute_project_paths`: log_file = Path("/home/sabawi/Development/flaskserver/logs/arbitrator.log")
+- **Line 28** `pathlib_paths`: log_file = Path("/home/sabawi/Development/flaskserver/logs/arbitrator.log")
 
 ### 🟡 `debug_embedding_generation.py`
 **1 issues found:**
@@ -787,9 +787,9 @@
 **6 issues found:**
 
 - **Line 13** `relative_dot_paths`: echo "   ./start_complete.sh"
-- **Line 34** `absolute_project_paths`: TOOL_CALLS_1=$(grep "TOOL CALLS DETECTED" /home/sabawi/Development/flaskserver/server_complete.log |...
-- **Line 62** `absolute_project_paths`: TOOL_CALLS_2=$(grep "TOOL CALLS DETECTED" /home/sabawi/Development/flaskserver/server_complete.log |...
-- **Line 82** `absolute_project_paths`: grep "TOOL CALLS DETECTED" /home/sabawi/Development/flaskserver/server_complete.log | tail -5
+- **Line 34** `absolute_project_paths`: TOOL_CALLS_1=$(grep "TOOL CALLS DETECTED" /home/sabawi/Development/flaskserver/logs/server_complete.log |...
+- **Line 62** `absolute_project_paths`: TOOL_CALLS_2=$(grep "TOOL CALLS DETECTED" /home/sabawi/Development/flaskserver/logs/server_complete.log |...
+- **Line 82** `absolute_project_paths`: grep "TOOL CALLS DETECTED" /home/sabawi/Development/flaskserver/logs/server_complete.log | tail -5
 - **Line 86** `absolute_project_paths`: SINGLE_TOOL_COUNT=$(grep "Found 1 tool calls" /home/sabawi/Development/flaskserver/server_complete.l...
 - **Line 87** `absolute_project_paths`: MULTI_TOOL_COUNT=$(grep -E "Found [2-9] tool calls|Found [1-9][0-9] tool calls" /home/sabawi/Develop...
 

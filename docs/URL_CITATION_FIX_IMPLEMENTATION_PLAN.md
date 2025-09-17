@@ -466,7 +466,7 @@ curl -X GET http://localhost:5000/api/status
 grep "__version__" /home/sabawi/Development/flaskserver/fastapi_server_complete.py
 
 # Check logs for errors
-tail -50 /home/sabawi/Development/flaskserver/server_complete.log | grep -i error
+tail -50 /home/sabawi/Development/flaskserver/logs/server_complete.log | grep -i error
 ```
 
 ---

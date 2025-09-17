@@ -199,7 +199,7 @@ curl -X POST "http://localhost:5000/documents/index-directory" \
 **Monitor Processing**:
 ```bash
 # Watch server logs during processing
-tail -f server_complete.log | grep -E "(Processing|Embedding|FAISS|document)"
+tail -f logs/server_complete.log | grep -E "(Processing|Embedding|FAISS|document)"
 ```
 
 **Expected Log Flow**:
@@ -295,7 +295,7 @@ ollama ps
 curl http://localhost:11434/api/embeddings -d '{"model": "mxbai-embed-large", "prompt": "test"}'
 
 # 3. Check server logs
-tail -f server_complete.log | grep -i embed
+tail -f logs/server_complete.log | grep -i embed
 ```
 
 **Solutions**:

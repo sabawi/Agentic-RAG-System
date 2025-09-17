@@ -103,9 +103,9 @@ Memory usage... ✅ OK (1024MB)
 ## Test Reports
 
 All test scripts generate detailed logs:
-- `test_results_YYYYMMDD_HHMMSS.log` (comprehensive suite)
-- `embedding_test_YYYYMMDD_HHMMSS.log` (embedding service)
-- `api_endpoints_test_YYYYMMDD_HHMMSS.log` (API endpoints)
+- `tests/results/test_results_YYYYMMDD_HHMMSS.log` (comprehensive suite)
+- `tests/results/embedding_test_YYYYMMDD_HHMMSS.log` (embedding service)
+- `tests/results/api_endpoints_test_YYYYMMDD_HHMMSS.log` (API endpoints)
 
 **Example Report:**
 ```

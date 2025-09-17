@@ -684,7 +684,7 @@ echo "8" | python llm_config_tool.py
 3. **Verification Steps**:
    - Check file creation: `file /path/to/file.pdf` (must show "PDF document")
    - Check email debug files: `/tmp/email_debug_*.eml`
-   - Check server logs: `tail -f server_complete.log`
+   - Check server logs: `tail -f logs/server_complete.log`
    - Verify MIME encoding in email (base64 for binary)
 
 ### RACE CONDITION ARCHITECTURE

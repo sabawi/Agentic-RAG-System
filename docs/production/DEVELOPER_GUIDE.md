@@ -977,7 +977,7 @@ curl -X POST http://localhost:5000/v1/chat/completions \
 #### 3. Log Verification
 ```bash
 # Check server logs for successful processing
-tail -f server_complete.log | grep -E "(INTERCEPTING|POST-LLM|File creation|Email sent)"
+tail -f logs/server_complete.log | grep -E "(INTERCEPTING|POST-LLM|File creation|Email sent)"
 ```
 
 ### Configuration Management
@@ -1901,7 +1901,7 @@ grep -E "context_window_size|num_predict" config/llm_config.yaml
 3. **Verification Steps**:
    - Check file creation: `file /path/to/file.pdf` (must show "PDF document")
    - Check email debug files: `/tmp/email_debug_*.eml`
-   - Check server logs: `tail -f server_complete.log`
+   - Check server logs: `tail -f logs/server_complete.log`
    - Verify MIME encoding in email (base64 for binary)
 
 #### Emergency Protocols
@@ -1953,7 +1953,7 @@ curl -X POST "http://localhost:5000/documents/search" \
   }'
 
 # Check server logs for embedding errors
-tail -f server_complete.log | grep -i embed
+tail -f logs/server_complete.log | grep -i embed
 ```
 
 **Common Solutions:**
@@ -2181,31 +2181,31 @@ export LOG_DIR="/path/to/logs"
 **System Health:**
 ```bash
 # Server startup and health
-tail -f server_complete.log | grep -E "(Starting|Health|Error|Exception)"
+tail -f logs/server_complete.log | grep -E "(Starting|Health|Error|Exception)"
 
 # Tool execution and results
-tail -f server_complete.log | grep -E "(Tool:|🎯 POST-LLM|📧 SMART DECISION)"
+tail -f logs/server_complete.log | grep -E "(Tool:|🎯 POST-LLM|📧 SMART DECISION)"
 
 # Email and file operations
-tail -f server_complete.log | grep -E "(📧 INTERCEPTING|INTERCEPTED|File creation|Email sent)"
+tail -f logs/server_complete.log | grep -E "(📧 INTERCEPTING|INTERCEPTED|File creation|Email sent)"
 
 # Memory and conversation tracking
-tail -f server_complete.log | grep -E "(🧠 Memory|Conversation ID|Enhanced context)"
+tail -f logs/server_complete.log | grep -E "(🧠 Memory|Conversation ID|Enhanced context)"
 
 # Performance metrics
-tail -f server_complete.log | grep -E "(🚀 META-TASK|parallel execution|optimization)"
+tail -f logs/server_complete.log | grep -E "(🚀 META-TASK|parallel execution|optimization)"
 ```
 
 **Error Tracking:**
 ```bash
 # Critical errors and exceptions
-tail -f server_complete.log | grep -E "(ERROR|Exception|Traceback|Failed)"
+tail -f logs/server_complete.log | grep -E "(ERROR|Exception|Traceback|Failed)"
 
 # Configuration and validation issues
-tail -f server_complete.log | grep -E "(context_window_size|num_predict|Config)"
+tail -f logs/server_complete.log | grep -E "(context_window_size|num_predict|Config)"
 
 # Document and embedding service issues
-tail -f server_complete.log | grep -E "(FAISS|embedding|document search|Unable to compute)"
+tail -f logs/server_complete.log | grep -E "(FAISS|embedding|document search|Unable to compute)"
 ```
 
 ### File Structure Reference
