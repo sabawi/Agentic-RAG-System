@@ -29,6 +29,10 @@ REQUIRED_MODELS=("qwen3:8b" "qwen2.5vl:3b" "bakllava:latest")
 # System dependencies
 SYSTEM_DEPS=("tesseract-ocr" "wkhtmltopdf" "build-essential" "python3-dev" "python3-venv" "curl" "git")
 
+# Version tracking
+FROM_VERSION=""
+TO_VERSION=""
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -57,6 +61,31 @@ log_error() {
 
 log_step() {
     echo -e "${PURPLE}🔧 $1${NC}"
+}
+
+# Version management functions
+get_current_version() {
+    if [ -f "VERSION" ]; then
+        cat VERSION | tr -d '\n\r'
+    else
+        echo "unknown"
+    fi
+}
+
+show_upgrade_summary() {
+    if [ "$UPGRADE_MODE" = true ] && [ -n "$FROM_VERSION" ] && [ -n "$TO_VERSION" ]; then
+        echo ""
+        log_header "Upgrade Summary"
+        echo -e "${GREEN}🎉 Successfully upgraded from version ${CYAN}${FROM_VERSION}${GREEN} to ${CYAN}${TO_VERSION}${GREEN}${NC}"
+        
+        # Show what changed based on version comparison
+        if [ "$FROM_VERSION" != "$TO_VERSION" ]; then
+            echo -e "${BLUE}📋 Changes may include new features, bug fixes, and improvements${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Same version detected - dependencies and configuration updated${NC}"
+        fi
+        echo ""
+    fi
 }
 
 log_header() {
@@ -239,10 +268,18 @@ setup_project_directory() {
             log_error "Not in a valid Agentic RAG System directory"
             exit 1
         fi
+        
+        # Capture current version before upgrade
+        FROM_VERSION=$(get_current_version)
+        log_info "Current version: $FROM_VERSION"
+        
         # Auto-detect the default branch and pull latest changes
         DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "master")
         execute_command "git pull origin $DEFAULT_BRANCH" "Pulling latest changes from GitHub"
         clear_python_caches
+        
+        # Capture new version after upgrade
+        TO_VERSION=$(get_current_version)
     else
         # Fresh installation
         log_step "Setting up project directory"
@@ -664,6 +701,9 @@ main() {
     # Verification
     if verify_installation; then
         log_success "Installation completed successfully!"
+        
+        # Show upgrade summary for upgrades
+        show_upgrade_summary
         
         # Test server connectivity
         echo ""
