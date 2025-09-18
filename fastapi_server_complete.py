@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Agentic-RAG Server v1.0.2.1 - Complete FastAPI Server with Ollama LLM Integration
+Agentic-RAG Server v1.0.2.2 - Complete FastAPI Server with Ollama LLM Integration
 =============================================================================
 
 FastAPI server with all original Flask functionality including:
@@ -13,12 +13,12 @@ FastAPI server with all original Flask functionality including:
 - Database connection pooling
 - Production-ready caching layer
 
-Version: 1.0.2.1
+Version: 1.0.2.2
 Release: Production Ready
 """
 
 # Version information
-__version__ = "1.0.2.1"
+__version__ = "1.0.2.2"
 __release__ = "Production Ready"
 
 import asyncio
@@ -1239,6 +1239,76 @@ class AsyncToolManager:
                     print(f"🎯 UNION RESULT: {len(unique_sources)} total unique sources from {len(ranked_categories + keyword_sources)} categories", flush=True)
                     return unique_sources
                 
+                
+                from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
+                def clean_news_url(url):
+                    """
+                    Clean Google News URLs by removing corrupted or excessively long parameters.
+
+                    Args:
+                        url: The URL to clean
+
+                    Returns:
+                        str: Clean URL, or None if URL is invalid/corrupted beyond repair
+                    """
+                    if not url or not isinstance(url, str):
+                        return None
+
+                    try:
+                        # Parse the URL into components
+                        parsed_url = urlparse(url)
+
+                        # Validate basic URL structure
+                        if not parsed_url.scheme or not parsed_url.netloc:
+                            return None
+
+                        # Extract query parameters
+                        query_params = parse_qs(parsed_url.query)
+
+                        # Keep only clean parameters, filtering out corrupted ones
+                        keep_params = ['nid', 'dat', 'ed', 'hl', 'gl', 'ceid']  # Common Google News parameters
+                        cleaned_query = {}
+
+                        for key, values in query_params.items():
+                            if key in keep_params and values:
+                                param_value = values[0]
+                                # Reject parameters that are excessively long (likely corrupted)
+                                if len(param_value) > 100:  # Most legitimate params are much shorter
+                                    print(f"🚨 Rejecting corrupted parameter '{key}' with length {len(param_value)}", flush=True)
+                                    continue
+                                # Reject parameters with repeated patterns (corruption indicator)
+                                if len(param_value) > 20 and param_value[:10] * 5 in param_value:
+                                    print(f"🚨 Rejecting repeated pattern in parameter '{key}': {param_value[:50]}...", flush=True)
+                                    continue
+                                cleaned_query[key] = param_value
+
+                        # Rebuild the query string
+                        cleaned_query_string = urlencode(cleaned_query) if cleaned_query else ""
+
+                        # Reconstruct the URL without the corrupted parameters
+                        cleaned_url = urlunparse((
+                            parsed_url.scheme,    # scheme (e.g., https)
+                            parsed_url.netloc,    # netloc (e.g., news.google.com)
+                            parsed_url.path,      # path (e.g., /newspapers)
+                            parsed_url.params,    # params (usually empty)
+                            cleaned_query_string, # cleaned query string
+                            parsed_url.fragment   # fragment (usually empty)
+                        ))
+
+                        # Final validation: reject if URL is still too long (indicates other corruption)
+                        if len(cleaned_url) > 2000:  # Reasonable URL length limit
+                            print(f"🚨 Rejecting URL still too long after cleaning: {len(cleaned_url)} chars", flush=True)
+                            return None
+
+                        return cleaned_url
+
+                    except Exception as e:
+                        print(f"🚨 Error cleaning URL '{url[:100]}...': {e}", flush=True)
+                        return None
+
+                
+                
                 # Enhanced Google News function with FULL ARTICLE CONTENT and enhanced source blocks
                 def get_news_from_google(keyword, source_num_start=1):
                     res = ''
@@ -1288,9 +1358,12 @@ class AsyncToolManager:
                                 # Fallback to description if full content extraction fails
                                 full_content = description
                             
-                            # Format using enhanced source block
+                            # Format using enhanced source block with safe URL cleaning
+                            cleaned_url = clean_news_url(article_url) if article_url else None
+                            safe_url = cleaned_url if cleaned_url else (article_url if article_url else f"https://news.google.com/search?q={keyword}")
+
                             formatted_source = _format_source_block(
-                                source_url=article_url if article_url else f"https://news.google.com/search?q={keyword}",
+                                source_url=safe_url,
                                 title=title,
                                 content=f"Published: {published_date}\n{full_content}",
                                 source_num=source_num_start + source_count

@@ -1,6 +1,6 @@
-# 📚 Agentic RAG System v1.0.2.1 - Documentation Overview
+# 📚 Agentic RAG System v1.0.2.2 - Documentation Overview
 
-Welcome to the comprehensive documentation for the **Agentic RAG System v1.0.2.1** - a production-ready FastAPI-based agentic system with advanced tool calling capabilities.
+Welcome to the comprehensive documentation for the **Agentic RAG System v1.0.2.2** - a production-ready FastAPI-based agentic system with advanced tool calling capabilities.
 
 ## 🎯 Quick Start - Choose Your Guide
 
@@ -198,7 +198,7 @@ curl -X POST http://localhost:5000/v1/chat/completions \
 ✅ **Performance Optimized** - 65-75% performance improvements implemented  
 ✅ **OpenAI Compatible** - Seamless integration with existing OpenAI workflows
 
-**Version**: v1.0.2.1 - Phase 1B Citation Mastery COMPLETE  
+**Version**: v1.0.2.2 - Google News URL Pollution Fix COMPLETE  
 **Last Updated**: Phase 1B verification completed with 100% Citation Mastery implementation  
 **Phase 1B Status**: ✅ PRODUCTION VERIFIED (search_web, lookup_website, wikipedia_query)  
 **Maintained By**: Development team following ironclad development standards
