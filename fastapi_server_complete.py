@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Agentic-RAG Server v1.0.2.2 - Complete FastAPI Server with Ollama LLM Integration
+Agentic-RAG Server v1.0.2.3 - Complete FastAPI Server with Ollama LLM Integration
 =============================================================================
 
 FastAPI server with all original Flask functionality including:
@@ -13,12 +13,12 @@ FastAPI server with all original Flask functionality including:
 - Database connection pooling
 - Production-ready caching layer
 
-Version: 1.0.2.2
+Version: 1.0.2.3
 Release: Production Ready
 """
 
 # Version information
-__version__ = "1.0.2.2"
+__version__ = "1.0.2.3"
 __release__ = "Production Ready"
 
 import asyncio
@@ -767,7 +767,7 @@ class AsyncToolManager:
                         "https://feeds.bbci.co.uk/news/world/rss.xml",
                         "https://www.aljazeera.com/xml/rss/all.xml",
                         # International perspectives
-                        "https://www.dw.com/en/rss/xmlfeed/top_stories",  # Deutsche Welle
+                        "https://rss.dw.com/atom/rss-en-all",  # Deutsche Welle
                         "https://www.theguardian.com/world/rss",
                         # Alternative viewpoints
                         "https://theintercept.com/feed/"
@@ -879,10 +879,10 @@ class AsyncToolManager:
                         # International News Sources
                         "https://feeds.bbci.co.uk/news/world/rss.xml",
                         "https://www.aljazeera.com/xml/rss/all.xml",
-                        "https://www.dw.com/en/rss/all/rss.xml",
+                        "https://rss.dw.com/atom/rss-en-all",  # Deutsche Welle - Fixed URL
                         "https://www.france24.com/en/rss",
                         "https://www.euronews.com/rss?level=vertical&name=news",
-                        "https://www.scmp.com/rss"
+                        "https://www.scmp.com/rss/feed/"  # South China Morning Post - Fixed URL
                     ],
                     "local": [
                         # Regional/Local News Sources
@@ -1329,7 +1329,11 @@ class AsyncToolManager:
                             full_content = ""
                             try:
                                 # Check if newspaper3k is available
-                                import newspaper
+                                import warnings
+                                # Suppress SyntaxWarnings from old newspaper3k package
+                                with warnings.catch_warnings():
+                                    warnings.filterwarnings("ignore", category=SyntaxWarning)
+                                    import newspaper
                                 # Get the full article from Google News
                                 full_article = google_news.get_full_article(article['url'])
                                 if full_article and hasattr(full_article, 'text'):
