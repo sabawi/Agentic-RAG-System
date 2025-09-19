@@ -1,0 +1,87 @@
+{
+  "description": "AI Research Analysis - Deep dive into artificial intelligence trends",
+  "max_iterations": 8,
+  "iteration_delay": 3.0,
+  "prompts": [
+    {
+      "id": "initial_research",
+      "template": "Research the current state of {topic}. Provide a comprehensive overview covering:\n1. Recent developments and breakthroughs\n2. Key players and organizations\n3. Current challenges and limitations\n4. Market trends and adoption\n\nFocus on factual information and cite reliable sources.",
+      "variables": ["topic"],
+      "priority": 10,
+      "context_weight": 0.3,
+      "expected_response_type": "research_overview"
+    },
+    {
+      "id": "technical_deep_dive",
+      "template": "Dive deeper into the technical aspects of {topic}. Analyze:\n1. Core technologies and methodologies\n2. Technical challenges and solutions\n3. Performance metrics and benchmarks\n4. Implementation considerations\n\nProvide detailed technical insights.",
+      "variables": ["topic"],
+      "priority": 9,
+      "context_weight": 0.8,
+      "expected_response_type": "technical_analysis"
+    },
+    {
+      "id": "future_implications",
+      "template": "Analyze the future implications and potential of {topic}. Consider:\n1. Emerging trends and predictions\n2. Potential impact on industries\n3. Ethical and societal considerations\n4. Investment and research directions\n\nProvide forward-looking insights.",
+      "variables": ["topic"],
+      "priority": 8,
+      "context_weight": 1.0,
+      "expected_response_type": "future_analysis"
+    },
+    {
+      "id": "synthesis_report",
+      "template": "Create a comprehensive synthesis report on {topic} that includes:\n1. Executive summary of key findings\n2. Current state assessment\n3. Future outlook and recommendations\n4. Critical success factors\n\nStructure this as a professional research report.",
+      "variables": ["topic"],
+      "priority": 10,
+      "context_weight": 1.0,
+      "expected_response_type": "final_report"
+    }
+  ],
+  "goal_criteria": [
+    {
+      "id": "comprehensive_length",
+      "description": "Research report has substantial content",
+      "check_type": "length",
+      "check_value": {"min": 3000, "max": 25000},
+      "weight": 1.0,
+      "required": true
+    },
+    {
+      "id": "technical_depth",
+      "description": "Contains technical depth and analysis",
+      "check_type": "keyword",
+      "check_value": ["technology", "methodology", "implementation", "technical", "analysis", "benchmark"],
+      "weight": 1.5,
+      "required": true
+    },
+    {
+      "id": "future_insights",
+      "description": "Includes future-oriented insights",
+      "check_type": "keyword",
+      "check_value": ["future", "trend", "prediction", "potential", "outlook", "forecast"],
+      "weight": 1.2,
+      "required": true
+    },
+    {
+      "id": "structured_report",
+      "description": "Content is well-structured with clear sections",
+      "check_type": "pattern",
+      "check_value": "(?:Summary|Overview|Analysis|Conclusion|Recommendation|Introduction)",
+      "weight": 1.0,
+      "required": false
+    },
+    {
+      "id": "credible_sources",
+      "description": "References credible sources and data",
+      "check_type": "keyword",
+      "check_value": ["study", "research", "data", "report", "survey", "statistics"],
+      "weight": 1.3,
+      "required": true
+    }
+  ],
+  "initial_goal_progress": {
+    "research_phases_completed": 0,
+    "technical_depth_achieved": false,
+    "future_analysis_included": false,
+    "synthesis_completed": false
+  }
+}

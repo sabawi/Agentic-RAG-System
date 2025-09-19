@@ -1,0 +1,357 @@
+{
+  "session_id": "1e389e98-b58b-4a0f-a864-8db6b4b094e5",
+  "start_time": "2025-09-18T17:41:54.882703",
+  "total_iterations": 8,
+  "goal_achieved": false,
+  "final_score": 0.21666666666666667,
+  "execution_time": 7321.676645755768,
+  "iterations": [
+    {
+      "iteration": 1,
+      "prompt_template": "initial_research",
+      "response_length": 60,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.21666666666666667,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Total response length: 60",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Pattern matches: 0",
+            "score": 0.0
+          },
+          "credible_sources": {
+            "passed": true,
+            "details": "Found keywords: ['data']",
+            "score": 0.16666666666666666
+          }
+        },
+        "missing_requirements": [
+          "Research report has substantial content",
+          "Contains technical depth and analysis",
+          "Includes future-oriented insights"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-18T18:02:36.539123"
+    },
+    {
+      "iteration": 2,
+      "prompt_template": "technical_deep_dive",
+      "response_length": 87,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.21666666666666667,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Total response length: 148",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Pattern matches: 0",
+            "score": 0.0
+          },
+          "credible_sources": {
+            "passed": true,
+            "details": "Found keywords: ['data']",
+            "score": 0.16666666666666666
+          }
+        },
+        "missing_requirements": [
+          "Research report has substantial content",
+          "Contains technical depth and analysis",
+          "Includes future-oriented insights"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-18T18:07:39.650239"
+    },
+    {
+      "iteration": 3,
+      "prompt_template": "future_implications",
+      "response_length": 87,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.21666666666666667,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Total response length: 236",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Pattern matches: 0",
+            "score": 0.0
+          },
+          "credible_sources": {
+            "passed": true,
+            "details": "Found keywords: ['data']",
+            "score": 0.16666666666666666
+          }
+        },
+        "missing_requirements": [
+          "Research report has substantial content",
+          "Contains technical depth and analysis",
+          "Includes future-oriented insights"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-18T18:12:42.778320"
+    },
+    {
+      "iteration": 4,
+      "prompt_template": "synthesis_report",
+      "response_length": 87,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.21666666666666667,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Total response length: 324",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Pattern matches: 0",
+            "score": 0.0
+          },
+          "credible_sources": {
+            "passed": true,
+            "details": "Found keywords: ['data']",
+            "score": 0.16666666666666666
+          }
+        },
+        "missing_requirements": [
+          "Research report has substantial content",
+          "Contains technical depth and analysis",
+          "Includes future-oriented insights"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-18T18:17:45.892119"
+    },
+    {
+      "iteration": 5,
+      "prompt_template": "initial_research",
+      "response_length": 60,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.21666666666666667,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Total response length: 385",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Pattern matches: 0",
+            "score": 0.0
+          },
+          "credible_sources": {
+            "passed": true,
+            "details": "Found keywords: ['data']",
+            "score": 0.16666666666666666
+          }
+        },
+        "missing_requirements": [
+          "Research report has substantial content",
+          "Contains technical depth and analysis",
+          "Includes future-oriented insights"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-18T18:43:16.477152"
+    },
+    {
+      "iteration": 6,
+      "prompt_template": "technical_deep_dive",
+      "response_length": 60,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.21666666666666667,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Total response length: 446",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Pattern matches: 0",
+            "score": 0.0
+          },
+          "credible_sources": {
+            "passed": true,
+            "details": "Found keywords: ['data']",
+            "score": 0.16666666666666666
+          }
+        },
+        "missing_requirements": [
+          "Research report has substantial content",
+          "Contains technical depth and analysis",
+          "Includes future-oriented insights"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-18T19:07:22.340378"
+    },
+    {
+      "iteration": 7,
+      "prompt_template": "future_implications",
+      "response_length": 60,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.21666666666666667,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Total response length: 507",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Pattern matches: 0",
+            "score": 0.0
+          },
+          "credible_sources": {
+            "passed": true,
+            "details": "Found keywords: ['data']",
+            "score": 0.16666666666666666
+          }
+        },
+        "missing_requirements": [
+          "Research report has substantial content",
+          "Contains technical depth and analysis",
+          "Includes future-oriented insights"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-18T19:21:05.303208"
+    },
+    {
+      "iteration": 8,
+      "prompt_template": "synthesis_report",
+      "response_length": 60,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.21666666666666667,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Total response length: 568",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Pattern matches: 0",
+            "score": 0.0
+          },
+          "credible_sources": {
+            "passed": true,
+            "details": "Found keywords: ['data']",
+            "score": 0.16666666666666666
+          }
+        },
+        "missing_requirements": [
+          "Research report has substantial content",
+          "Contains technical depth and analysis",
+          "Includes future-oriented insights"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-18T19:43:56.559338"
+    }
+  ],
+  "final_context": "Goal Progress:\n{\n  \"research_phases_completed\": 0,\n  \"technical_depth_achieved\": false,\n  \"future_analysis_included\": false,\n  \"synthesis_completed\": false\n}\n\nIteration 6:\nPrompt: Dive deeper into the technical aspects of quantum computing applications in cryptography. Analyze:\n1. Core technologies and methodologies\n2. Technical challenges and solutions\n3. Performance metrics a...\nResponse: Error: Request failed: Extra data: line 2 column 1 (char 95)...\n\nIteration 7:\nPrompt: Analyze the future implications and potential of quantum computing applications in cryptography. Consider:\n1. Emerging trends and predictions\n2. Potential impact on industries\n3. Ethical and societal ...\nResponse: Error: Request failed: Extra data: line 2 column 1 (char 95)...\n\nIteration 8:\nPrompt: Create a comprehensive synthesis report on quantum computing applications in cryptography that includes:\n1. Executive summary of key findings\n2. Current state assessment\n3. Future outlook and recommen...\nResponse: Error: Request failed: Extra data: line 2 column 1 (char 95)...\n",
+  "achievement_details": {},
+  "end_time": "2025-09-18T19:43:56.559349"
+}

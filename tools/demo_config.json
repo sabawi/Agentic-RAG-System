@@ -1,0 +1,37 @@
+{
+  "prompts": [
+    {
+      "id": "solve",
+      "template": "Solve this problem: {problem}. Show your work.",
+      "variables": [
+        "problem"
+      ],
+      "priority": 10,
+      "context_weight": 0.5,
+      "expected_response_type": "solution"
+    },
+    {
+      "id": "verify",
+      "template": "Check this solution: {problem}. Is it correct?",
+      "variables": [
+        "problem"
+      ],
+      "priority": 8,
+      "context_weight": 1.0,
+      "expected_response_type": "verification"
+    }
+  ],
+  "goal_criteria": [
+    {
+      "id": "has_answer",
+      "description": "Contains numerical answer",
+      "check_type": "pattern",
+      "check_value": "\\b\\d+\\b",
+      "weight": 1.0,
+      "required": true
+    }
+  ],
+  "max_iterations": 3,
+  "iteration_delay": 1.0,
+  "initial_goal_progress": {}
+}

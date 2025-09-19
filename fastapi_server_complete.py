@@ -18,7 +18,7 @@ Release: Production Ready
 """
 
 # Version information
-__version__ = "1.0.2.5"
+__version__ = "1.0.2.11"
 __release__ = "Production Ready"
 
 import asyncio
@@ -1306,13 +1306,25 @@ class AsyncToolManager:
                 
                 
                 # Enhanced Google News function with FULL ARTICLE CONTENT and enhanced source blocks
-                def get_news_from_google(keyword, source_num_start=1):
+                def get_news_from_google(keyword, source_num_start=1, categories=None):
                     res = ''
                     articlesLimit = 8  # Reduced slightly to account for more content per article
                     source_count = 0
                     try:
                         google_news = GNews(language='en', country='US', max_results=articlesLimit)
-                        keyword_news = google_news.get_news(keyword)
+
+                        # Enhance search terms based on detected categories
+                        enhanced_keyword = keyword
+                        if categories:
+                            if any(cat in ['finance', 'economy'] for cat in categories):
+                                enhanced_keyword = f"{keyword} stocks market finance economy"
+                            elif 'crypto' in categories:
+                                enhanced_keyword = f"{keyword} cryptocurrency bitcoin blockchain"
+                            elif 'technology' in categories:
+                                enhanced_keyword = f"{keyword} tech innovation AI software"
+
+                        print(f"🔍 Google News search: '{keyword}' -> '{enhanced_keyword}'", flush=True)
+                        keyword_news = google_news.get_news(enhanced_keyword)
                         
                         for i in range(min(len(keyword_news), articlesLimit)):
                             article = keyword_news[i]
@@ -1470,8 +1482,8 @@ class AsyncToolManager:
                 # Initialize result string with timestamp and sorting instructions
                 res = f'''\nFROM EXTERNAL SOURCES as of [Current Date and Time: {todayStr}]. Here is the News Summary you requested, use the summary to compose your response to the user's prompt: ANALYZE ALL SOURCES and select the MOST IMPORTANT and RELEVANT news items based on the user's specific request. Sort them by RELEVANCE and IMPORTANCE to the user's query, NOT by the order they appear below. Focus on the most significant developments, breaking news, and impactful stories related to the topic requested. Prioritize recent news resources. If user requests expanded content, provide detailed content and analysis from the available context. Cite sources for each item. '''
                 
-                # Get Google News results with enhanced format
-                google_results, google_source_count = get_news_from_google(newsFilter, source_num_start=1)
+                # Get Google News results with enhanced format and category awareness
+                google_results, google_source_count = get_news_from_google(newsFilter, source_num_start=1, categories=ranked_categories)
                 res += google_results
                 
                 # Fetch content from each URL with improved error handling and fallbacks
@@ -2398,6 +2410,7 @@ def _format_source_block(source_url: str, title: str, content: str, source_num: 
     This creates clear source blocks that help the Primary LLM maintain
     accurate URL-content associations without overwhelming context size.
     Now extracts actual publication dates from content to avoid misleading the Primary LLM.
+    Includes accessibility indicators to help balance recency with content accessibility.
 
     Args:
         source_url: The exact URL to cite (MANDATORY CITATION URL)
@@ -2407,7 +2420,7 @@ def _format_source_block(source_url: str, title: str, content: str, source_num: 
         timestamp: Deprecated parameter (kept for backward compatibility)
 
     Returns:
-        Formatted source block with clear citation requirements and actual content dates
+        Formatted source block with clear citation requirements, content dates, and accessibility indicators
     """
     # Extract actual publication date from content
     content_date = _extract_content_date(content)
@@ -2417,15 +2430,16 @@ def _format_source_block(source_url: str, title: str, content: str, source_num: 
     if content_date:
         date_line = f"📅 Published: {content_date}\n"
 
+    # Detect paywall sources and add accessibility indicator
+    accessibility_indicator = _get_accessibility_indicator(source_url)
+
     return f"""
-═══════════════════════════════════════════════════════
+───────────────────────────────────────────────────────
 📄 SOURCE BLOCK #{source_num} [REQUIRED CITATION: {source_url}]
-═══════════════════════════════════════════════════════
 Title: {title}
 🔗 MANDATORY CITATION URL: {source_url}
-{date_line}───────────────────────────────────────────────────────
-CONTENT: {content}
-═══════════════════════════════════════════════════════
+{date_line}{accessibility_indicator}CONTENT: {content}
+───────────────────────────────────────────────────────
 """
 
 def _extract_content_date(content: str) -> str:
@@ -2518,6 +2532,75 @@ def _extract_content_date(content: str) -> str:
                     continue
 
     return None
+
+def _get_accessibility_indicator(source_url: str) -> str:
+    """
+    Determine content accessibility for a given source URL.
+    Returns accessibility indicator line for Primary LLM prioritization.
+
+    Args:
+        source_url: The URL to check for paywall/accessibility status
+
+    Returns:
+        Formatted accessibility indicator line
+    """
+    # Known paywall domains
+    paywall_domains = [
+        'bloomberg.com',
+        'wsj.com', 'wallstreetjournal.com',
+        'ft.com', 'financialtimes.com',
+        'nytimes.com',
+        'washingtonpost.com',
+        'economist.com',
+        'reuters.com',  # Some Reuters content has paywalls
+        'barrons.com',
+        'marketwatch.com',  # Some premium content
+        'seekingalpha.com'  # Some premium content
+    ]
+
+    # Free access domains (high confidence)
+    free_domains = [
+        'cnbc.com',
+        'cnn.com',
+        'bbc.com', 'bbc.co.uk',
+        'yahoo.com',
+        'axios.com',
+        'npr.org',
+        'apnews.com',
+        'cbsnews.com',
+        'abcnews.go.com',
+        'nbcnews.com',
+        'federalreserve.gov',
+        'investing.com'
+    ]
+
+    if not source_url:
+        return ""
+
+    # Extract domain from URL
+    try:
+        from urllib.parse import urlparse
+        domain = urlparse(source_url).netloc.lower()
+
+        # Remove www. prefix for matching
+        if domain.startswith('www.'):
+            domain = domain[4:]
+
+        # Check for paywall domains
+        for paywall_domain in paywall_domains:
+            if paywall_domain in domain:
+                return "🔒 Access: May require subscription (paywall possible)\n"
+
+        # Check for free domains
+        for free_domain in free_domains:
+            if free_domain in domain:
+                return "🌐 Access: Generally free access\n"
+
+        # Default for unknown domains
+        return "❓ Access: Accessibility unknown\n"
+
+    except Exception:
+        return ""
 
 def _extract_domain(url: str) -> str:
     """Extract domain name from URL for titles"""
@@ -2690,12 +2773,9 @@ def _get_news_content_with_article_urls(news_url: str, source_num_start: int) ->
                     article_url = article.get('url', news_url)
                     title = article.get('title', 'Untitled Article')
                     description = article.get('description', '')
-                    pub_date = article.get('pub_date', '')
-                    
-                    # Enhanced content with publication date if available
+
+                    # Use description as content (date will be extracted by _format_source_block)
                     enhanced_content = description
-                    if pub_date:
-                        enhanced_content = f"Date: {pub_date}\n{description}"
                     
                     # Create source block for each article
                     formatted_source = _format_source_block(

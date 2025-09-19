@@ -1,0 +1,171 @@
+# =============================================================================
+# LLM Configuration File
+# =============================================================================
+#
+# CRITICAL: Token Parameter Usage by Provider Type
+# ------------------------------------------------
+# 
+# For OLLAMA providers (type: ollama):
+#   • context_window_size → Maps to Ollama 'num_ctx' parameter (input context limit)
+#   • num_predict         → Maps to Ollama 'num_predict' parameter (output tokens limit)
+#   • max_tokens          → IGNORED (kept for backward compatibility only)
+#
+# For NON-OLLAMA providers (type: openai, qwen, gemini, etc.):
+#   • context_window_size → Used for input context size management
+#   • max_tokens          → Used for output tokens limit (native API parameter)
+#   • num_predict         → Available but typically unused by these providers
+#
+# Parameter Priority (all providers):
+#   1. Request-level parameters (highest priority)
+#   2. Configuration file parameters  
+#   3. Provider-specific defaults (lowest priority)
+#
+# =============================================================================
+
+debug:
+  log_requests: false
+  log_timing: true
+  mock_providers: false
+llm:
+  fallback:
+    auto_switch: true
+    enabled: true
+    order:
+    - ollama
+    - openai
+    - qwen
+    - gemini
+  primary:
+    type: ollama
+    config:
+      model: qwen3:8b
+      timeout: 600
+      context_window_size: 8192
+      temperature: 0.7
+      num_predict: 16384
+      max_tokens: 8192
+      base_url: http://127.0.0.1:11434
+      api_key: null
+      stream: true
+      context_management:
+        enabled: true
+        max_context_chars: 10000
+        block_boundary_only: true
+        equal_tool_representation: true
+        min_blocks_per_tool: 1
+  tool_calling:
+    type: openai
+    config:
+      model: gpt-4o-mini
+      timeout: 300
+      context_window_size: 8192
+      temperature: 0.7
+      max_tokens: 4096
+      stream: false
+      api_key: ${OPENAI_API_KEY}
+      base_url: https://api.openai.com/v1
+  providers:
+    ollama:
+      health_check_url: http://127.0.0.1:11434/api/tags
+      retry_attempts: 3
+      retry_delay: 2
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      base_url: https://api.openai.com/v1
+      organization: null
+      retry_attempts: 3
+      retry_delay: 1
+      models:
+        primary: gpt-4o
+        tool_calling: gpt-4o
+performance:
+  connection_pool_size: 10
+  max_concurrent_requests: 5
+  request_timeout: 600
+  streaming_chunk_size: 1024
+platform:
+  config_dir:
+    linux: ${HOME}/.config/agentic_rag
+    macos: ${HOME}/.config/agentic_rag
+    windows: ${APPDATA}/agentic_rag
+  log_dir:
+    linux: ${HOME}/.local/share/agentic_rag/logs
+    macos: ${HOME}/.local/share/agentic_rag/logs
+    windows: ${LOCALAPPDATA}/agentic_rag/logs
+  temp_dir:
+    linux: /tmp/agentic_rag
+    macos: ${TMPDIR}/agentic_rag
+    windows: ${TEMP}/agentic_rag
+security:
+  api_key_encryption: false
+  audit_logging: true
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    burst_limit: 10
+arbitrator:
+  enabled: true
+  type: openai
+  config:
+    model: gpt-4o-mini
+    timeout: 60
+    context_window_size: 4096
+    temperature: 0.1
+    max_tokens: 1024
+    stream: false
+    api_key: ${OPENAI_API_KEY}
+    base_url: https://api.openai.com/v1
+optimization:
+  enabled: true
+  rollout_percentage: 100.0
+  detailed_logging: true
+vision:
+  type: ollama
+  config:
+    model: qwen2.5vl:3b
+    timeout: 1800
+    base_url: http://127.0.0.1:11434
+    fallback_model: bakllava:latest
+flight_search:
+  enabled: true
+  web_scraping:
+    enabled: true
+    timeout_seconds: 30
+    max_results: 10
+    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+  apis:
+    # Flight search API providers - Add your API keys here
+    amadeus:
+      enabled: false
+      api_key: ${AMADEUS_API_KEY}
+      api_secret: ${AMADEUS_API_SECRET}
+      base_url: "https://test.api.amadeus.com"
+      # Change to "https://api.amadeus.com" for production
+    skyscanner:
+      enabled: false
+      api_key: ${SKYSCANNER_API_KEY}
+      base_url: "https://partners.api.skyscanner.net"
+    serpapi:
+      enabled: false
+      api_key: ${SERPAPI_API_KEY}
+      base_url: "https://serpapi.com/search.json"
+      # SerpAPI for Google Flights scraping
+    rapidapi_skyscanner:
+      enabled: false
+      api_key: ${RAPIDAPI_KEY}
+      base_url: "https://skyscanner50.p.rapidapi.com"
+      host: "skyscanner50.p.rapidapi.com"
+  verification_links:
+    # These booking sites are always included for verification
+    kayak: "https://www.kayak.com/flights"
+    expedia: "https://www.expedia.com/Flights-Search"
+    google_flights: "https://www.google.com/travel/flights"
+    priceline: "https://www.priceline.com/relax/at/flights"
+    momondo: "https://www.momondo.com/flight-search"
+  chromedriver:
+    # ChromeDriver configuration for web scraping
+    path: ${CHROMEDRIVER_PATH}  # Optional: specify custom path
+    auto_install: true
+    headless: true
+    timeout: 30
+    window_size: "1920,1080"
