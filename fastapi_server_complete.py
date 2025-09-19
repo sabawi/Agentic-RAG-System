@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Agentic-RAG Server v1.0.2.3 - Complete FastAPI Server with Ollama LLM Integration
+Agentic-RAG Server v1.0.2.4 - Complete FastAPI Server with Ollama LLM Integration
 =============================================================================
 
 FastAPI server with all original Flask functionality including:
@@ -13,12 +13,12 @@ FastAPI server with all original Flask functionality including:
 - Database connection pooling
 - Production-ready caching layer
 
-Version: 1.0.2.3
+Version: 1.0.2.4
 Release: Production Ready
 """
 
 # Version information
-__version__ = "1.0.2.3"
+__version__ = "1.0.2.4"
 __release__ = "Production Ready"
 
 import asyncio
@@ -682,19 +682,15 @@ class AsyncToolManager:
                     # Truncate summary if too long
                     summary = page.summary[:2000] + "..." if len(page.summary) > 2000 else page.summary
                     
-                    # Get current timestamp
-                    timestamp = datetime.now().strftime('%A, %B %d, %Y %I:%M:%S %p')
-                    
                     # Use enhanced source block formatting
                     formatted_result = _format_source_block(
                         source_url=page.fullurl,
                         title=page.title,
                         content=f"Wikipedia Summary:\n\n{summary}",
-                        source_num=1,
-                        timestamp=timestamp
+                        source_num=1
                     )
                     
-                    return f"\nAs of [Current Date and Time: {timestamp}] here are the Wikipedia query results:\n{formatted_result}"
+                    return f"\nHere are the Wikipedia query results:\n{formatted_result}"
                 else:
                     return f"No Wikipedia page found for: {query}"
             
@@ -1369,7 +1365,7 @@ class AsyncToolManager:
                             formatted_source = _format_source_block(
                                 source_url=safe_url,
                                 title=title,
-                                content=f"Published: {published_date}\n{full_content}",
+                                content=full_content,
                                 source_num=source_num_start + source_count
                             )
                             res += formatted_source
@@ -2398,35 +2394,130 @@ async def check_ollama_health() -> bool:
 def _format_source_block(source_url: str, title: str, content: str, source_num: int, timestamp: str = None) -> str:
     """
     Format individual source with simplified block structure for accurate LLM citation.
-    
+
     This creates clear source blocks that help the Primary LLM maintain
     accurate URL-content associations without overwhelming context size.
-    
+    Now extracts actual publication dates from content to avoid misleading the Primary LLM.
+
     Args:
         source_url: The exact URL to cite (MANDATORY CITATION URL)
         title: Source title or description
         content: The actual content from the source
         source_num: Sequential source number for organization
-        timestamp: Optional timestamp (auto-generated if not provided)
-    
+        timestamp: Deprecated parameter (kept for backward compatibility)
+
     Returns:
-        Formatted source block with clear citation requirements
+        Formatted source block with clear citation requirements and actual content dates
     """
-    if not timestamp:
-        from datetime import datetime
-        timestamp = datetime.now().strftime('%A, %B %d, %Y %I:%M:%S %p')
-    
+    # Extract actual publication date from content
+    content_date = _extract_content_date(content)
+
+    # Build date line only if we found an actual publication date
+    date_line = ""
+    if content_date:
+        date_line = f"📅 Published: {content_date}\n"
+
     return f"""
 ═══════════════════════════════════════════════════════
 📄 SOURCE BLOCK #{source_num} [REQUIRED CITATION: {source_url}]
 ═══════════════════════════════════════════════════════
 Title: {title}
 🔗 MANDATORY CITATION URL: {source_url}
-📅 Retrieved: {timestamp}
-───────────────────────────────────────────────────────
+{date_line}───────────────────────────────────────────────────────
 CONTENT: {content}
 ═══════════════════════════════════════════════════════
 """
+
+def _extract_content_date(content: str) -> str:
+    """
+    Extract actual publication date from content text.
+    Returns formatted date string if found, None if not available.
+    """
+    import re
+    from datetime import datetime
+
+    if not content:
+        return None
+
+    # Common date patterns in news content
+    date_patterns = [
+        # Format: "Published: January 15, 2024" or "Published January 15, 2024"
+        r'(?:Published|Publication date|Date published):\s*([A-Za-z]+ \d{1,2}, \d{4})',
+        r'(?:Published|Publication date|Date published)\s+([A-Za-z]+ \d{1,2}, \d{4})',
+
+        # Format: "15 January 2024" or "January 15, 2024"
+        r'\b(\d{1,2} [A-Za-z]+ \d{4})\b',
+        r'\b([A-Za-z]+ \d{1,2}, \d{4})\b',
+
+        # Format: "2024-01-15" or "15/01/2024" or "01/15/2024"
+        r'\b(\d{4}-\d{1,2}-\d{1,2})\b',
+        r'\b(\d{1,2}/\d{1,2}/\d{4})\b',
+
+        # Format: "15 Jan 2024" or "Jan 15, 2024" or "Sept 18, 2023"
+        r'\b(\d{1,2} [A-Za-z]{3,4} \d{4})\b',
+        r'\b([A-Za-z]{3,4} \d{1,2}, \d{4})\b',
+
+        # BBC specific: "5 hours ago", "2 days ago", "1 week ago"
+        r'\b(\d+)\s+(hour|hours|day|days|week|weeks|month|months)\s+ago\b',
+
+        # Format: "September 18, 2025" or "18 September 2025"
+        r'\b([A-Za-z]+ \d{1,2}, \d{4})\b',
+        r'\b(\d{1,2} [A-Za-z]+ \d{4})\b',
+    ]
+
+    # Try each pattern
+    for pattern in date_patterns:
+        matches = re.findall(pattern, content, re.IGNORECASE)
+        if matches:
+            for match in matches:
+                if isinstance(match, tuple):
+                    # Handle relative dates like "2 days ago"
+                    if len(match) == 2 and match[1] in ['hour', 'hours', 'day', 'days', 'week', 'weeks', 'month', 'months']:
+                        try:
+                            from datetime import timedelta
+                            amount = int(match[0])
+                            unit = match[1]
+
+                            now = datetime.now()
+                            if 'hour' in unit:
+                                target_date = now - timedelta(hours=amount)
+                            elif 'day' in unit:
+                                target_date = now - timedelta(days=amount)
+                            elif 'week' in unit:
+                                target_date = now - timedelta(weeks=amount)
+                            elif 'month' in unit:
+                                target_date = now - timedelta(days=amount*30)  # Approximate
+
+                            return target_date.strftime('%B %d, %Y')
+                        except:
+                            continue
+                    else:
+                        match = match[0] if isinstance(match, tuple) else match
+
+                # Validate the date makes sense (not future, not too old)
+                try:
+                    # Try to parse various formats
+                    parsed_date = None
+                    for fmt in ['%B %d, %Y', '%b %d, %Y', '%d %B %Y', '%d %b %Y', '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y']:
+                        try:
+                            parsed_date = datetime.strptime(match, fmt)
+                            break
+                        except:
+                            continue
+
+                    if parsed_date:
+                        # Check if date is reasonable (between 2020 and now + 1 year)
+                        now = datetime.now()
+                        min_date = datetime(2020, 1, 1)
+                        max_date = datetime(now.year + 1, 12, 31)
+
+                        if min_date <= parsed_date <= max_date:
+                            return parsed_date.strftime('%B %d, %Y')
+
+                except:
+                    continue
+
+    return None
 
 def _extract_domain(url: str) -> str:
     """Extract domain name from URL for titles"""
