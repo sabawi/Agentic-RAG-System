@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# Multi-Step Automation CLI Launcher
+# Quick launcher for the automation framework
+#
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Check if we're in a virtual environment
+if [[ "$VIRTUAL_ENV" != "" ]]; then
+    echo "🌟 Virtual environment detected: $(basename $VIRTUAL_ENV)"
+else
+    echo "⚠️  No virtual environment detected. Consider activating one."
+fi
+
+# Check if the server is running
+if curl -s http://localhost:5000/health > /dev/null 2>&1; then
+    echo "✅ Server is running on http://localhost:5000"
+else
+    echo "❌ Server not detected on http://localhost:5000"
+    echo "   Start the server first: ./start_complete.sh"
+    echo "   Or continue anyway to test offline features"
+    echo ""
+fi
+
+# Launch the CLI
+echo "🚀 Launching Multi-Step Automation CLI..."
+echo ""
+
+cd "$SCRIPT_DIR"
+python tools/automation_cli.py "$@"

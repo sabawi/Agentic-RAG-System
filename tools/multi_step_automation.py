@@ -243,11 +243,17 @@ class GoalAchievementDetector:
         try:
             if criterion.check_type == "keyword":
                 # Check for specific keywords
-                keywords = criterion.check_value if isinstance(criterion.check_value, list) else [criterion.check_value]
-                found_keywords = [kw for kw in keywords if kw.lower() in all_responses.lower()]
-                result["passed"] = len(found_keywords) > 0
+                if isinstance(criterion.check_value, dict):
+                    keywords = criterion.check_value.get('keywords', [])
+                    min_matches = criterion.check_value.get('min_matches', 1)
+                else:
+                    keywords = criterion.check_value if isinstance(criterion.check_value, list) else [criterion.check_value]
+                    min_matches = 1
+
+                found_keywords = [kw for kw in keywords if isinstance(kw, str) and kw.lower() in all_responses.lower()]
+                result["passed"] = len(found_keywords) >= min_matches
                 result["details"] = f"Found keywords: {found_keywords}"
-                result["score"] = len(found_keywords) / len(keywords)
+                result["score"] = len(found_keywords) / len(keywords) if keywords else 0
 
             elif criterion.check_type == "pattern":
                 # Check for regex patterns
@@ -302,6 +308,91 @@ class MultiStepAutomation:
         self.current_prompt_index = 0
 
         logger.info(f"🚀 Multi-Step Automation initialized (Session: {self.session_id})")
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> 'MultiStepAutomation':
+        """Create MultiStepAutomation instance from configuration dictionary"""
+        # Extract basic parameters
+        server_url = config.get('server_url', 'http://localhost:5000')
+        endpoint = config.get('endpoint', '/llama3_1b/stream')
+        max_iterations = config.get('max_iterations', 20)
+        iteration_delay = config.get('iteration_delay', 2.0)
+
+        # Create instance
+        automation = cls(
+            server_url=server_url,
+            endpoint=endpoint,
+            max_iterations=max_iterations,
+            iteration_delay=iteration_delay
+        )
+
+        # Load prompt templates
+        template_configs = config.get('prompt_templates', [])
+        automation.prompt_templates = [
+            PromptTemplate(
+                id=t.get('name', f'template_{i}'),
+                template=t.get('template', ''),
+                variables=['query'],  # Default to query variable
+                priority=5,
+                context_weight=t.get('weight', 1.0)
+            ) for i, t in enumerate(template_configs)
+        ]
+
+        # Set up goal detector if target_goal is provided
+        target_goal = config.get('target_goal')
+        if target_goal:
+            criteria = []
+            criteria_config = target_goal.get('criteria', {})
+
+            for criterion_name, criterion_data in criteria_config.items():
+                # Determine check type and value based on criterion data
+                if 'keywords' in criterion_data:
+                    check_type = "keyword"
+                    check_value = {
+                        'keywords': criterion_data.get('keywords', []),
+                        'min_matches': criterion_data.get('min_matches', 1)
+                    }
+                elif 'min_length' in criterion_data:
+                    check_type = "length"
+                    # Convert min_length to proper format expected by checking logic
+                    min_length = criterion_data.get('min_length', 0)
+                    max_length = criterion_data.get('max_length', float('inf'))
+                    check_value = {"min": min_length, "max": max_length}
+                elif 'patterns' in criterion_data:
+                    check_type = "pattern"
+                    # Convert patterns list to single pattern for regex
+                    patterns = criterion_data.get('patterns', [])
+                    if isinstance(patterns, list):
+                        # Join patterns with OR operator for regex
+                        check_value = '|'.join(f'({pattern})' for pattern in patterns)
+                    else:
+                        check_value = patterns
+                else:
+                    check_type = "keyword"
+                    check_value = {'keywords': [], 'min_matches': 1}
+
+                criteria.append(GoalCriteria(
+                    id=criterion_name,
+                    description=f"Goal criteria: {criterion_name}",
+                    check_type=check_type,
+                    check_value=check_value,
+                    weight=criterion_data.get('weight', 1.0),
+                    required=True
+                ))
+
+            if criteria:
+                automation.goal_detector = GoalAchievementDetector(criteria)
+
+        # Initialize context buffer with goal type
+        goal_type = config.get('goal_type', 'general')
+        automation.context_buffer = ContextBuffer(
+            session_id=automation.session_id,
+            iterations=[],
+            goal_progress={"type": goal_type, "target_score": target_goal.get('min_score', 0.8) if target_goal else 0.8}
+        )
+
+        logger.info(f"✅ Automation created from config - Goal: {goal_type}, Templates: {len(automation.prompt_templates)}")
+        return automation
 
     def load_configuration(self, config_path: str):
         """Load configuration from JSON file"""
@@ -588,12 +679,26 @@ class MultiStepAutomation:
     async def send_prompt_to_server(self, prompt: str) -> str:
         """Send a prompt to the server and return the response"""
         try:
-            payload = {
-                "prompt": prompt,
-                "stream": False,
-                "max_tokens": 4000,
-                "temperature": 0.7
-            }
+            # Choose payload format based on endpoint
+            if "/v1/chat/completions" in self.endpoint:
+                # OpenAI-compatible format
+                payload = {
+                    "model": "qwen3:8b",
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ],
+                    "stream": False,
+                    "max_tokens": 4000,
+                    "temperature": 0.7
+                }
+            else:
+                # Legacy format for /llama3_1b/stream
+                payload = {
+                    "prompt": prompt,
+                    "stream": False,
+                    "max_tokens": 4000,
+                    "temperature": 0.7
+                }
 
             logger.info(f"📤 Sending prompt ({len(prompt)} chars) to {self.server_url}{self.endpoint}")
 
@@ -601,7 +706,7 @@ class MultiStepAutomation:
                 f"{self.server_url}{self.endpoint}",
                 json=payload,
                 headers={"Content-Type": "application/json"},
-                timeout=300  # 5 minute timeout
+                timeout=2700  # 45 minute timeout for complex queries
             )
 
             if response.status_code == 200:
@@ -622,6 +727,14 @@ class MultiStepAutomation:
                 logger.error(error_msg)
                 return f"Error: {error_msg}"
 
+        except requests.exceptions.Timeout:
+            error_msg = "Request timed out - server may be processing a complex query"
+            logger.error(error_msg)
+            return f"Error: {error_msg}"
+        except requests.exceptions.ConnectionError:
+            error_msg = "Connection failed - check if server is running"
+            logger.error(error_msg)
+            return f"Error: {error_msg}"
         except Exception as e:
             error_msg = f"Request failed: {str(e)}"
             logger.error(error_msg)
