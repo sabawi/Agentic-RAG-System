@@ -113,3 +113,9 @@ sandbox_workspace/**/*
 
 # Test directory - needs major maintenance and rewriting
 test/
+
+# Runtime data files that should not be committed
+document_store/faiss.index
+watched_directories.json
+logs/
+runtime/
