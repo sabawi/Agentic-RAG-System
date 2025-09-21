@@ -1,6 +1,6 @@
-# 📚 Agentic RAG System v1.0.2.2 - Documentation Overview
+# 📚 Agentic RAG System v1.0.2.57 - Documentation Overview
 
-Welcome to the comprehensive documentation for the **Agentic RAG System v1.0.2.2** - a production-ready FastAPI-based agentic system with advanced tool calling capabilities.
+Welcome to the comprehensive documentation for the **Agentic RAG System v1.0.2.57** - a production-ready FastAPI-based agentic system with **Hybrid LLM Architecture** and advanced tool calling capabilities.
 
 ## 🎯 Quick Start - Choose Your Guide
 
@@ -50,6 +50,7 @@ These are the **comprehensive, production-ready guides** that consolidate all es
 
 #### **⚙️ Setup & Installation**
 - [`./docs/setup/INSTALLATION.md`](./setup/INSTALLATION.md) - Detailed installation procedures
+- [`./docs/LLM_CONFIGURATION_GUIDE.md`](./LLM_CONFIGURATION_GUIDE.md) - **NEW**: Hybrid LLM Architecture configuration
 
 #### **📊 Project Tracking**
 - [`./docs/PROJECT_CHANGELOG.md`](./PROJECT_CHANGELOG.md) - Current project history and features
@@ -75,12 +76,17 @@ Preserved for reference but not needed for daily operations:
 - **📧 Integrated Email** - Secure email automation with attachment support
 - **🛡️ Production Ready** - Comprehensive monitoring, security, and maintenance procedures
 
-### **System Architecture**
+### **System Architecture - Hybrid LLM**
 ```
-User Request → Tool Calling LLM → Multi-Tool Execution → Primary LLM → Response
-                     ↓                    ↓                    ↓
-              [19 AI Tools]        [Parallel Processing]   [Email/File Generation]
+User Request → Tool Calling LLM (OpenAI) → Multi-Tool Execution → Primary LLM (Ollama) → Response
+                     ↓                            ↓                        ↓
+              [Reliable Tool Calls]        [19 AI Tools]         [Local Processing + Thinking]
 ```
+
+**NEW: Hybrid Architecture**
+- **Tool Calling**: OpenAI gpt-4o-mini for reliable, accurate tool orchestration
+- **Primary LLM**: Local Ollama qwen3:8b for privacy, speed, and thinking capabilities
+- **Vision**: Local Ollama qwen2.5vl:3b for image analysis and OCR
 
 ### **Available Tools**
 1. **Web Search** - DuckDuckGo search with content extraction

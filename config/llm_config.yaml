@@ -39,7 +39,7 @@ llm:
     type: ollama
     config:
       model: qwen3:8b
-      timeout: 600
+      timeout: 3600  # 60 minutes for local models with large contexts
       context_window_size: 8192
       temperature: 0.7
       num_predict: 16384
@@ -47,17 +47,16 @@ llm:
       base_url: http://127.0.0.1:11434
       api_key: null
       stream: true
+      think: false  # Configurable think parameter for reasoning
   tool_calling:
     type: openai
     config:
       model: gpt-4o-mini
-      timeout: 300
-      context_window_size: 8192
-      temperature: 0.7
-      max_tokens: 4096
+      timeout: 60
+      context_window_size: 4096
+      temperature: 0.1  # Lower for tool calling
+      max_tokens: 1024
       stream: false
-      api_key: ${OPENAI_API_KEY}
-      base_url: https://api.openai.com/v1
   providers:
     ollama:
       health_check_url: http://127.0.0.1:11434/api/tags
@@ -117,9 +116,10 @@ vision:
   type: ollama
   config:
     model: qwen2.5vl:3b
-    timeout: 1800
+    timeout: 3600  # 60 minutes for vision processing with large images
     base_url: http://127.0.0.1:11434
     fallback_model: bakllava:latest
+    think: false  # Configurable think parameter for vision tasks
 flight_search:
   enabled: true
   web_scraping:

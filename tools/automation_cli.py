@@ -298,10 +298,23 @@ class AutomationCLI:
             print(f"🔗 Session ID: {self.session_id}")
             print("⏳ Starting automation process...\n")
 
+            # Ask user for execution mode
+            print("🔄 Execution Mode:")
+            print("1. 📝 Sequential (traditional step-by-step)")
+            print("2. ⚡ Parallel (faster concurrent exploration)")
+            mode_choice = input("Choose mode (1/2, default=1): ").strip() or "1"
+
             # Start automation in background
-            automation_task = asyncio.create_task(
-                self.automation.run_automation({"query": query})
-            )
+            if mode_choice == "2":
+                print("⚡ Using parallel execution mode for faster results!")
+                automation_task = asyncio.create_task(
+                    self.automation.run_parallel_exploration({"query": query})
+                )
+            else:
+                print("📝 Using sequential execution mode")
+                automation_task = asyncio.create_task(
+                    self.automation.run_automation({"query": query})
+                )
 
             # Monitor progress
             while not automation_task.done() and not self.stop_requested:

@@ -1,0 +1,325 @@
+{
+  "session_id": "6c3feeee-53e1-4a56-b6cb-6a9510ac3896",
+  "start_time": "2025-09-19T13:21:24.646134",
+  "total_iterations": 8,
+  "goal_achieved": false,
+  "final_score": 0.0,
+  "execution_time": 2414.7360274791718,
+  "iterations": [
+    {
+      "iteration": 1,
+      "prompt_template": "initial_research",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: comprehensive_length",
+          "Goal criteria: technical_depth",
+          "Goal criteria: future_insights",
+          "Goal criteria: structured_report"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T13:26:24.723032"
+    },
+    {
+      "iteration": 2,
+      "prompt_template": "technical_deep_dive",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: comprehensive_length",
+          "Goal criteria: technical_depth",
+          "Goal criteria: future_insights",
+          "Goal criteria: structured_report"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T13:31:26.747164"
+    },
+    {
+      "iteration": 3,
+      "prompt_template": "future_implications",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: comprehensive_length",
+          "Goal criteria: technical_depth",
+          "Goal criteria: future_insights",
+          "Goal criteria: structured_report"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T13:36:28.860788"
+    },
+    {
+      "iteration": 4,
+      "prompt_template": "synthesis_report",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: comprehensive_length",
+          "Goal criteria: technical_depth",
+          "Goal criteria: future_insights",
+          "Goal criteria: structured_report"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T13:41:30.963273"
+    },
+    {
+      "iteration": 5,
+      "prompt_template": "initial_research",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: comprehensive_length",
+          "Goal criteria: technical_depth",
+          "Goal criteria: future_insights",
+          "Goal criteria: structured_report"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T13:46:33.069083"
+    },
+    {
+      "iteration": 6,
+      "prompt_template": "technical_deep_dive",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: comprehensive_length",
+          "Goal criteria: technical_depth",
+          "Goal criteria: future_insights",
+          "Goal criteria: structured_report"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T13:51:35.174835"
+    },
+    {
+      "iteration": 7,
+      "prompt_template": "future_implications",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: comprehensive_length",
+          "Goal criteria: technical_depth",
+          "Goal criteria: future_insights",
+          "Goal criteria: structured_report"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T13:56:37.278830"
+    },
+    {
+      "iteration": 8,
+      "prompt_template": "synthesis_report",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "comprehensive_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "technical_depth": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "future_insights": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "structured_report": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: comprehensive_length",
+          "Goal criteria: technical_depth",
+          "Goal criteria: future_insights",
+          "Goal criteria: structured_report"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T14:01:39.382152"
+    }
+  ],
+  "final_context": "Goal Progress:\n{\n  \"type\": \"research_analysis\",\n  \"target_score\": 0.7\n}\n\nIteration 6:\nPrompt: Dive deeper into the technical aspects of Investing in Quantum Computing Technology for 5 years. Analyze methodologies, frameworks, and implementation approaches.\n\n## Previous Context:\nGoal Progress:\n...\nResponse: Error: Request failed: HTTPConnectionPool(host='localhost', port=5000): Read timed out. (read timeout=300)...\n\nIteration 7:\nPrompt: Analyze the future implications and potential of Investing in Quantum Computing Technology for 5 years. Consider trends, predictions, and emerging developments.\n\n## Previous Context:\nGoal Progress:\n{\n...\nResponse: Error: Request failed: HTTPConnectionPool(host='localhost', port=5000): Read timed out. (read timeout=300)...\n\nIteration 8:\nPrompt: Create a comprehensive synthesis report on Investing in Quantum Computing Technology for 5 years that includes executive summary, current state, and future outlook.\n\n## Previous Context:\nGoal Progress...\nResponse: Error: Request failed: HTTPConnectionPool(host='localhost', port=5000): Read timed out. (read timeout=300)...\n",
+  "achievement_details": {},
+  "end_time": "2025-09-19T14:01:39.382160"
+}

@@ -29,6 +29,7 @@ from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, asdict
 from pathlib import Path
 import argparse
+import aiohttp
 import requests
 import re
 
@@ -188,8 +189,8 @@ class GoalAchievementDetector:
         self.criteria = criteria
         self.achievement_history = []
 
-    def check_goal_achievement(self, context_buffer: ContextBuffer) -> Dict[str, Any]:
-        """Check if the goal has been achieved"""
+    async def check_goal_achievement(self, context_buffer: ContextBuffer) -> Dict[str, Any]:
+        """Check if the goal has been achieved using parallel criterion evaluation"""
         results = {
             "achieved": False,
             "progress_score": 0.0,
@@ -201,8 +202,20 @@ class GoalAchievementDetector:
         total_weight = sum(c.weight for c in self.criteria)
         achieved_weight = 0.0
 
-        for criterion in self.criteria:
-            criterion_result = self._check_single_criterion(criterion, context_buffer)
+        # Parallel criterion checking for better performance
+        async def check_criterion_async(criterion):
+            return criterion, self._check_single_criterion(criterion, context_buffer)
+
+        # Run all criterion checks concurrently
+        criterion_tasks = [check_criterion_async(criterion) for criterion in self.criteria]
+        criterion_results = await asyncio.gather(*criterion_tasks, return_exceptions=True)
+
+        for result in criterion_results:
+            if isinstance(result, Exception):
+                logger.error(f"Error in parallel criterion check: {result}")
+                continue
+
+            criterion, criterion_result = result
             results["criteria_results"][criterion.id] = criterion_result
 
             if criterion_result["passed"]:
@@ -677,7 +690,7 @@ class MultiStepAutomation:
             }
 
     async def send_prompt_to_server(self, prompt: str) -> str:
-        """Send a prompt to the server and return the response"""
+        """Send a prompt to the server and return the response using async HTTP"""
         try:
             # Choose payload format based on endpoint
             if "/v1/chat/completions" in self.endpoint:
@@ -702,37 +715,48 @@ class MultiStepAutomation:
 
             logger.info(f"📤 Sending prompt ({len(prompt)} chars) to {self.server_url}{self.endpoint}")
 
-            response = requests.post(
-                f"{self.server_url}{self.endpoint}",
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=2700  # 45 minute timeout for complex queries
+            # Use async HTTP client with connection pooling
+            timeout = aiohttp.ClientTimeout(total=2700)  # 45 minute timeout
+            connector = aiohttp.TCPConnector(
+                limit=10,
+                limit_per_host=5,
+                keepalive_timeout=300
             )
 
-            if response.status_code == 200:
-                result = response.json()
+            async with aiohttp.ClientSession(
+                connector=connector,
+                timeout=timeout,
+                headers={"Content-Type": "application/json"}
+            ) as session:
+                async with session.post(
+                    f"{self.server_url}{self.endpoint}",
+                    json=payload
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
 
-                # Extract content based on response format
-                if "choices" in result and len(result["choices"]) > 0:
-                    content = result["choices"][0].get("message", {}).get("content", "")
-                elif "response" in result:
-                    content = result["response"]
-                else:
-                    content = str(result)
+                        # Extract content based on response format
+                        if "choices" in result and len(result["choices"]) > 0:
+                            content = result["choices"][0].get("message", {}).get("content", "")
+                        elif "response" in result:
+                            content = result["response"]
+                        else:
+                            content = str(result)
 
-                logger.info(f"📥 Received response ({len(content)} chars)")
-                return content
-            else:
-                error_msg = f"Server error: {response.status_code} - {response.text}"
-                logger.error(error_msg)
-                return f"Error: {error_msg}"
+                        logger.info(f"📥 Received response ({len(content)} chars)")
+                        return content
+                    else:
+                        error_text = await response.text()
+                        error_msg = f"Server error: {response.status} - {error_text}"
+                        logger.error(error_msg)
+                        return f"Error: {error_msg}"
 
-        except requests.exceptions.Timeout:
+        except asyncio.TimeoutError:
             error_msg = "Request timed out - server may be processing a complex query"
             logger.error(error_msg)
             return f"Error: {error_msg}"
-        except requests.exceptions.ConnectionError:
-            error_msg = "Connection failed - check if server is running"
+        except aiohttp.ClientError as e:
+            error_msg = f"Connection failed - check if server is running: {str(e)}"
             logger.error(error_msg)
             return f"Error: {error_msg}"
         except Exception as e:
@@ -754,6 +778,88 @@ class MultiStepAutomation:
         self.current_prompt_index += 1
 
         return template
+
+    async def run_parallel_exploration(self, variables: Dict[str, Any], max_parallel: int = 3) -> Dict[str, Any]:
+        """Run multiple prompt templates in parallel for faster exploration"""
+        logger.info(f"🚀 Starting parallel automation exploration (max {max_parallel} concurrent)")
+
+        start_time = time.time()
+        results = {
+            "session_id": self.session_id,
+            "start_time": datetime.now().isoformat(),
+            "total_iterations": 0,
+            "goal_achieved": False,
+            "final_score": 0.0,
+            "execution_time": 0.0,
+            "iterations": [],
+            "final_context": "",
+            "achievement_details": {}
+        }
+
+        try:
+            # Run multiple prompts concurrently
+            active_templates = self.prompt_templates[:max_parallel]
+
+            async def process_template(template, template_vars):
+                context = self.context_buffer.get_summary_context() if self.context_buffer else ""
+                formatted_prompt = template.format(template_vars, context)
+                response = await self.send_prompt_to_server(formatted_prompt)
+
+                return {
+                    "template": template,
+                    "prompt": formatted_prompt,
+                    "response": response,
+                    "metadata": {
+                        "template_id": template.id,
+                        "prompt_length": len(formatted_prompt),
+                        "response_length": len(response)
+                    }
+                }
+
+            # Execute templates in parallel
+            template_tasks = [process_template(template, variables) for template in active_templates]
+            parallel_results = await asyncio.gather(*template_tasks, return_exceptions=True)
+
+            # Process results and add to context
+            for result in parallel_results:
+                if isinstance(result, Exception):
+                    logger.error(f"Parallel template error: {result}")
+                    continue
+
+                self.context_buffer.add_iteration(
+                    result["prompt"],
+                    result["response"],
+                    result["metadata"]
+                )
+                results["iterations"].append(result["metadata"])
+
+            # Check goal achievement with all parallel results
+            if self.goal_detector:
+                goal_status = await self.goal_detector.check_goal_achievement(self.context_buffer)
+                results["goal_achieved"] = goal_status["achieved"]
+                results["final_score"] = goal_status["progress_score"]
+
+                if goal_status["achieved"]:
+                    results["achievement_details"] = goal_status["achievement_details"]
+                    logger.info(f"🎉 GOAL ACHIEVED through parallel exploration!")
+
+            results["total_iterations"] = len(results["iterations"])
+
+        except Exception as e:
+            logger.error(f"❌ Parallel automation error: {e}")
+            results["error"] = str(e)
+
+        # Finalize results
+        results["execution_time"] = time.time() - start_time
+        results["final_context"] = self.context_buffer.get_summary_context() if self.context_buffer else ""
+
+        logger.info(f"🏁 PARALLEL AUTOMATION COMPLETED")
+        logger.info(f"📈 Parallel Executions: {results['total_iterations']}")
+        logger.info(f"🎯 Goal Achieved: {results['goal_achieved']}")
+        logger.info(f"📊 Final Score: {results['final_score']:.2f}")
+        logger.info(f"⏱️ Execution Time: {results['execution_time']:.1f}s")
+
+        return results
 
     async def run_automation(self, variables: Dict[str, Any]) -> Dict[str, Any]:
         """Run the multi-step automation process"""
@@ -809,7 +915,7 @@ class MultiStepAutomation:
                 self.context_buffer.add_iteration(formatted_prompt, response, iteration_metadata)
 
                 # Check goal achievement
-                goal_status = self.goal_detector.check_goal_achievement(self.context_buffer)
+                goal_status = await self.goal_detector.check_goal_achievement(self.context_buffer)
                 goal_achieved = goal_status["achieved"]
 
                 # Log progress
@@ -837,10 +943,8 @@ class MultiStepAutomation:
                     logger.info(f"🎉 GOAL ACHIEVED in {iteration_count} iterations!")
                     break
 
-                # Delay before next iteration
-                if iteration_count < self.max_iterations:
-                    logger.info(f"⏳ Waiting {self.iteration_delay}s before next iteration...")
-                    await asyncio.sleep(self.iteration_delay)
+                # Skip unnecessary delay for better performance
+                # Note: Removed iteration delay to optimize execution speed
 
         except Exception as e:
             logger.error(f"❌ Automation error: {e}")

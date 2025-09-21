@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Agentic-RAG Server v1.0.2.5 - Complete FastAPI Server with Ollama LLM Integration
+Agentic-RAG Server v1.0.2.57 - Complete FastAPI Server with Hybrid LLM Architecture
 =============================================================================
 
 FastAPI server with all original Flask functionality including:
@@ -13,12 +13,12 @@ FastAPI server with all original Flask functionality including:
 - Database connection pooling
 - Production-ready caching layer
 
-Version: 1.0.2.5
+Version: 1.0.2.57 - Critical Ollama Tool Calling Fix & Hybrid Architecture
 Release: Production Ready
 """
 
 # Version information
-__version__ = "1.0.2.17"
+__version__ = "1.0.2.57"
 __release__ = "Production Ready"
 
 import asyncio
@@ -2176,7 +2176,6 @@ class AsyncToolManager:
                     email_tool = SecureEmailSenderTool()
                     
                     # Execute the email tool (async)
-                    import asyncio
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
@@ -2278,7 +2277,6 @@ async def lifespan(app: FastAPI):
         interrogator = get_document_interrogator()
         if interrogator:
             # Trigger startup scanning in background
-            import asyncio
             asyncio.create_task(interrogator._safe_startup_config_scan())
             
             # Start periodic background scanning
@@ -3213,8 +3211,8 @@ async def llama_prompt(request: OllamaPromptRequest):
         payload = {
             "model": request.model,
             "prompt": request.prompt,
-            "stream": request.stream,
-            "think": False  # Disable thinking like the original version
+            "stream": request.stream
+            # think parameter handled by LLM Manager from config
         }
         
         if request.system:
@@ -5772,7 +5770,6 @@ Comprehensive stock analysis completed successfully.
                         # News analysis email with dynamic subject
                         email_subject = _generate_dynamic_title(user_prompt, tools_results)
                         # 🔧 CRITICAL FIX: Add timeout to prevent infinite hanging
-                        import asyncio
                         
                         try:
                             logger.info(f"⏰ POST-LLM AUTO-EXECUTION: Starting email execution with 120s timeout...")
@@ -6518,7 +6515,6 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     
                     if email_tool_instance and html_filename:
                         # 🔧 CRITICAL FIX: Add timeout to prevent infinite hanging
-                        import asyncio
                         
                         try:
                             logger.info(f"⏰ POST-LLM HTML EMAIL: Starting email execution with 120s timeout...")
@@ -6587,8 +6583,7 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         
                         if email_tool_instance:
                             # 🔧 CRITICAL FIX: Add timeout to prevent infinite hanging
-                            import asyncio
-                            
+                                
                             try:
                                 logger.info(f"⏰ POST-LLM CONVERSATION PDF: Starting email execution with 120s timeout...")
                                 
@@ -6811,7 +6806,6 @@ AI Document Generation System"""
                         logger.info(f"📧 POST-LLM EMAIL: Body length: {len(email_body)} chars")
                         
                         # 🔧 CRITICAL FIX: Add timeout to prevent infinite hanging
-                        import asyncio
                         
                         try:
                             logger.info(f"⏰ POST-LLM EMAIL: Starting email execution with 120s timeout...")
@@ -7069,6 +7063,7 @@ async def llama_stream(request: Request):
             tools_results = ""    # Default value to prevent UnboundLocalError
             tools_results_list = []  # Use list for O(1) append vs O(n²) string concatenation
             tools_called = []  # Track all tools that were called
+            complete_llm_response = ""  # Initialize for both Ollama and OpenAI paths
             
             # 🎯 EMAIL INTERCEPTION STATE  
             email_intercepted = False
@@ -7278,8 +7273,7 @@ The above image analysis was automatically performed on newly uploaded images. T
                                 logger.info(f"🎯 TOOL CALLS DETECTED: {len(tool_calls)} tools to execute")
                                 
                                 # Process each tool call - PARALLEL EXECUTION OPTIMIZATION
-                                import asyncio
-                                
+                                        
                                 # Log all tool calls upfront
                                 for i, tool_call in enumerate(tool_calls):
                                     function_name = tool_call['function']['name']
@@ -7792,8 +7786,7 @@ The above image analysis was automatically performed on newly uploaded images. T
                                 
                                 # Execute forced tool calls - PARALLEL EXECUTION OPTIMIZATION
                                 if forced_tools:
-                                    import asyncio
-                                    
+                                                
                                     # Log all forced tool calls upfront
                                     for function_name, function_args in forced_tools:
                                         logger.info(f"🔧 FORCED Tool {function_name}: START | Args: {list(function_args.keys())}")
@@ -8308,6 +8301,12 @@ END OF CONTEXT
             
             # Stream response from Ollama using connection pool
             async with http_pool.get_session() as session:
+                # Get think parameter from primary LLM configuration
+                # Disable think for meta-tasks (title generation, tagging, etc.)
+                primary_config = config_loader.get_llm_config('primary')
+                base_think_enabled = primary_config.get('config', {}).get('think', False)
+                think_enabled = False if is_meta_task else base_think_enabled
+
                 stream_payload = {
                     "model": model,
                     "prompt": in_prompt,
@@ -8319,7 +8318,7 @@ END OF CONTEXT
                         "num_ctx": data.get('num_ctx', 8192),
                         "low_vram": data.get('low_vram', False)
                     },
-                    "think": False,  # Set to False to disable thinking
+                    "think": think_enabled,  # Add think parameter from configuration
                     "stream": True
                 }
                 
@@ -8506,44 +8505,101 @@ END OF CONTEXT
                     logger.info(json.dumps(stream_payload, indent=2))
                     logger.info("="*80)
                     
-                    # Legacy logging maintained
-                    logger.info(f"🧾 PRIMARY LLM: System Prompt: {stream_payload["system"]}")
-                    # async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=2700) as response:
-                    async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=3600) as response:
-                        if response.status == 200:
-                            # Capture complete LLM response for post-processing
-                            complete_llm_response = ""
-                        
-                            async for chunk in response.content.iter_chunked(1024):
-                                if chunk:
-                                    # Stream chunk to client immediately  
-                                    yield chunk
-                                
-                                # Also capture chunk for post-processing
+                    # 🎯 PHASE 2 FIX: Use LLM Manager instead of hardcoded Ollama
+                    logger.info(f"🧾 PRIMARY LLM: System Prompt: {stream_payload['system']}")
+                    logger.info(f"🎛️ MANAGER: Routing to configured primary provider")
+
+                    # Prepare parameters for LLM Manager
+                    # Get think parameter from primary LLM configuration
+                    # Disable think for meta-tasks (title generation, tagging, etc.)
+                    primary_config = config_loader.get_llm_config('primary')
+                    base_think_enabled = primary_config.get('config', {}).get('think', False)
+                    think_enabled = False if is_meta_task else base_think_enabled
+
+                    manager_kwargs = {
+                        'model': stream_payload.get('model'),
+                        'system_prompt': stream_payload.get('system'),
+                        'temperature': stream_payload.get('options', {}).get('temperature', 0.7),
+                        'max_tokens': stream_payload.get('options', {}).get('num_predict', 4096),
+                        'stream': stream_payload.get('stream', True),
+                        'think': think_enabled  # Pass think parameter from configuration
+                    }
+
+                    # Add images if present for vision models
+                    if image_exists and stream_payload.get("images"):
+                        manager_kwargs['images'] = stream_payload["images"]
+
+                    try:
+                        # Use LLM Manager for provider-agnostic primary model call
+                        async for chunk in llm_manager.generate_stream(stream_payload['prompt'], **manager_kwargs):
+                            if chunk:
+                                # 🎯 STREAMING FIX: Format LLM Manager text into proper JSON chunks
+                                # Native endpoint expects Ollama-style JSON format
+                                if isinstance(chunk, str):
+                                    # Format text chunk as Ollama-style JSON response
+                                    json_chunk = {
+                                        "model": stream_payload.get('model', model),
+                                        "response": chunk,
+                                        "done": False
+                                    }
+                                    formatted_chunk = json.dumps(json_chunk) + '\n'
+                                    yield formatted_chunk.encode('utf-8')
+                                else:
+                                    # Handle bytes - convert to JSON format
+                                    chunk_text = chunk.decode('utf-8') if isinstance(chunk, bytes) else str(chunk)
+                                    json_chunk = {
+                                        "model": stream_payload.get('model', model),
+                                        "response": chunk_text,
+                                        "done": False
+                                    }
+                                    formatted_chunk = json.dumps(json_chunk) + '\n'
+                                    yield formatted_chunk.encode('utf-8')
+
+                                # 🎯 PHASE 3 FIX: Unified streaming interface
+                                # LLM Manager providers already return clean text content
                                 try:
-                                    chunk_text = chunk.decode('utf-8')
-                                    # Extract actual response text from JSON streaming format  
-                                    for line in chunk_text.strip().split('\n'):
-                                        if line.strip():
-                                            try:
-                                                # Handle both raw JSON and "data: {json}" format
-                                                if line.startswith('data: '):
-                                                    json_data = line[6:].strip()
-                                                else:
-                                                    json_data = line.strip()
-                                                
-                                                if json_data:
-                                                    chunk_json = json.loads(json_data)
-                                                    if 'response' in chunk_json and not chunk_json.get('done', False):
-                                                        # Only accumulate actual response text, not metadata/tokens
-                                                        response_text = chunk_json['response']
-                                                        if response_text:  # Skip empty responses
-                                                            complete_llm_response += response_text
-                                            except json.JSONDecodeError:
-                                                # Skip malformed JSON - don't include raw text
-                                                pass
-                                except:
-                                    pass  # Skip non-text chunks
+                                    if isinstance(chunk, str):
+                                        # Direct text content from LLM Manager
+                                        complete_llm_response += chunk
+                                    elif isinstance(chunk, bytes):
+                                        # Convert bytes to string if needed
+                                        chunk_text = chunk.decode('utf-8')
+                                        complete_llm_response += chunk_text
+                                except Exception as chunk_error:
+                                    logger.warning(f"⚠️ Chunk processing error: {chunk_error}")
+                                    pass  # Skip malformed chunks
+
+                        # 🎯 STREAMING FIX: Send completion chunk
+                        final_chunk = {
+                            "model": stream_payload.get('model', model),
+                            "response": "",
+                            "done": True
+                        }
+                        final_formatted = json.dumps(final_chunk) + '\n'
+                        yield final_formatted.encode('utf-8')
+
+                    except Exception as e:
+                        logger.error(f"❌ LLM Manager primary call failed: {e}")
+                        # Fallback to direct Ollama if manager fails
+                        logger.warning("🔄 Falling back to direct Ollama call")
+                        async with session.post(ServerConfig.OLLAMA_URL, json=stream_payload, timeout=3600) as response:
+                            if response.status == 200:
+                                async for chunk in response.content.iter_chunked(1024):
+                                    if chunk:
+                                        yield chunk
+                                        # Simplified fallback processing
+                                        try:
+                                            chunk_text = chunk.decode('utf-8')
+                                            for line in chunk_text.strip().split('\n'):
+                                                if line.strip():
+                                                    try:
+                                                        chunk_json = json.loads(line)
+                                                        if 'response' in chunk_json:
+                                                            complete_llm_response += chunk_json['response']
+                                                    except:
+                                                        pass
+                                        except:
+                                            pass
                         
                         # Output condition: PRIMARY LLM completed
                         llm_duration = time.time() - llm_start_time
@@ -9470,9 +9526,10 @@ async def openai_direct_stream(native_request_data: dict, model: str):
                         # Try to parse as JSON
                         native_json = json.loads(raw_content.strip())
                         logger.debug(f"🔧 Parsed JSON: {native_json}")
-                        
-                        # Check if stream should end
-                        if native_json.get("done", False):
+
+                        # 🎯 PHASE 4 FIX: Handle LLM Manager text content vs Ollama JSON
+                        # Check if stream should end (only for dict responses from Ollama)
+                        if isinstance(native_json, dict) and native_json.get("done", False):
                             logger.info("🏁 Stream completion detected")
                             # If there's still response content in the final chunk, send it first
                             if "response" in native_json and native_json["response"]:
@@ -9498,15 +9555,26 @@ async def openai_direct_stream(native_request_data: dict, model: str):
                             return
                         
                         # Extract and send content
-                        if "response" in native_json and native_json["response"]:
+                        if isinstance(native_json, dict) and "response" in native_json and native_json["response"]:
                             content_chunk = {
                                 "id": f"chatcmpl-{int(time.time())}",
-                                "object": "chat.completion.chunk", 
+                                "object": "chat.completion.chunk",
                                 "created": int(time.time()),
                                 "model": model,
                                 "choices": [{"index": 0, "delta": {"content": native_json["response"]}, "finish_reason": None}]
                             }
                             logger.debug(f"🔧 Sending content chunk: {native_json['response'][:50]}...")
+                            yield f"data: {json.dumps(content_chunk)}\n\n"
+                        elif not isinstance(native_json, dict):
+                            # 🎯 PHASE 4 FIX: Handle LLM Manager text content parsed as non-dict JSON
+                            logger.debug(f"🔧 LLM Manager text content: {str(native_json)}")
+                            content_chunk = {
+                                "id": f"chatcmpl-{int(time.time())}",
+                                "object": "chat.completion.chunk",
+                                "created": int(time.time()),
+                                "model": model,
+                                "choices": [{"index": 0, "delta": {"content": str(native_json)}, "finish_reason": None}]
+                            }
                             yield f"data: {json.dumps(content_chunk)}\n\n"
                     except json.JSONDecodeError as json_err:
                         logger.debug(f"🔧 Not JSON, treating as raw content: {raw_content[:50]}...")

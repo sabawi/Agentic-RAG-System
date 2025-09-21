@@ -1,0 +1,211 @@
+{
+  "session_id": "cd6fd285-8956-4037-bc90-4bb17bdf971f",
+  "start_time": "2025-09-19T12:46:56.056874",
+  "total_iterations": 6,
+  "goal_achieved": false,
+  "final_score": 0.0,
+  "execution_time": 1810.5552332401276,
+  "iterations": [
+    {
+      "iteration": 1,
+      "prompt_template": "story_outline",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "story_elements": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "creative_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "narrative_structure": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: story_elements",
+          "Goal criteria: creative_length",
+          "Goal criteria: narrative_structure"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T12:51:56.158659"
+    },
+    {
+      "iteration": 2,
+      "prompt_template": "character_development",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "story_elements": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "creative_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "narrative_structure": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: story_elements",
+          "Goal criteria: creative_length",
+          "Goal criteria: narrative_structure"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T12:56:58.211293"
+    },
+    {
+      "iteration": 3,
+      "prompt_template": "scene_writing",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "story_elements": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "creative_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "narrative_structure": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: story_elements",
+          "Goal criteria: creative_length",
+          "Goal criteria: narrative_structure"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T13:02:00.321042"
+    },
+    {
+      "iteration": 4,
+      "prompt_template": "story_completion",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "story_elements": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "creative_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "narrative_structure": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: story_elements",
+          "Goal criteria: creative_length",
+          "Goal criteria: narrative_structure"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T13:07:02.388879"
+    },
+    {
+      "iteration": 5,
+      "prompt_template": "story_outline",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "story_elements": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "creative_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "narrative_structure": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: story_elements",
+          "Goal criteria: creative_length",
+          "Goal criteria: narrative_structure"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T13:12:04.501858"
+    },
+    {
+      "iteration": 6,
+      "prompt_template": "character_development",
+      "response_length": 106,
+      "goal_status": {
+        "achieved": false,
+        "progress_score": 0.0,
+        "criteria_results": {
+          "story_elements": {
+            "passed": false,
+            "details": "Found keywords: []",
+            "score": 0.0
+          },
+          "creative_length": {
+            "passed": false,
+            "details": "Error: 'int' object has no attribute 'get'",
+            "score": 0.0
+          },
+          "narrative_structure": {
+            "passed": false,
+            "details": "Error: unhashable type: 'list'",
+            "score": 0.0
+          }
+        },
+        "missing_requirements": [
+          "Goal criteria: story_elements",
+          "Goal criteria: creative_length",
+          "Goal criteria: narrative_structure"
+        ],
+        "achievement_details": {}
+      },
+      "timestamp": "2025-09-19T13:17:06.612088"
+    }
+  ],
+  "final_context": "Goal Progress:\n{\n  \"type\": \"creative_writing\",\n  \"target_score\": 0.75\n}\n\nIteration 4:\nPrompt: Complete the story: A group of scientists discovering a warmhole in the whitehouse. Ensure proper narrative flow, character arcs, and satisfying resolution.\n\n## Previous Context:\nGoal Progress:\n{\n  \"t...\nResponse: Error: Request failed: HTTPConnectionPool(host='localhost', port=5000): Read timed out. (read timeout=300)...\n\nIteration 5:\nPrompt: Create a detailed story outline for: A group of scientists discovering a warmhole in the whitehouse. Include main characters, plot structure, and key scenes.\n\n## Previous Context:\nGoal Progress:\n{\n  \"...\nResponse: Error: Request failed: HTTPConnectionPool(host='localhost', port=5000): Read timed out. (read timeout=300)...\n\nIteration 6:\nPrompt: Develop rich characters for the story: A group of scientists discovering a warmhole in the whitehouse. Create detailed character profiles with motivations and backgrounds.\n\n## Previous Context:\nGoal P...\nResponse: Error: Request failed: HTTPConnectionPool(host='localhost', port=5000): Read timed out. (read timeout=300)...\n",
+  "achievement_details": {},
+  "end_time": "2025-09-19T13:17:06.612106"
+}

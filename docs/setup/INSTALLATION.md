@@ -104,10 +104,13 @@ nano .env
 Add required API keys:
 
 ```bash
-# OpenAI API (required for tool calling)
+# CRITICAL: OpenAI API (REQUIRED for hybrid architecture tool calling)
+# The system now uses a hybrid approach:
+# - Local Ollama models for primary conversations (privacy + speed)
+# - OpenAI gpt-4o-mini for reliable tool calling (accuracy)
 OPENAI_API_KEY=REPLACE_WITH_YOUR_OPENAI_API_KEY
 
-# Optional cloud providers
+# Optional cloud providers (for fallback scenarios)
 GOOGLE_API_KEY=REPLACE_WITH_YOUR_GOOGLE_API_KEY
 GEMINI_API_KEY=REPLACE_WITH_YOUR_GEMINI_API_KEY
 QWEN_API_KEY=REPLACE_WITH_YOUR_QWEN_API_KEY
@@ -317,30 +320,45 @@ curl -X POST http://localhost:5000/v1/chat/completions \
 
 ## ⚙️ Configuration
 
-### LLM Configuration
+### LLM Configuration - Hybrid Architecture
+
+The system now uses a **Hybrid LLM Architecture** for optimal performance and reliability:
 
 Edit `config/llm_config.yaml`:
 
 ```yaml
 llm:
+  # PRIMARY: Local Ollama model for conversations (privacy + thinking mode)
   primary:
     type: ollama
     config:
       model: qwen3:8b        # Primary conversation model
       base_url: http://127.0.0.1:11434
-      
+      think: false           # Enable for reasoning visibility
+      timeout: 3600          # 60 minutes for complex tasks
+
+  # TOOL CALLING: Cloud OpenAI for reliable tool orchestration
   tool_calling:
     type: openai
     config:
-      model: gpt-4o-mini     # Tool orchestration
+      model: gpt-4o-mini     # Reliable tool calling
       api_key: ${OPENAI_API_KEY}
-      
-  image_processing:
+      temperature: 0.1       # Low temperature for precision
+
+  # VISION: Local Ollama model for image analysis
+  vision:
     type: ollama
     config:
       model: qwen2.5vl:3b    # Vision analysis
       base_url: http://127.0.0.1:11434
+      think: false           # Usually disabled for vision
 ```
+
+**Architecture Benefits:**
+- 🔒 **Privacy**: Main conversations stay local with Ollama
+- ⚡ **Reliability**: Tool calling uses proven OpenAI models
+- 💰 **Cost Effective**: Expensive reasoning local, cheap tools cloud
+- 🧠 **Thinking Mode**: Enhanced reasoning with `<think>` tags
 
 ### System Prompts
 
@@ -395,12 +413,47 @@ Customize AI behavior by editing:
    ```bash
    # Test mail system
    echo "Test" | mail -s "Test" your-email@example.com
-   
+
    # Check postfix status
    sudo systemctl status postfix
-   
+
    # View mail logs
    sudo tail -f /var/log/mail.log
+   ```
+
+6. **Hybrid Architecture Issues (NEW)**
+   ```bash
+   # Test OpenAI API key for tool calling
+   curl -H "Authorization: Bearer $OPENAI_API_KEY" \
+        https://api.openai.com/v1/models | head -10
+
+   # Test tool calling specifically
+   curl -X POST http://localhost:8000/v1/chat/completions \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer test-key" \
+     -d '{
+       "model": "primary",
+       "messages": [{"role": "user", "content": "Search for AI news"}],
+       "tools": [{"type": "function", "function": {"name": "search_web"}}]
+     }'
+
+   # Check hybrid setup in logs
+   tail -f logs/server_complete.log | grep -E "(TOOL|OpenAI|🧠)"
+   ```
+
+7. **Thinking Mode Not Working**
+   ```bash
+   # Enable thinking mode in config
+   nano config/llm_config.yaml
+   # Set: primary.config.think: true
+
+   # Restart server to apply changes
+   ./stop_complete.sh && ./start_complete.sh
+
+   # Test thinking mode
+   curl -X POST http://localhost:8000/v1/chat/completions \
+     -H "Content-Type: application/json" \
+     -d '{"model": "primary", "messages": [{"role": "user", "content": "Explain quantum physics step by step"}]}'
    ```
 
 ### Getting Help

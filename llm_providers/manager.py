@@ -11,6 +11,82 @@ from utils.config_loader import config_loader
 
 logger = logging.getLogger(__name__)
 
+def normalize_tool_call(tool_call: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize tool call format across different providers to ensure consistent structure.
+
+    Handles different provider formats:
+    - OpenAI: {'id': '...', 'type': 'function', 'function': {'name': '...', 'arguments': {...}}}
+    - Ollama: {'function': {'name': '...', 'arguments': {...}}}
+    - Custom: Any other provider-specific format
+
+    Returns standardized format matching OpenAI structure for consistency.
+    """
+    if not isinstance(tool_call, dict):
+        logger.warning(f"⚠️ Invalid tool call format: {type(tool_call)}")
+        return tool_call
+
+    # Check if already in OpenAI format (has id, type, and function)
+    if 'id' in tool_call and 'type' in tool_call and 'function' in tool_call:
+        return tool_call  # Already normalized
+
+    # Handle Ollama format (just 'function' key)
+    if 'function' in tool_call and isinstance(tool_call['function'], dict):
+        return {
+            'id': f"call_{hash(str(tool_call['function']))}", # Generate stable ID
+            'type': 'function',
+            'function': tool_call['function']
+        }
+
+    # Handle direct function format (name and arguments at top level)
+    if 'name' in tool_call:
+        return {
+            'id': f"call_{hash(str(tool_call))}",
+            'type': 'function',
+            'function': {
+                'name': tool_call.get('name'),
+                'arguments': tool_call.get('arguments', {})
+            }
+        }
+
+    # Log unknown format and return as-is
+    logger.warning(f"⚠️ Unknown tool call format: {list(tool_call.keys())}")
+    return tool_call
+
+def extract_tool_names_safely(tool_calls: List[Dict[str, Any]]) -> List[str]:
+    """
+    Safely extract tool names from tool calls with different provider formats.
+
+    Args:
+        tool_calls: List of tool call dictionaries in various formats
+
+    Returns:
+        List of function names, with empty strings filtered out
+    """
+    tool_names = []
+
+    for i, tool_call in enumerate(tool_calls):
+        try:
+            # Normalize first to ensure consistent structure
+            normalized = normalize_tool_call(tool_call)
+
+            # Extract name from normalized structure
+            function_info = normalized.get('function', {})
+            if isinstance(function_info, dict):
+                name = function_info.get('name', '')
+                if name:  # Only add non-empty names
+                    tool_names.append(name)
+                else:
+                    logger.warning(f"⚠️ Tool call {i+1} has empty function name")
+            else:
+                logger.warning(f"⚠️ Tool call {i+1} has invalid function structure: {type(function_info)}")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to extract name from tool call {i+1}: {e}")
+            logger.error(f"   Raw tool call: {tool_call}")
+
+    return tool_names
+
 class LLMManager:
     """Manages LLM providers and coordinates requests"""
     
@@ -180,11 +256,16 @@ class LLMManager:
         
         try:
             result = await self.tool_calling_provider.generate_tools(prompt, model, tools, **kwargs_clean)
-            
-            # Log tool calls for debugging
+
+            # Log tool calls for debugging (with safe extraction)
             tool_calls = result.get('tool_calls', [])
             if tool_calls:
-                tool_names = [tc.get('function', {}).get('name') for tc in tool_calls]
+                # Normalize tool calls FIRST to ensure consistent format
+                normalized_tool_calls = [normalize_tool_call(tc) for tc in tool_calls]
+                result['tool_calls'] = normalized_tool_calls
+
+                # Extract names from normalized tool calls
+                tool_names = extract_tool_names_safely(normalized_tool_calls)
                 logger.info(f"🎯 Generated tool calls: {tool_names}")
             
             return result
