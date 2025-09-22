@@ -6,7 +6,9 @@
 # 
 # Usage:
 #   ./install.sh                    - Fresh installation
-#   ./install.sh upgrade            - Pull latest changes from GitHub
+#   ./install.sh upgrade            - Pull latest changes from GitHub (interactive)
+#   ./install.sh upgrade --auto-safe      - Auto upgrade with safe mode (preserves databases)
+#   ./install.sh upgrade --auto-stash     - Auto upgrade with stash mode (preserves all changes)
 #   ./install.sh verify             - Verify existing installation
 #   ./install.sh --dry-run          - Show what would be done without executing
 #
@@ -16,12 +18,14 @@
 set -e  # Exit on any error
 
 # Script configuration
-SCRIPT_VERSION="1.0.0"
+SCRIPT_VERSION="1.1.0"
 REPO_URL="https://github.com/sabawi/Agentic-RAG-System.git"
 REQUIRED_PYTHON_VERSION="3.8"
 DRY_RUN=false
 UPGRADE_MODE=false
 VERIFY_MODE=false
+AUTO_UPGRADE=false  # For non-interactive upgrades
+UPGRADE_STRATEGY=""  # "safe" or "stash" for automated upgrades
 
 # Required Ollama models
 REQUIRED_MODELS=("qwen3:8b" "qwen2.5vl:3b" "bakllava:latest")
@@ -118,6 +122,18 @@ parse_arguments() {
             verify)
                 VERIFY_MODE=true
                 ;;
+            --auto-safe)
+                AUTO_UPGRADE=true
+                UPGRADE_STRATEGY="safe"
+                UPGRADE_MODE=true
+                log_info "Auto-upgrade enabled: SAFE mode (preserves databases, overwrites code)"
+                ;;
+            --auto-stash)
+                AUTO_UPGRADE=true
+                UPGRADE_STRATEGY="stash"
+                UPGRADE_MODE=true
+                log_info "Auto-upgrade enabled: STASH mode (preserves all changes, attempts merge)"
+                ;;
             --dry-run)
                 DRY_RUN=true
                 log_warning "Running in DRY-RUN mode - no actual changes will be made"
@@ -142,17 +158,25 @@ show_help() {
     echo ""
     echo "Commands:"
     echo "  (none)     Fresh installation"
-    echo "  upgrade    Pull latest changes from GitHub and update dependencies"
+    echo "  upgrade    Pull latest changes from GitHub and update dependencies (interactive)"
     echo "  verify     Verify existing installation"
     echo ""
     echo "Options:"
-    echo "  --dry-run  Show what would be done without executing"
-    echo "  --help     Show this help message"
+    echo "  --auto-safe   Auto upgrade with SAFE mode (preserves databases, overwrites code)"
+    echo "  --auto-stash  Auto upgrade with STASH mode (preserves all changes, attempts merge)"
+    echo "  --dry-run     Show what would be done without executing"
+    echo "  --help        Show this help message"
+    echo ""
+    echo "Upgrade Strategies:"
+    echo "  SAFE:   Backs up databases/configs, force-overwrites code, restores data"
+    echo "  STASH:  Preserves all local changes, attempts automatic merge"
     echo ""
     echo "Examples:"
-    echo "  $0                    # Fresh installation"
-    echo "  $0 upgrade            # Upgrade existing installation"
-    echo "  $0 verify --dry-run   # Check what verification would do"
+    echo "  $0                       # Fresh installation"
+    echo "  $0 upgrade               # Interactive upgrade (choose strategy)"
+    echo "  $0 upgrade --auto-safe   # Non-interactive safe upgrade"
+    echo "  $0 upgrade --auto-stash  # Non-interactive stash upgrade"
+    echo "  $0 verify --dry-run      # Check what verification would do"
 }
 
 # System requirements check
@@ -258,6 +282,85 @@ clear_python_caches() {
     fi
 }
 
+# Helper function for safe upgrade (preserves databases, overwrites everything else)
+perform_safe_upgrade() {
+    local branch="$1"
+
+    log_info "Creating timestamp-based backup directory"
+    BACKUP_DIR="upgrade_backup_$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$BACKUP_DIR"
+
+    # Backup critical data that must be preserved
+    log_info "🛡️ Backing up databases and FAISS indexes..."
+
+    # Backup document store and databases
+    [ -d "document_store" ] && cp -r document_store/ "$BACKUP_DIR/" 2>/dev/null || true
+    [ -f "faiss.index" ] && cp faiss.index "$BACKUP_DIR/" 2>/dev/null || true
+    find . -name "*.db" -maxdepth 1 -exec cp {} "$BACKUP_DIR/" \; 2>/dev/null || true
+    find . -name "faiss_*" -maxdepth 1 -exec cp {} "$BACKUP_DIR/" \; 2>/dev/null || true
+
+    # Also backup config files that user might have customized
+    [ -f "credentials.json" ] && cp credentials.json "$BACKUP_DIR/" 2>/dev/null || true
+    [ -f ".env" ] && cp .env "$BACKUP_DIR/" 2>/dev/null || true
+    [ -f "watched_directories.json" ] && cp watched_directories.json "$BACKUP_DIR/" 2>/dev/null || true
+
+    log_success "Backup completed to: $BACKUP_DIR"
+
+    # Force clean upgrade
+    log_info "🔄 Performing force upgrade (overwrites local changes)"
+    execute_command "git reset --hard HEAD" "Resetting local changes"
+    execute_command "git clean -fd" "Cleaning untracked files"
+    execute_command "git pull origin $branch" "Pulling latest changes"
+
+    # Restore critical data
+    log_info "📊 Restoring databases and user data..."
+    [ -d "$BACKUP_DIR/document_store" ] && cp -r "$BACKUP_DIR/document_store"/* document_store/ 2>/dev/null || true
+    [ -f "$BACKUP_DIR/faiss.index" ] && cp "$BACKUP_DIR/faiss.index" . 2>/dev/null || true
+    find "$BACKUP_DIR" -name "*.db" -exec cp {} . \; 2>/dev/null || true
+    find "$BACKUP_DIR" -name "faiss_*" -exec cp {} . \; 2>/dev/null || true
+
+    # Restore user configs if they exist
+    [ -f "$BACKUP_DIR/credentials.json" ] && cp "$BACKUP_DIR/credentials.json" . 2>/dev/null || true
+    [ -f "$BACKUP_DIR/.env" ] && cp "$BACKUP_DIR/.env" . 2>/dev/null || true
+    [ -f "$BACKUP_DIR/watched_directories.json" ] && cp "$BACKUP_DIR/watched_directories.json" . 2>/dev/null || true
+
+    log_success "✅ Safe upgrade completed! Your databases and user data have been preserved."
+    log_info "📁 Backup available at: $BACKUP_DIR (you can delete this later if upgrade was successful)"
+}
+
+# Helper function for stash upgrade (preserves all changes, attempts to merge)
+perform_stash_upgrade() {
+    local branch="$1"
+
+    log_info "📦 Stashing local changes..."
+    STASH_NAME="pre-upgrade-$(date +%Y%m%d_%H%M%S)"
+    execute_command "git stash push -m '$STASH_NAME'" "Stashing changes"
+
+    # Pull latest changes
+    execute_command "git pull origin $branch" "Pulling latest changes"
+
+    # Attempt to restore stashed changes
+    log_info "🔄 Attempting to restore your local changes..."
+    if git stash pop; then
+        log_success "✅ Successfully merged your local changes with the upgrade"
+
+        # Check if there are any merge conflicts
+        if git diff --name-only --diff-filter=U | grep -q .; then
+            log_warning "⚠️ Merge conflicts detected in the following files:"
+            git diff --name-only --diff-filter=U
+            echo ""
+            log_warning "Please resolve conflicts manually and then run:"
+            echo "  git add <resolved-files>"
+            echo "  git commit -m 'Resolved upgrade conflicts'"
+        fi
+    else
+        log_warning "⚠️ Could not automatically merge your changes"
+        echo "Your changes are still available in stash: $STASH_NAME"
+        echo "To view stashed changes: git stash show"
+        echo "To apply manually later: git stash apply"
+    fi
+}
+
 # Project directory setup
 setup_project_directory() {
     log_header "Project Directory Setup"
@@ -273,9 +376,75 @@ setup_project_directory() {
         FROM_VERSION=$(get_current_version)
         log_info "Current version: $FROM_VERSION"
         
-        # Auto-detect the default branch and pull latest changes
+        # Auto-detect the default branch and handle upgrade conflicts intelligently
         DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "master")
-        execute_command "git pull origin $DEFAULT_BRANCH" "Pulling latest changes from GitHub"
+
+        # Check for local changes that might conflict
+        if ! git diff-index --quiet HEAD --; then
+            log_warning "Local changes detected that may conflict with upgrade"
+
+            # Show user what will be affected
+            echo -e "${YELLOW}"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "   UPGRADE CONFLICT DETECTED"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "The following files have local changes that may conflict:"
+            git diff --name-only HEAD
+            echo ""
+            echo "Choose upgrade strategy:"
+            echo "  [1] 🛡️  SAFE: Backup & preserve databases, overwrite everything else (RECOMMENDED)"
+            echo "  [2] 🔄 STASH: Temporarily stash changes, upgrade, then restore"
+            echo "  [3] ❌ ABORT: Cancel upgrade and resolve manually"
+            echo -e "${NC}"
+
+            # Handle automated vs interactive upgrade
+            if [ "$AUTO_UPGRADE" = true ]; then
+                # Automated upgrade mode
+                case "$UPGRADE_STRATEGY" in
+                    "safe")
+                        log_step "🤖 Automated SAFE upgrade (preserving databases)"
+                        perform_safe_upgrade "$DEFAULT_BRANCH"
+                        ;;
+                    "stash")
+                        log_step "🤖 Automated STASH upgrade (preserving all changes)"
+                        perform_stash_upgrade "$DEFAULT_BRANCH"
+                        ;;
+                    *)
+                        log_error "Invalid automated upgrade strategy: $UPGRADE_STRATEGY"
+                        exit 1
+                        ;;
+                esac
+            else
+                # Interactive upgrade mode
+                read -p "Enter choice [1-3]: " choice
+
+                case $choice in
+                    1)
+                        log_step "🛡️ Performing SAFE upgrade (preserving databases)"
+                        perform_safe_upgrade "$DEFAULT_BRANCH"
+                        ;;
+                    2)
+                        log_step "🔄 Performing STASH upgrade"
+                        perform_stash_upgrade "$DEFAULT_BRANCH"
+                        ;;
+                    3)
+                        log_error "Upgrade cancelled by user"
+                        echo "To resolve manually:"
+                        echo "  git stash push -m 'before-upgrade'"
+                        echo "  git pull origin $DEFAULT_BRANCH"
+                        echo "  git stash pop  # (if you want to restore changes)"
+                        exit 1
+                        ;;
+                    *)
+                        log_error "Invalid choice. Aborting upgrade."
+                        exit 1
+                        ;;
+                esac
+            fi
+        else
+            # No conflicts, proceed normally
+            execute_command "git pull origin $DEFAULT_BRANCH" "Pulling latest changes from GitHub"
+        fi
         clear_python_caches
         
         # Capture new version after upgrade
