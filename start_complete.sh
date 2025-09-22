@@ -66,6 +66,13 @@ echo "📚 API Docs: http://localhost:5000/docs"
 sleep 3
 if ps -p $SERVER_PID > /dev/null; then
     echo "🎯 Server is running successfully with optimizations!"
+
+    # 🔄 RESTORE PERSISTENT LOGGING SETTINGS
+    if [ -f "config/logging_config.json" ]; then
+        echo "🔄 Restoring persistent logging settings..."
+        sleep 2  # Give server time to fully initialize
+        ./server_logs restore 2>/dev/null && echo "✅ Logging settings restored" || echo "⚠️  Logging restore skipped (server not ready)"
+    fi
     echo ""
     
     # 🧪 TESTING FEATURES: Available via API (examples below)

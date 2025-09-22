@@ -1,0 +1,514 @@
+#!/usr/bin/env python3
+"""
+Server Logs Management CLI Tool
+===============================
+
+Comprehensive command-line interface for managing Agentic RAG Server logging.
+Provides intuitive control over logging levels, persistence, and monitoring.
+
+Usage:
+    ./server_logs status                    - Show current logging status
+    ./server_logs enable                    - Enable logging with INFO level
+    ./server_logs disable                   - Disable all logging
+    ./server_logs level <LEVEL>             - Set logging level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+    ./server_logs requests on|off           - Control request logging
+    ./server_logs timing on|off             - Control timing logging
+    ./server_logs save                      - Save current settings as default
+    ./server_logs reset                     - Reset to default settings
+    ./server_logs monitor                   - Live log monitoring
+    ./server_logs help                      - Show this help
+"""
+
+import argparse
+import json
+import os
+import sys
+import time
+import requests
+import subprocess
+from datetime import datetime
+from pathlib import Path
+
+# Configuration
+SERVER_URL = "http://localhost:5000"
+CONFIG_FILE = "config/logging_config.json"
+LOG_FILE = "logs/server_complete.log"
+
+class Colors:
+    """ANSI color codes for terminal output"""
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    MAGENTA = '\033[95m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
+
+def print_header(title):
+    """Print a formatted header"""
+    print(f"\n{Colors.BOLD}{Colors.CYAN}{'='*60}{Colors.END}")
+    print(f"{Colors.BOLD}{Colors.CYAN}  {title}{Colors.END}")
+    print(f"{Colors.BOLD}{Colors.CYAN}{'='*60}{Colors.END}")
+
+def print_success(message):
+    """Print success message"""
+    print(f"{Colors.GREEN}✅ {message}{Colors.END}")
+
+def print_error(message):
+    """Print error message"""
+    print(f"{Colors.RED}❌ {message}{Colors.END}")
+
+def print_warning(message):
+    """Print warning message"""
+    print(f"{Colors.YELLOW}⚠️  {message}{Colors.END}")
+
+def print_info(message):
+    """Print info message"""
+    print(f"{Colors.BLUE}ℹ️  {message}{Colors.END}")
+
+def check_server():
+    """Check if server is running"""
+    try:
+        response = requests.get(f"{SERVER_URL}/health", timeout=5)
+        return response.status_code == 200
+    except:
+        return False
+
+def api_call(method, endpoint, data=None):
+    """Make API call to server"""
+    if not check_server():
+        print_error("Server is not running. Please start the server first.")
+        print_info("Use: ./start_complete.sh")
+        return None
+
+    try:
+        url = f"{SERVER_URL}{endpoint}"
+        if method == "GET":
+            response = requests.get(url, timeout=10)
+        elif method == "POST":
+            response = requests.post(url, json=data, timeout=10)
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print_error(f"API Error {response.status_code}: {response.text}")
+            return None
+    except Exception as e:
+        print_error(f"Connection error: {e}")
+        return None
+
+def load_config():
+    """Load persistent logging configuration"""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_config(config):
+    """Save persistent logging configuration"""
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+        return True
+    except Exception as e:
+        print_error(f"Failed to save config: {e}")
+        return False
+
+def show_status():
+    """Show current logging status"""
+    print_header("Current Logging Status")
+
+    result = api_call("GET", "/admin/logging/status")
+    if not result:
+        return
+
+    status = result.get("logging_status", {})
+    config = result.get("configuration", {})
+
+    print(f"\n{Colors.BOLD}Server Status:{Colors.END}")
+    enabled = status.get("enabled", False)
+    status_color = Colors.GREEN if enabled else Colors.RED
+    status_text = "ENABLED" if enabled else "DISABLED"
+    print(f"  Logging: {status_color}{status_text}{Colors.END}")
+    print(f"  Level: {Colors.YELLOW}{status.get('level', 'Unknown')}{Colors.END}")
+    print(f"  Handlers: {status.get('handlers_count', 0)}")
+
+    print(f"\n{Colors.BOLD}Configuration:{Colors.END}")
+    print(f"  Request Logging: {Colors.GREEN if config.get('log_requests') else Colors.RED}{config.get('log_requests', False)}{Colors.END}")
+    print(f"  Timing Logging: {Colors.GREEN if config.get('log_timing') else Colors.RED}{config.get('log_timing', False)}{Colors.END}")
+    print(f"  Mock Providers: {Colors.YELLOW}{config.get('mock_providers', False)}{Colors.END}")
+
+    # Show persistent config
+    persistent_config = load_config()
+    if persistent_config:
+        print(f"\n{Colors.BOLD}Persistent Settings:{Colors.END}")
+        for key, value in persistent_config.items():
+            print(f"  {key}: {Colors.CYAN}{value}{Colors.END}")
+
+    print(f"\n{Colors.BOLD}Available Log Levels:{Colors.END}")
+    levels = result.get("log_levels", {})
+    for level, value in levels.items():
+        current = "👈" if status.get("level") == level else ""
+        print(f"  {level}: {value} {current}")
+
+def enable_logging():
+    """Enable logging"""
+    print_info("Enabling logging...")
+    result = api_call("POST", "/admin/logging/enable")
+    if result:
+        print_success(f"Logging enabled: {result.get('message')}")
+
+        # Save to persistent config
+        config = load_config()
+        config["enabled"] = True
+        config["level"] = "INFO"
+        config["last_updated"] = datetime.now().isoformat()
+        save_config(config)
+
+def disable_logging():
+    """Disable logging"""
+    print_warning("Disabling all logging...")
+    result = api_call("POST", "/admin/logging/disable")
+    if result:
+        print_success(f"Logging disabled: {result.get('message')}")
+
+        # Save to persistent config
+        config = load_config()
+        config["enabled"] = False
+        config["level"] = "DISABLED"
+        config["last_updated"] = datetime.now().isoformat()
+        save_config(config)
+
+def set_level(level):
+    """Set logging level"""
+    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    level_upper = level.upper()
+
+    if level_upper not in valid_levels:
+        print_error(f"Invalid log level: {level}")
+        print_info(f"Valid levels: {', '.join(valid_levels)}")
+        return
+
+    print_info(f"Setting logging level to {level_upper}...")
+    result = api_call("POST", f"/admin/logging/level/{level_upper}")
+    if result:
+        print_success(f"Level set: {result.get('message')}")
+
+        # Save to persistent config
+        config = load_config()
+        config["enabled"] = True
+        config["level"] = level_upper
+        config["last_updated"] = datetime.now().isoformat()
+        save_config(config)
+
+def toggle_requests(state):
+    """Toggle request logging"""
+    if state.lower() not in ["on", "off"]:
+        print_error("Use 'on' or 'off' for request logging")
+        return
+
+    # Get current state first
+    current = api_call("GET", "/admin/logging/status")
+    if not current:
+        return
+
+    current_state = current.get("configuration", {}).get("log_requests", False)
+    desired_state = state.lower() == "on"
+
+    if current_state == desired_state:
+        print_info(f"Request logging is already {state}")
+        return
+
+    print_info(f"Setting request logging {state}...")
+    result = api_call("POST", "/admin/logging/requests/toggle")
+    if result:
+        print_success(f"Request logging: {result.get('message')}")
+
+        # Save to persistent config
+        config = load_config()
+        config["log_requests"] = desired_state
+        config["last_updated"] = datetime.now().isoformat()
+        save_config(config)
+
+def toggle_timing(state):
+    """Toggle timing logging"""
+    if state.lower() not in ["on", "off"]:
+        print_error("Use 'on' or 'off' for timing logging")
+        return
+
+    # Get current state first
+    current = api_call("GET", "/admin/logging/status")
+    if not current:
+        return
+
+    current_state = current.get("configuration", {}).get("log_timing", False)
+    desired_state = state.lower() == "on"
+
+    if current_state == desired_state:
+        print_info(f"Timing logging is already {state}")
+        return
+
+    print_info(f"Setting timing logging {state}...")
+    result = api_call("POST", "/admin/logging/timing/toggle")
+    if result:
+        print_success(f"Timing logging: {result.get('message')}")
+
+        # Save to persistent config
+        config = load_config()
+        config["log_timing"] = desired_state
+        config["last_updated"] = datetime.now().isoformat()
+        save_config(config)
+
+def save_current_settings():
+    """Save current server settings as persistent defaults"""
+    print_info("Saving current logging settings as defaults...")
+
+    result = api_call("GET", "/admin/logging/status")
+    if not result:
+        return
+
+    status = result.get("logging_status", {})
+    config_data = result.get("configuration", {})
+
+    persistent_config = {
+        "enabled": status.get("enabled", False),
+        "level": status.get("level", "INFO"),
+        "log_requests": config_data.get("log_requests", True),
+        "log_timing": config_data.get("log_timing", True),
+        "saved_at": datetime.now().isoformat(),
+        "version": "1.0.2.58"
+    }
+
+    if save_config(persistent_config):
+        print_success("Settings saved successfully!")
+        print_info(f"Saved to: {CONFIG_FILE}")
+    else:
+        print_error("Failed to save settings")
+
+def reset_to_defaults():
+    """Reset to default logging settings"""
+    print_warning("Resetting to default logging settings...")
+
+    # Default settings
+    defaults = {
+        "enabled": True,
+        "level": "INFO",
+        "log_requests": True,
+        "log_timing": True,
+        "reset_at": datetime.now().isoformat()
+    }
+
+    # Apply defaults to server
+    enable_logging()
+    set_level("INFO")
+
+    # Save defaults
+    if save_config(defaults):
+        print_success("Reset to default settings!")
+    else:
+        print_error("Failed to save default settings")
+
+def monitor_logs():
+    """Live log monitoring"""
+    print_header("Live Log Monitor")
+    print_info("Press Ctrl+C to exit")
+    print_info(f"Monitoring: {LOG_FILE}")
+    print("-" * 60)
+
+    if not os.path.exists(LOG_FILE):
+        print_error(f"Log file not found: {LOG_FILE}")
+        return
+
+    try:
+        # Use tail -f for live monitoring
+        process = subprocess.Popen(
+            ["tail", "-f", LOG_FILE],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        while True:
+            line = process.stdout.readline()
+            if line:
+                # Colorize log levels
+                line = line.strip()
+                if "ERROR" in line:
+                    print(f"{Colors.RED}{line}{Colors.END}")
+                elif "WARNING" in line:
+                    print(f"{Colors.YELLOW}{line}{Colors.END}")
+                elif "INFO" in line:
+                    print(f"{Colors.GREEN}{line}{Colors.END}")
+                elif "DEBUG" in line:
+                    print(f"{Colors.CYAN}{line}{Colors.END}")
+                else:
+                    print(line)
+            time.sleep(0.1)
+
+    except KeyboardInterrupt:
+        print(f"\n{Colors.YELLOW}Monitor stopped.{Colors.END}")
+        process.terminate()
+    except Exception as e:
+        print_error(f"Monitor error: {e}")
+
+def restore_persistent_settings():
+    """Restore persistent settings on server startup"""
+    config = load_config()
+    if not config:
+        print_info("No persistent settings found")
+        return
+
+    print_header("Restoring Persistent Settings")
+
+    if not check_server():
+        print_error("Server is not running. Start server first to restore settings.")
+        return
+
+    # Restore logging state
+    if config.get("enabled", True):
+        enable_logging()
+        if "level" in config:
+            set_level(config["level"])
+    else:
+        disable_logging()
+
+    # Restore specific settings
+    if "log_requests" in config:
+        current = api_call("GET", "/admin/logging/status")
+        if current:
+            current_req = current.get("configuration", {}).get("log_requests", False)
+            desired_req = config["log_requests"]
+            if current_req != desired_req:
+                toggle_requests("on" if desired_req else "off")
+
+    if "log_timing" in config:
+        current = api_call("GET", "/admin/logging/status")
+        if current:
+            current_timing = current.get("configuration", {}).get("log_timing", False)
+            desired_timing = config["log_timing"]
+            if current_timing != desired_timing:
+                toggle_timing("on" if desired_timing else "off")
+
+    print_success("Persistent settings restored!")
+
+def show_help():
+    """Show help information"""
+    print_header("Server Logs Management CLI")
+
+    print(f"""
+{Colors.BOLD}DESCRIPTION:{Colors.END}
+    Comprehensive command-line tool for managing Agentic RAG Server logging.
+    Provides real-time control with persistent settings across server restarts.
+
+{Colors.BOLD}USAGE:{Colors.END}
+    {Colors.CYAN}./server_logs <command> [options]{Colors.END}
+
+{Colors.BOLD}COMMANDS:{Colors.END}
+    {Colors.GREEN}status{Colors.END}                     Show current logging status and configuration
+    {Colors.GREEN}enable{Colors.END}                     Enable logging with INFO level
+    {Colors.GREEN}disable{Colors.END}                    Disable all logging completely
+    {Colors.GREEN}level <LEVEL>{Colors.END}              Set logging level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+    {Colors.GREEN}requests <on|off>{Colors.END}          Control request logging
+    {Colors.GREEN}timing <on|off>{Colors.END}            Control timing logging
+    {Colors.GREEN}save{Colors.END}                       Save current settings as persistent defaults
+    {Colors.GREEN}reset{Colors.END}                      Reset to default logging settings
+    {Colors.GREEN}restore{Colors.END}                    Restore persistent settings to server
+    {Colors.GREEN}monitor{Colors.END}                    Live log file monitoring with colors
+    {Colors.GREEN}help{Colors.END}                       Show this help information
+
+{Colors.BOLD}EXAMPLES:{Colors.END}
+    {Colors.CYAN}./server_logs status{Colors.END}                 # Check current logging status
+    {Colors.CYAN}./server_logs enable{Colors.END}                 # Enable logging
+    {Colors.CYAN}./server_logs level DEBUG{Colors.END}            # Set debug level logging
+    {Colors.CYAN}./server_logs requests off{Colors.END}           # Disable request logging
+    {Colors.CYAN}./server_logs timing on{Colors.END}              # Enable timing logs
+    {Colors.CYAN}./server_logs save{Colors.END}                   # Save current as defaults
+    {Colors.CYAN}./server_logs monitor{Colors.END}                # Live log monitoring
+
+{Colors.BOLD}LOG LEVELS:{Colors.END}
+    {Colors.MAGENTA}DEBUG{Colors.END}      - Detailed debugging information (most verbose)
+    {Colors.BLUE}INFO{Colors.END}       - General information messages (default)
+    {Colors.YELLOW}WARNING{Colors.END}    - Warning messages for potential issues
+    {Colors.RED}ERROR{Colors.END}      - Error messages for serious problems
+    {Colors.RED}CRITICAL{Colors.END}   - Critical errors requiring immediate attention
+
+{Colors.BOLD}PERSISTENCE:{Colors.END}
+    Settings are automatically saved to {Colors.CYAN}{CONFIG_FILE}{Colors.END}
+    Use {Colors.GREEN}'save'{Colors.END} command to make current settings the default
+    Use {Colors.GREEN}'restore'{Colors.END} command to apply saved settings to server
+
+{Colors.BOLD}FILES:{Colors.END}
+    Config: {Colors.CYAN}{CONFIG_FILE}{Colors.END}
+    Logs:   {Colors.CYAN}{LOG_FILE}{Colors.END}
+    Server: {Colors.CYAN}{SERVER_URL}{Colors.END}
+
+{Colors.BOLD}SERVER INTEGRATION:{Colors.END}
+    This tool communicates with the Agentic RAG Server via REST API.
+    The server must be running for most commands to work.
+    Use {Colors.CYAN}./start_complete.sh{Colors.END} to start the server.
+""")
+
+def main():
+    """Main CLI entry point"""
+    parser = argparse.ArgumentParser(
+        description="Server Logs Management CLI",
+        add_help=False  # We'll handle help ourselves
+    )
+
+    # Add subcommands
+    parser.add_argument('command', nargs='?', default='help',
+                       choices=['status', 'enable', 'disable', 'level', 'requests', 'timing',
+                               'save', 'reset', 'restore', 'monitor', 'help'])
+    parser.add_argument('args', nargs='*', help='Command arguments')
+
+    if len(sys.argv) == 1:
+        show_help()
+        return
+
+    args = parser.parse_args()
+
+    # Route commands
+    if args.command == 'help':
+        show_help()
+    elif args.command == 'status':
+        show_status()
+    elif args.command == 'enable':
+        enable_logging()
+    elif args.command == 'disable':
+        disable_logging()
+    elif args.command == 'level':
+        if not args.args:
+            print_error("Please specify a log level")
+            print_info("Usage: ./server_logs level <DEBUG|INFO|WARNING|ERROR|CRITICAL>")
+        else:
+            set_level(args.args[0])
+    elif args.command == 'requests':
+        if not args.args:
+            print_error("Please specify 'on' or 'off'")
+            print_info("Usage: ./server_logs requests <on|off>")
+        else:
+            toggle_requests(args.args[0])
+    elif args.command == 'timing':
+        if not args.args:
+            print_error("Please specify 'on' or 'off'")
+            print_info("Usage: ./server_logs timing <on|off>")
+        else:
+            toggle_timing(args.args[0])
+    elif args.command == 'save':
+        save_current_settings()
+    elif args.command == 'reset':
+        reset_to_defaults()
+    elif args.command == 'restore':
+        restore_persistent_settings()
+    elif args.command == 'monitor':
+        monitor_logs()
+
+if __name__ == "__main__":
+    main()

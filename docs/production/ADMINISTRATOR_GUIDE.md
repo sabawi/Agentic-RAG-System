@@ -1,6 +1,6 @@
 # Agentic RAG System - Administrator Guide
 
-**Version:** 2.0  
+**Version:** 2.1
 **Last Updated:** September 2025  
 **Target Audience:** System Administrators, DevOps Engineers, Production Support
 
@@ -13,6 +13,7 @@
 3. [CONFIGURATION MANAGEMENT](#3-configuration-management)
 4. [SERVICE OPERATIONS](#4-service-operations)
 5. [CORE SYSTEM MONITORING](#5-core-system-monitoring)
+   - [Logging Management System](#logging-management-system)
 6. [EMBEDDING SERVICE ADMINISTRATION (A-1)](#6-embedding-service-administration-a-1)
 7. [DIRECTORY WATCHING SYSTEM (A-2)](#7-directory-watching-system-a-2)
 8. [SECURITY ADMINISTRATION (A-3)](#8-security-administration-a-3)
@@ -504,6 +505,189 @@ time curl -X POST "http://localhost:5000/documents/search" \
     "max_results": 5
   }'
 ```
+
+### Logging Management System
+
+#### Overview
+
+The system provides comprehensive logging management through both API endpoints and a dedicated CLI tool (`./server_logs`). This enables real-time control of logging levels, timing data, and request monitoring without server restarts.
+
+#### Logging Components
+
+- **API Endpoints**: Direct server control via REST calls
+- **CLI Tool**: `./server_logs` - User-friendly command interface
+- **Persistent Configuration**: Settings survive server restarts
+- **Real-time Monitoring**: Live log streaming with color coding
+
+#### Core Logging Commands
+
+```bash
+# Quick Status Check
+./server_logs status                    # View current logging configuration
+
+# Essential Controls
+./server_logs enable                    # Enable logging (INFO level)
+./server_logs disable                   # Disable all logging
+./server_logs level DEBUG               # Set logging level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+
+# Granular Controls
+./server_logs requests on               # Enable HTTP request/response logging
+./server_logs timing on                 # Enable performance timing measurements
+
+# Persistence Management
+./server_logs save                      # Save current settings as defaults
+./server_logs restore                   # Restore persistent settings
+
+# Live Monitoring
+./server_logs monitor                   # Real-time colorized log streaming
+```
+
+#### Timing Logging Deep Dive
+
+**What Timing Logging Captures:**
+- ⏱️ **Request Processing Duration** - Total HTTP request-to-response time
+- 🛠️ **Tool Execution Times** - Individual function and operation timing
+- 🗄️ **Database Query Times** - SQL operations and FAISS vector searches
+- 🌐 **API Call Durations** - External service response times (Ollama, OpenAI)
+- 📋 **Background Task Timing** - Scheduled operations like file scanning
+- 🧠 **LLM Response Times** - Model inference and generation timing
+
+**Example Timing Log Entries:**
+```bash
+⏱️ Tool execution took 1.23s
+⏱️ Database query completed in 450ms
+⏱️ Request processed in 2.1s
+⏱️ FAISS search took 89ms
+⏱️ LLM generation completed in 3.4s
+```
+
+**When to Enable Timing Logging:**
+- 🐛 **Performance Debugging** - Identify slow operations and bottlenecks
+- 📈 **Production Monitoring** - Track response times and SLA compliance
+- ⚡ **Optimization Projects** - Measure improvement impact
+- 🔍 **Issue Investigation** - Understand time allocation during problems
+
+#### Live Monitoring Features
+
+**Color-Coded Real-Time Monitoring:**
+```bash
+./server_logs monitor
+```
+
+**Color Coding System:**
+- 🔴 **RED** - ERROR messages (critical issues requiring attention)
+- 🟡 **YELLOW** - WARNING messages (potential issues to monitor)
+- 🔵 **BLUE** - INFO messages (general operational information)
+- ⚫ **DEFAULT** - DEBUG messages (detailed debugging information)
+- 🟢 **GREEN** - SUCCESS messages (successful operations)
+
+**Advanced Monitoring Techniques:**
+```bash
+# Monitor specific patterns
+tail -f logs/server_complete.log | grep -E "(⏱️|took|duration)" --line-buffered    # Timing only
+tail -f logs/server_complete.log | grep -E "(ERROR|CRITICAL)" --line-buffered      # Errors only
+tail -f logs/server_complete.log | grep -E "(TOOL|Citation|🔗)" --line-buffered    # Tool activity
+```
+
+#### Environment-Specific Configurations
+
+**Production Environment:**
+```bash
+./server_logs level WARNING             # Appropriate production level
+./server_logs requests off              # Reduce log volume
+./server_logs timing on                 # Keep performance monitoring
+./server_logs save                      # Make settings persistent
+```
+
+**Development Environment:**
+```bash
+./server_logs level DEBUG               # Detailed debugging
+./server_logs requests on               # Full request tracking
+./server_logs timing on                 # Performance optimization data
+./server_logs save                      # Persist development settings
+./server_logs monitor                   # Start live monitoring
+```
+
+**Emergency Response:**
+```bash
+./server_logs level CRITICAL            # Only critical errors
+./server_logs requests off              # Reduce system load
+./server_logs timing off                # Minimal logging overhead
+./server_logs disable                   # Emergency: disable all logging
+```
+
+#### API Integration
+
+**REST Endpoints for Programmatic Control:**
+```bash
+# Status Information
+curl -X GET "http://localhost:5000/admin/logging/status"
+
+# Enable/Disable Logging
+curl -X POST "http://localhost:5000/admin/logging/enable"
+curl -X POST "http://localhost:5000/admin/logging/disable"
+
+# Set Logging Level
+curl -X POST "http://localhost:5000/admin/logging/level/DEBUG"
+
+# Toggle Features
+curl -X POST "http://localhost:5000/admin/logging/requests/toggle"
+curl -X POST "http://localhost:5000/admin/logging/timing/toggle"
+```
+
+#### Persistent Configuration
+
+**Configuration File:** `config/logging_config.json`
+
+**Example Configuration:**
+```json
+{
+  "enabled": true,
+  "level": "INFO",
+  "log_requests": false,
+  "log_timing": true,
+  "saved_at": "2025-09-22T07:42:55.080704",
+  "version": "1.0.2.59"
+}
+```
+
+**Automatic Restoration:**
+- Settings automatically restored on server startup
+- Integrated with `start_complete.sh` startup script
+- No manual intervention required
+
+#### Performance Monitoring Integration
+
+**Continuous Performance Monitoring:**
+```bash
+# Monitor slow operations (>5 seconds)
+while true; do
+    SLOW_OPS=$(tail -n 100 logs/server_complete.log | grep -E "took [5-9]\.[0-9]+s|took [0-9]{2,}\.[0-9]+s")
+    if [ ! -z "$SLOW_OPS" ]; then
+        echo "⚠️ ALERT: Slow operations detected!"
+        echo "$SLOW_OPS"
+    fi
+    sleep 30
+done
+
+# Performance correlation with system resources
+while true; do
+    TIMING_LOGS=$(tail -n 50 logs/server_complete.log | grep "⏱️" | tail -5)
+    MEMORY=$(free -m | awk 'NR==2{printf "Memory: %s/%sMB (%.2f%%)", $3,$2,$3*100/$2 }')
+    echo "$(date): $MEMORY"
+    echo "Recent timing: $TIMING_LOGS"
+    sleep 120
+done
+```
+
+#### Best Practices Summary
+
+1. **Always check status first**: `./server_logs status`
+2. **Use appropriate levels for environment** (DEBUG for dev, WARNING for prod)
+3. **Enable timing logging for performance monitoring**
+4. **Save configurations after changes**: `./server_logs save`
+5. **Use live monitoring during investigations**: `./server_logs monitor`
+6. **Disable logging only in emergencies** to maintain observability
 
 ---
 
