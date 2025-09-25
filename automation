@@ -14,6 +14,27 @@ else
     echo "⚠️  No virtual environment detected. Consider activating one."
 fi
 
+# Check critical dependencies
+echo "🔍 Checking dependencies..."
+MISSING_DEPS=()
+
+if ! python -c "import aiohttp" &>/dev/null; then
+    MISSING_DEPS+=("aiohttp")
+fi
+
+if ! python -c "import requests" &>/dev/null; then
+    MISSING_DEPS+=("requests")
+fi
+
+if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
+    echo "❌ Missing dependencies: ${MISSING_DEPS[*]}"
+    echo "   Install with: pip install ${MISSING_DEPS[*]}"
+    echo "   Or run: pip install -r requirements.txt"
+    exit 1
+fi
+
+echo "✅ Dependencies verified"
+
 # Check if the server is running
 if curl -s http://localhost:5000/health > /dev/null 2>&1; then
     echo "✅ Server is running on http://localhost:5000"
