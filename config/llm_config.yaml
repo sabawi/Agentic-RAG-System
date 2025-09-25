@@ -36,16 +36,18 @@ llm:
     - qwen
     - gemini
   primary:
-    type: openai
+    type: ollama
     config:
-      model: gpt-4.1-mini
-      timeout: 3600  # 60 minutes to match previous setting
-      context_window_size: 1000000  # 1M token context window
+      model: qwen3:8b
+      timeout: 3600  # 60 minutes for local models with large contexts
+      context_window_size: 8192
       temperature: 0.7
-      max_tokens: 32768  # 32K token output limit
-      base_url: https://api.openai.com/v1
-      api_key: ${OPENAI_API_KEY}
+      num_predict: 16384
+      max_tokens: 8192
+      base_url: http://127.0.0.1:11434
+      api_key: null
       stream: true
+      think: false  # Configurable think parameter for reasoning
   tool_calling:
     type: openai
     config:
