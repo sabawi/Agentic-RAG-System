@@ -18,7 +18,7 @@ Release: Production Ready
 """
 
 # Version information
-__version__ = "1.0.2.68"
+__version__ = "1.0.2.69"
 __release__ = "Production Ready"
 
 import asyncio
