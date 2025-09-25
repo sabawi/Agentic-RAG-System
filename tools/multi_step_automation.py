@@ -914,6 +914,12 @@ class MultiStepAutomation:
 
                 self.context_buffer.add_iteration(formatted_prompt, response, iteration_metadata)
 
+                # Log iteration completion for CLI progress tracking
+                logger.info(f"✅ Iteration {iteration_count} completed - Progress: {len(self.context_buffer.iterations)}/{self.max_iterations}")
+
+                # Small delay to allow CLI monitoring to catch progress update
+                await asyncio.sleep(0.1)
+
                 # Check goal achievement
                 goal_status = await self.goal_detector.check_goal_achievement(self.context_buffer)
                 goal_achieved = goal_status["achieved"]
