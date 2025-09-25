@@ -805,33 +805,33 @@ class MultiStepAutomation:
                 formatted_prompt = template.format(template_vars, context)
                 response = await self.send_prompt_to_server(formatted_prompt)
 
+                # Immediately add to context buffer when this template completes
+                metadata = {
+                    "template_id": template.id,
+                    "prompt_length": len(formatted_prompt),
+                    "response_length": len(response)
+                }
+
+                self.context_buffer.add_iteration(formatted_prompt, response, metadata)
+                results["iterations"].append(metadata)
+                logger.info(f"✅ Template '{template.id}' completed - Progress: {len(results['iterations'])}/{len(active_templates)}")
+
                 return {
                     "template": template,
                     "prompt": formatted_prompt,
                     "response": response,
-                    "metadata": {
-                        "template_id": template.id,
-                        "prompt_length": len(formatted_prompt),
-                        "response_length": len(response)
-                    }
+                    "metadata": metadata
                 }
 
             # Execute templates in parallel
             template_tasks = [process_template(template, variables) for template in active_templates]
             parallel_results = await asyncio.gather(*template_tasks, return_exceptions=True)
 
-            # Process results and add to context
+            # Handle any exceptions from parallel execution
             for result in parallel_results:
                 if isinstance(result, Exception):
                     logger.error(f"Parallel template error: {result}")
                     continue
-
-                self.context_buffer.add_iteration(
-                    result["prompt"],
-                    result["response"],
-                    result["metadata"]
-                )
-                results["iterations"].append(result["metadata"])
 
             # Check goal achievement with all parallel results
             if self.goal_detector:
