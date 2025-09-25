@@ -18,7 +18,7 @@ Release: Production Ready
 """
 
 # Version information
-__version__ = "1.0.2.70"
+__version__ = "1.0.2.73"
 __release__ = "Production Ready"
 
 import asyncio
@@ -6932,6 +6932,7 @@ async def llama_stream(request: Request):
             
         processed_images = []
         image_exists = False
+        user_errors = []  # Collect errors for user feedback
         
         for i, img_data in enumerate(images_raw):
             if img_data == "noimage":
@@ -6948,14 +6949,27 @@ async def llama_stream(request: Request):
                         _, base64_part = img_data.split(',', 1)
                         img_data = base64_part
                     
-                    # Check if it looks like base64 (contains only base64 characters)
-                    import re
-                    if re.match(r'^[A-Za-z0-9+/]*={0,2}$', img_data) and len(img_data) > 100:
-                        logger.info(f"🖼️ Image {i+1}: Already base64 data ({len(img_data)} chars)")
-                        processed_images.append(img_data)
+                    # Use signature-based detection instead of arbitrary length thresholds
+                    from signature_image_detection import ImageSignatureValidator
+                    validator = ImageSignatureValidator()
+                    validation_result = validator.validate_image_data(img_data, i + 1)
+
+                    if validation_result['is_valid']:
+                        logger.info(f"🖼️ Image {i+1}: Valid {validation_result['format']} image ({validation_result['size_bytes']} bytes)")
+                        processed_images.append(validation_result['processed_data'])
                         image_exists = True
                         continue
-                    
+                    else:
+                        # Check if it might be a file path before declaring failure
+                        if not ('/' in img_data or '\\' in img_data or any(img_data.endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'])):
+                            # Not a file path either - this is a validation failure
+                            user_errors.append(validation_result['user_error'])
+                            logger.error(f"🖼️ Image {i+1}: {validation_result['error']}")
+                            processed_images.append("noimage")
+                            continue
+
+                        logger.warning(f"🖼️ Image {i+1}: Signature validation failed, trying file path - {validation_result['error']}")
+
                     # Otherwise, treat as file path
                     file_path = img_data.strip()
                     
@@ -7036,11 +7050,13 @@ async def llama_stream(request: Request):
                 processed_images.append("noimage")
         
         logger.info(f"🖼️ Image processing complete: {len(processed_images)} images, image_exists={image_exists}")
-        return processed_images, image_exists
+        if user_errors:
+            logger.warning(f"🖼️ User errors collected: {len(user_errors)} errors")
+        return processed_images, image_exists, user_errors
     
     # Process images with comprehensive error handling
     try:
-        images, image_exists = await process_image_data(images)
+        images, image_exists, image_errors = await process_image_data(images)
         # Update the data dictionary with processed images
         data["images"] = images
         logger.info(f"🖼️ Updated data[images] with {len([img for img in images if img != 'noimage'])} processed images")
@@ -7052,6 +7068,7 @@ async def llama_stream(request: Request):
         logger.error(f"🖼️ CRITICAL: Image processing failed: {e}")
         images = ['noimage']
         image_exists = False
+        image_errors = [f"Critical image processing error: {str(e)}"]
     
     async def generate_stream():
         import time  # Import time at function start for timing measurements
@@ -7077,6 +7094,20 @@ async def llama_stream(request: Request):
                 
                 # 🖼️ FORCED IMAGE PROCESSING: When images are present, automatically call image_to_text
                 forced_image_processing_result = ""
+
+                # 🚨 USER ERROR REPORTING: Report image validation failures to user
+                if image_errors:
+                    import datetime
+                    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+                    error_messages = "\n".join(image_errors)
+                    forced_image_processing_result = f"""
+🖼️ IMAGE VALIDATION ERRORS [{timestamp}]:
+{error_messages}
+
+💡 Please check your images and try again. Supported formats: PNG, JPEG, GIF, BMP, WebP, TIFF.
+"""
+                    logger.error(f"🖼️ Reporting {len(image_errors)} image validation errors to user")
+
                 if image_exists:
                     logger.info("🖼️ FORCED IMAGE PROCESSING: Images detected, automatically processing...")
                     
