@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-"""
-Agentic-RAG Server v1.0.2.57 - Complete FastAPI Server with Hybrid LLM Architecture
+
+# Import centralized version information
+from version import __version__, __release__, get_release_string
+
+# Generate dynamic docstring with current version
+__doc__ = f"""
+{get_release_string()} - Complete FastAPI Server with Hybrid LLM Architecture
 =============================================================================
 
 FastAPI server with all original Flask functionality including:
@@ -13,13 +18,9 @@ FastAPI server with all original Flask functionality including:
 - Database connection pooling
 - Production-ready caching layer
 
-Version: 1.0.2.57 - Critical Ollama Tool Calling Fix & Hybrid Architecture
-Release: Production Ready
+Version: {__version__} - Critical Ollama Tool Calling Fix & Hybrid Architecture
+Release: {__release__}
 """
-
-# Version information
-__version__ = "1.0.2.75"
-__release__ = "Production Ready"
 
 import asyncio
 import base64
@@ -8561,6 +8562,17 @@ END OF CONTEXT
                         manager_kwargs['images'] = stream_payload["images"]
 
                     try:
+                        # Log context size information
+                        prompt_text = stream_payload['prompt']
+                        system_text = manager_kwargs.get('system_prompt', '')
+                        full_context = f"{system_text}\n\n{prompt_text}" if system_text else prompt_text
+
+                        char_count = len(full_context)
+                        # Rough token estimation: ~4 characters per token for most models
+                        token_estimate = char_count // 4
+
+                        logger.info(f"📏 CONTEXT SIZE: {char_count:,} chars (~{token_estimate:,} tokens) → Primary LLM: {stream_payload.get('model', 'unknown')}")
+
                         # Use LLM Manager for provider-agnostic primary model call
                         async for chunk in llm_manager.generate_stream(stream_payload['prompt'], **manager_kwargs):
                             if chunk:

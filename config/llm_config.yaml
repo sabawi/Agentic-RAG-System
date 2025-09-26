@@ -113,12 +113,12 @@ optimization:
   rollout_percentage: 100.0
   detailed_logging: true
 vision:
-  type: ollama
+  type: lm_studio
   config:
-    model: qwen2.5vl:3b
+    model: sabawi/qwen2.5-vl-7b-instruct
     timeout: 3600  # 60 minutes for vision processing with large images
-    base_url: http://127.0.0.1:11434
-    fallback_model: bakllava:latest
+    base_url: http://127.0.0.1:1234
+    fallback_model: lmstudio-community/gemma-3-4b-it
     think: false  # Configurable think parameter for vision tasks
 flight_search:
   enabled: true
