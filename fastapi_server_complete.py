@@ -18,7 +18,7 @@ Release: Production Ready
 """
 
 # Version information
-__version__ = "1.0.2.74"
+__version__ = "1.0.2.75"
 __release__ = "Production Ready"
 
 import asyncio
@@ -8938,6 +8938,7 @@ async def health_check():
     return {
         "status": overall_status,
         "timestamp": datetime.now().isoformat(),
+        "version": __version__,
         "services": services,
         "cache_size": len(simple_cache),
         "tools_available": TOOLS_AVAILABLE
