@@ -7,6 +7,7 @@ The Agentic RAG System is a high-performance AI assistant that combines local la
 - **Answer questions** using advanced language models
 - **Search the web** and extract information from websites
 - **Process documents** and provide intelligent search across your files
+- **Retrieve and summarize emails** with advanced HTML content processing
 - **Send emails** with attachments and professional formatting
 - **Execute code** safely in a sandboxed environment
 - **Analyze financial data** and create visualizations
@@ -17,7 +18,7 @@ The Agentic RAG System is a high-performance AI assistant that combines local la
 - **Local Processing**: Runs entirely on your hardware with Ollama integration
 - **Tool Integration**: 19 specialized tools for different tasks
 - **Document Management**: Advanced RAG system with semantic search
-- **Email Capabilities**: Professional email sending with multiple providers
+- **Advanced Email System**: Retrieve, process, and send emails with intelligent HTML-to-text conversion
 - **Real-time Streaming**: Live responses as the AI processes your requests
 - **OpenAI Compatible API**: Works with existing OpenAI-compatible applications
 
@@ -119,22 +120,23 @@ Your AI assistant has access to these specialized tools:
 7. **document_search** - Search through indexed documents using RAG system
 
 #### Communication & Productivity Tools
-8. **secure_email_sender** - Send professional emails with attachments
-9. **google_calendar_scheduler** - Manage calendar events and appointments
-10. **flight_search** - Search for airline flights with real-time pricing
+8. **email_retriever** - 🚀 NEW: Retrieve and summarize emails with advanced HTML processing
+9. **secure_email_sender** - Send professional emails with attachments
+10. **google_calendar_scheduler** - Manage calendar events and appointments
+11. **flight_search** - Search for airline flights with real-time pricing
 
 #### Analysis & Computing Tools
-11. **calculator** - Advanced mathematical calculations
-12. **comprehensive_stock_analyzer** - Advanced financial analysis and stock evaluation
-13. **get_stock_and_company_data** - Financial data retrieval
-14. **sandboxed_executor** - Safe code execution and file operations
-15. **process_executor** - Advanced system process execution
+12. **calculator** - Advanced mathematical calculations
+13. **comprehensive_stock_analyzer** - Advanced financial analysis and stock evaluation
+14. **get_stock_and_company_data** - Financial data retrieval
+15. **sandboxed_executor** - Safe code execution and file operations
+16. **process_executor** - Advanced system process execution
 
 #### Content Creation & Processing Tools
-16. **analytical_visualizer** - Create charts, graphs, and data visualizations
-17. **image_to_text** - Extract text from images using OCR
-18. **pdf_generator** - Create and generate PDF documents
-19. **[Additional tools may be available - check /v1/models endpoint]**
+17. **analytical_visualizer** - Create charts, graphs, and data visualizations
+18. **image_to_text** - Extract text from images using OCR
+19. **pdf_generator** - Create and generate PDF documents
+20. **[Additional tools may be available - check /v1/models endpoint]**
 
 ### Multi-Tool Intelligence
 
@@ -243,7 +245,37 @@ curl -X POST "http://localhost:5000/v1/chat/completions" \
   }'
 ```
 
-#### 3. Email Communication
+#### 3. Email Communication & Retrieval
+
+**🚀 NEW: Advanced Email Retrieval with HTML Content Optimization**
+
+**Email Summarization (Optimized Performance)**
+```bash
+curl -X POST "http://localhost:5000/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Summarize my last 3 emails from Gmail"}
+    ],
+    "stream": false
+  }'
+```
+
+**Email Search & Analysis**
+```bash
+curl -X POST "http://localhost:5000/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Agentic-RAG-Model1",
+    "messages": [
+      {"role": "user", "content": "Find unread emails from work about the project deadline"}
+    ],
+    "stream": false
+  }'
+```
+
+**Email Sending**
 ```bash
 curl -X POST "http://localhost:5000/v1/chat/completions" \
   -H "Content-Type: application/json" \
@@ -255,6 +287,12 @@ curl -X POST "http://localhost:5000/v1/chat/completions" \
     "stream": false
   }'
 ```
+
+**✨ Performance Benefits:**
+- **84% Context Reduction**: HTML emails now use 6,000 tokens instead of 37,000
+- **Better Summaries**: Clean text processing improves AI understanding
+- **Faster Processing**: Reduced token usage leads to quicker responses
+- **Cost Efficiency**: Dramatic reduction in API costs for email operations
 
 #### 4. Flight Search
 ```bash

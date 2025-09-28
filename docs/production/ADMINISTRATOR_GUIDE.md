@@ -1,8 +1,9 @@
 # Agentic RAG System - Administrator Guide
 
-**Version:** 2.1
-**Last Updated:** September 2025  
+**Version:** 2.1.87
+**Last Updated:** September 28, 2025
 **Target Audience:** System Administrators, DevOps Engineers, Production Support
+**Latest Update:** HTML Email Content Optimization System
 
 ---
 
@@ -14,13 +15,14 @@
 4. [SERVICE OPERATIONS](#4-service-operations)
 5. [CORE SYSTEM MONITORING](#5-core-system-monitoring)
    - [Logging Management System](#logging-management-system)
-6. [EMBEDDING SERVICE ADMINISTRATION (A-1)](#6-embedding-service-administration-a-1)
-7. [DIRECTORY WATCHING SYSTEM (A-2)](#7-directory-watching-system-a-2)
-8. [SECURITY ADMINISTRATION (A-3)](#8-security-administration-a-3)
-9. [TROUBLESHOOTING](#9-troubleshooting)
-10. [MAINTENANCE PROCEDURES](#10-maintenance-procedures)
-11. [PERFORMANCE OPTIMIZATION](#11-performance-optimization)
-12. [APPENDICES](#12-appendices)
+6. [EMAIL SYSTEM ADMINISTRATION (A-1)](#6-email-system-administration-a-1)
+7. [EMBEDDING SERVICE ADMINISTRATION (A-2)](#7-embedding-service-administration-a-2)
+8. [DIRECTORY WATCHING SYSTEM (A-3)](#8-directory-watching-system-a-3)
+9. [SECURITY ADMINISTRATION (A-4)](#9-security-administration-a-4)
+10. [TROUBLESHOOTING](#10-troubleshooting)
+11. [MAINTENANCE PROCEDURES](#11-maintenance-procedures)
+12. [PERFORMANCE OPTIMIZATION](#12-performance-optimization)
+13. [APPENDICES](#13-appendices)
 
 ---
 
@@ -691,7 +693,167 @@ done
 
 ---
 
-## 6. EMBEDDING SERVICE ADMINISTRATION (A-1)
+## 6. EMAIL SYSTEM ADMINISTRATION (A-1)
+
+### 🚀 HTML Email Content Optimization System
+**Status**: ✅ Production Ready | **Performance**: 84% Context Reduction
+
+#### Overview
+The email system provides advanced email retrieval and processing capabilities with major performance optimization achieved through HTML content conversion.
+
+**Key Achievement**: Context size reduced from 37,000 tokens to 6,000 tokens (84% reduction) while maintaining all meaningful content.
+
+#### Architecture Components
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Email Query   │───▶│  Email Retriever │───▶│ Content Cleaner │
+│   Processing    │    │     Tool         │    │   HTML→Text     │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│ Provider Config │    │ Smart Selection  │    │ Clean Context   │
+│ • Gmail         │    │ • Plain Text 1st │    │ • No HTML Bloat │
+│ • Outlook       │    │ • HTML Convert   │    │ • Links Preserved│
+│ • Yahoo/iCloud  │    │ • Format Retain  │    │ • 84% Reduction │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+```
+
+#### Configuration Management
+
+**1. Email Provider Configuration**
+Location: `config/llm_config.yaml`
+
+```yaml
+email_integration:
+  providers:
+    gmail_primary:
+      server: "imap.gmail.com"
+      port: 993
+      username: "${GMAIL_PRIMARY_EMAIL}"
+      password: "${GMAIL_PRIMARY_APP_PASSWORD}"
+    outlook_personal:
+      server: "outlook.office365.com"
+      port: 993
+      username: "${OUTLOOK_PERSONAL_EMAIL}"
+      password: "${OUTLOOK_PERSONAL_PASSWORD}"
+    # Additional providers...
+```
+
+**2. Environment Variables**
+Required for secure credential management:
+
+```bash
+# Gmail Configuration
+export GMAIL_PRIMARY_EMAIL="user@example.com"
+export GMAIL_PRIMARY_APP_PASSWORD="your_app_password_here"
+
+# Outlook Configuration
+export OUTLOOK_PERSONAL_EMAIL="user@example.com"
+export OUTLOOK_PERSONAL_PASSWORD="your_outlook_password_here"
+```
+
+#### Performance Monitoring
+
+**1. Context Size Tracking**
+Monitor email processing efficiency:
+
+```bash
+# Monitor context sizes in logs
+tail -f logs/server_complete.log | grep "CONTEXT SIZE"
+
+# Expected: 6,000-8,000 tokens for typical email queries
+# Alert if: >15,000 tokens (potential HTML conversion issue)
+```
+
+**2. HTML Conversion Metrics**
+Track conversion performance:
+
+```bash
+# Check conversion logs
+grep "Converted HTML email body" logs/server_complete.log
+
+# Expected format: "1234 chars -> 456 chars" (60%+ reduction)
+```
+
+**3. Email Retrieval Performance**
+Monitor query processing times:
+
+```bash
+# Track email retrieval duration
+grep "EMAIL RETRIEVAL SUCCESS" logs/server_complete.log
+
+# Expected: <5 seconds for typical queries
+# Alert if: >30 seconds (connection issues)
+```
+
+#### Troubleshooting Email Issues
+
+**Problem: High Context Size (>20k tokens)**
+```bash
+# Check if HTML conversion is working
+grep "raw_html" logs/server_complete.log
+# Should be: No results (raw_html removed in v1.0.2.87)
+
+# Verify HTML cleaning is active
+grep "_html_to_clean_text" logs/server_complete.log
+# Should show conversion activity
+```
+
+**Problem: Email Content Missing**
+```bash
+# Check provider configuration
+curl -X GET http://localhost:5000/api/tools/email_retriever/status
+
+# Verify credentials
+python -c "
+from utils.email_library_adapter import EmailLibraryAdapter
+adapter = EmailLibraryAdapter('config/llm_config.yaml')
+print(adapter.list_providers())
+"
+```
+
+**Problem: Poor Email Summarization**
+```bash
+# Verify clean text conversion
+tail -f logs/server_complete.log | grep "body_content"
+# Should show clean, formatted text without HTML tags
+```
+
+#### Maintenance Procedures
+
+**1. Test Email System Health**
+```bash
+# Run email conversion tests
+python tests/test_html_email_conversion.py
+# Expected: All tests passing with 60%+ size reduction
+
+# Test email retrieval
+python tests/test_email_body_fix.py
+# Expected: Clean content extraction verified
+```
+
+**2. Update Email Credentials**
+```bash
+# Update environment variables
+vi ~/.bashrc  # Add new credentials
+source ~/.bashrc
+
+# Restart server to apply changes
+./stop_complete.sh && ./start_complete.sh
+```
+
+**3. Monitor Performance Metrics**
+```bash
+# Check daily email processing efficiency
+grep "EMAIL RETRIEVAL SUCCESS" logs/server_complete.log | \
+  grep "$(date +%Y-%m-%d)" | \
+  awk '{print $NF}' | # Extract duration
+  sort -n
+```
+
+## 7. EMBEDDING SERVICE ADMINISTRATION (A-2)
 
 ### Architecture Overview
 

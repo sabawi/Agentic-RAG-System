@@ -163,3 +163,163 @@ flight_search:
     headless: true
     timeout: 30
     window_size: "1920,1080"
+email:
+  # =============================================================================
+  # Email Management Configuration
+  # =============================================================================
+  # Universal email library integration for retrieval, search, and management
+  # Enables natural language queries like:
+  # - "List my unread emails from gmail"
+  # - "Show emails from Reema about university in last 7 days"
+  # - "Find Apple billing notifications"
+
+  # Enable the unified email management system
+  enabled: true
+
+  # Default provider for operations (when not specified)
+  default_provider: "gmail_primary"
+
+  # Email retrieval settings
+  retrieval:
+    default_timeout: 30
+    max_emails_per_request: 50
+    auto_mark_read: false
+    default_retrieval_type: "headers"  # "headers" (fast) or "full" (complete)
+    cache_duration: 300  # Cache results for 5 minutes
+
+  # Email sending settings (integrates with existing secure_email_sender)
+  sending:
+    auto_cleanup_attachments: true
+    max_attachment_size_mb: 25
+    wait_for_attachments: true
+    attachment_timeout: 45
+    preserve_existing_functionality: true  # Ensures backward compatibility
+
+  # Security settings
+  security:
+    allowed_attachment_types: [".pdf", ".html", ".txt", ".md", ".csv", ".json", ".xml", ".log", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip"]
+    forbidden_attachment_types: [".exe", ".bat", ".cmd", ".com", ".scr", ".pif", ".msi", ".dll"]
+    max_recipients: 50
+    require_auth: true
+    enable_app_passwords: true
+
+  # Email providers configuration
+  providers:
+    gmail_primary:
+      email: "${GMAIL_PRIMARY_EMAIL}"
+      password: "${GMAIL_PRIMARY_APP_PASSWORD}"
+      imap:
+        server: "imap.gmail.com"
+        port: 993
+        use_ssl: true
+      smtp:
+        server: "smtp.gmail.com"
+        port: 587
+        use_tls: true
+      pop3:
+        server: "pop.gmail.com"
+        port: 995
+        use_ssl: true
+      description: "Primary Gmail account for personal/main email"
+
+    gmail_work:
+      email: "${GMAIL_WORK_EMAIL}"
+      password: "${GMAIL_WORK_APP_PASSWORD}"
+      imap:
+        server: "imap.gmail.com"
+        port: 993
+        use_ssl: true
+      smtp:
+        server: "smtp.gmail.com"
+        port: 587
+        use_tls: true
+      description: "Work Gmail account"
+
+    outlook_personal:
+      email: "${OUTLOOK_PERSONAL_EMAIL}"
+      password: "${OUTLOOK_PERSONAL_PASSWORD}"
+      imap:
+        server: "outlook.office365.com"
+        port: 993
+        use_ssl: true
+      smtp:
+        server: "smtp.office365.com"
+        port: 587
+        use_tls: true
+      description: "Personal Outlook/Hotmail account"
+
+    outlook_work:
+      email: "${OUTLOOK_WORK_EMAIL}"
+      password: "${OUTLOOK_WORK_PASSWORD}"
+      imap:
+        server: "outlook.office365.com"
+        port: 993
+        use_ssl: true
+      smtp:
+        server: "smtp.office365.com"
+        port: 587
+        use_tls: true
+      description: "Work Outlook/Office 365 account"
+
+    yahoo_personal:
+      email: "${YAHOO_PERSONAL_EMAIL}"
+      password: "${YAHOO_PERSONAL_APP_PASSWORD}"
+      imap:
+        server: "imap.mail.yahoo.com"
+        port: 993
+        use_ssl: true
+      smtp:
+        server: "smtp.mail.yahoo.com"
+        port: 587
+        use_tls: true
+      pop3:
+        server: "pop.mail.yahoo.com"
+        port: 995
+        use_ssl: true
+      description: "Personal Yahoo Mail account"
+
+    icloud_personal:
+      email: "${ICLOUD_PERSONAL_EMAIL}"
+      password: "${ICLOUD_PERSONAL_APP_PASSWORD}"
+      imap:
+        server: "imap.mail.me.com"
+        port: 993
+        use_ssl: true
+      smtp:
+        server: "smtp.mail.me.com"
+        port: 587
+        use_tls: true
+      description: "Personal iCloud Mail account"
+
+    custom_server:
+      email: "${CUSTOM_EMAIL}"
+      password: "${CUSTOM_PASSWORD}"
+      imap:
+        server: "${CUSTOM_IMAP_SERVER}"
+        port: "${CUSTOM_IMAP_PORT:993}"
+        use_ssl: true
+      smtp:
+        server: "${CUSTOM_SMTP_SERVER}"
+        port: "${CUSTOM_SMTP_PORT:587}"
+        use_tls: true
+      description: "Custom IMAP/SMTP server"
+
+  # Global email settings
+  settings:
+    default_timeout: 30
+    max_attachment_size_mb: 25
+    date_format: "%Y-%m-%d %H:%M:%S"
+    encoding: "utf-8"
+    max_search_results: 100
+    connection_retry_attempts: 3
+    connection_retry_delay: 2
+
+  # Natural language processing settings
+  nlp:
+    enable_smart_parsing: true
+    enable_sender_detection: true
+    enable_date_parsing: true
+    enable_content_filtering: true
+    enable_company_detection: true
+    enable_fuzzy_matching: true
+    confidence_threshold: 0.7

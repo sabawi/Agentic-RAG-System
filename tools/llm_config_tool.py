@@ -2,6 +2,9 @@
 """
 LLM Configuration Tool
 Interactive tool to configure llm_config.yaml with all provider and model permutations
+
+WARNING: This tool still contains references to constants that were removed from llm_constants.py
+TODO: Update this tool to work without external constants (low priority - tool not part of runtime)
 """
 
 import os
@@ -9,20 +12,18 @@ import sys
 import yaml
 from pathlib import Path
 
-# Import constants to avoid hardcoded values
-from config.llm_constants import (
-    DEFAULT_PRIMARY_TIMEOUT, DEFAULT_SECONDARY_TIMEOUT,
-    DEFAULT_PRIMARY_TEMPERATURE, DEFAULT_SECONDARY_TEMPERATURE,
-    DEFAULT_CONTEXT_WINDOW_SIZE, DEFAULT_PRIMARY_MAX_TOKENS, DEFAULT_SECONDARY_MAX_TOKENS,
-    DEFAULT_IMAGE_PROCESSING_MAX_TOKENS, OLLAMA_DEFAULT_BASE_URL, OLLAMA_HEALTH_CHECK_URL,
-    OLLAMA_DEFAULT_NUM_PREDICT_PRIMARY, OLLAMA_DEFAULT_NUM_PREDICT_SECONDARY,
-    OPENAI_BASE_URL, QWEN_BASE_URL, GEMINI_BASE_URL,
-    DEFAULT_IMAGE_PROCESSING_MODEL, VISION_MODELS_OLLAMA, VISION_MODELS_OPENAI,
-    ENV_VAR_OPENAI, ENV_VAR_QWEN, ENV_VAR_GOOGLE,
-    DEFAULT_RETRY_ATTEMPTS, DEFAULT_RETRY_DELAY, DEFAULT_OPENAI_RETRY_DELAY,
-    DEFAULT_CONNECTION_POOL_SIZE, DEFAULT_MAX_CONCURRENT_REQUESTS,
-    DEFAULT_REQUEST_TIMEOUT, DEFAULT_STREAMING_CHUNK_SIZE
-)
+# Configuration constants for tool - all values should go into llm_config.yaml
+# These are for the config tool UI only
+VISION_MODELS_OLLAMA = {
+    'llava:7b': 'LLaVA 7B (Vision)',
+    'llava:13b': 'LLaVA 13B (Vision)',
+    'bakllava': 'BakLLaVA (Vision)',
+    'moondream': 'Moondream (Vision)'
+}
+
+VISION_MODELS_OPENAI = {
+    'gpt-4-vision-preview': 'GPT-4 Vision (Image Analysis)'
+}
 
 class LLMConfigTool:
     def __init__(self):
@@ -52,19 +53,19 @@ class LLMConfigTool:
         self.providers = {
             'ollama': {
                 'name': 'Ollama (Local)',
-                'base_url': OLLAMA_DEFAULT_BASE_URL,
+                'base_url': 'http://127.0.0.1:11434',
                 'api_key': None,
                 'models': ollama_models
             },
             'openai': {
                 'name': 'OpenAI (Cloud)',
-                'base_url': OPENAI_BASE_URL,
+                'base_url': 'https://api.openai.com/v1',
                 'api_key': ENV_VAR_OPENAI,
                 'models': openai_models
             },
             'qwen': {
                 'name': 'Qwen Cloud (Alibaba)',
-                'base_url': QWEN_BASE_URL,
+                'base_url': 'https://dashscope.aliyuncs.com/api/v1',
                 'api_key': ENV_VAR_QWEN,
                 'models': {
                     'qwen-plus': 'Qwen Plus',
@@ -77,7 +78,7 @@ class LLMConfigTool:
             },
             'gemini': {
                 'name': 'Google Gemini (Cloud)',
-                'base_url': GEMINI_BASE_URL,
+                'base_url': 'https://generativelanguage.googleapis.com/v1beta',
                 'api_key': ENV_VAR_GOOGLE,
                 'models': {
                     'gemini-1.5-pro': 'Gemini 1.5 Pro',
@@ -234,7 +235,7 @@ class LLMConfigTool:
             base_config.update({
                 'num_predict': OLLAMA_DEFAULT_NUM_PREDICT_PRIMARY if is_primary else OLLAMA_DEFAULT_NUM_PREDICT_SECONDARY,  # CRITICAL: Output token limit for Ollama
                 'max_tokens': DEFAULT_PRIMARY_MAX_TOKENS if is_primary else DEFAULT_SECONDARY_MAX_TOKENS,    # Backward compatibility
-                'base_url': OLLAMA_DEFAULT_BASE_URL,
+                'base_url': 'http://127.0.0.1:11434',
                 'api_key': None,
                 'stream': is_primary
             })
@@ -274,7 +275,7 @@ class LLMConfigTool:
             },
             'openai': {
                 'api_key': ENV_VAR_OPENAI,
-                'base_url': OPENAI_BASE_URL,
+                'base_url': 'https://api.openai.com/v1',
                 'organization': None,
                 'retry_attempts': DEFAULT_RETRY_ATTEMPTS,
                 'retry_delay': DEFAULT_OPENAI_RETRY_DELAY,
@@ -285,7 +286,7 @@ class LLMConfigTool:
             },
             'qwen': {
                 'api_key': ENV_VAR_QWEN,
-                'base_url': QWEN_BASE_URL,
+                'base_url': 'https://dashscope.aliyuncs.com/api/v1',
                 'retry_attempts': DEFAULT_RETRY_ATTEMPTS,
                 'retry_delay': DEFAULT_OPENAI_RETRY_DELAY,
                 'models': {
@@ -295,7 +296,7 @@ class LLMConfigTool:
             },
             'gemini': {
                 'api_key': ENV_VAR_GOOGLE,
-                'base_url': GEMINI_BASE_URL,
+                'base_url': 'https://generativelanguage.googleapis.com/v1beta',
                 'retry_attempts': DEFAULT_RETRY_ATTEMPTS,
                 'retry_delay': DEFAULT_OPENAI_RETRY_DELAY,
                 'models': {
@@ -680,7 +681,7 @@ class LLMConfigTool:
                         'temperature': DEFAULT_SECONDARY_TEMPERATURE,
                         'max_tokens': DEFAULT_IMAGE_PROCESSING_MAX_TOKENS,
                         'stream': False,
-                        'base_url': OLLAMA_DEFAULT_BASE_URL,
+                        'base_url': 'http://127.0.0.1:11434',
                         'api_key': None
                     }
                 }

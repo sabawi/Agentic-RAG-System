@@ -9,17 +9,10 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from .platform import platform_paths, EnvironmentManager
 
-# Import constants to avoid hardcoded values
-import sys
-config_dir = Path(__file__).parent.parent / "config"
-sys.path.insert(0, str(config_dir))
-from llm_constants import (
-    DEFAULT_PRIMARY_TIMEOUT, DEFAULT_SECONDARY_TIMEOUT,
-    DEFAULT_PRIMARY_TEMPERATURE, DEFAULT_SECONDARY_TEMPERATURE,
-    DEFAULT_CONTEXT_WINDOW_SIZE, DEFAULT_IMAGE_PROCESSING_MAX_TOKENS,
-    OLLAMA_DEFAULT_BASE_URL, DEFAULT_IMAGE_PROCESSING_MODEL,
-    DEFAULT_TOOL_CALLING_MODEL, DEFAULT_PRIMARY_MODEL
-)
+# Constants moved from llm_constants.py - these are ONLY emergency fallbacks
+# All real configuration should come from llm_config.yaml
+EMERGENCY_FALLBACK_BASE_URL = 'http://127.0.0.1:11434'
+EMERGENCY_FALLBACK_TIMEOUT = 600
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +61,8 @@ class ConfigLoader:
             return self._config_cache
         
         if not self.config_file.exists():
-            logger.warning(f"⚠️ Config file not found: {self.config_file}")
-            return self._get_default_config()
+            logger.error(f"❌ Config file not found: {self.config_file}")
+            raise FileNotFoundError(f"Configuration file required: {self.config_file}. No hardcoded fallbacks allowed.")
         
         try:
             with open(self.config_file, 'r') as f:
@@ -90,8 +83,7 @@ class ConfigLoader:
             
         except Exception as e:
             logger.error(f"❌ Failed to load config from {self.config_file}: {e}")
-            logger.info("📋 Using default configuration")
-            return self._get_default_config()
+            raise ValueError(f"Configuration file is invalid: {self.config_file}. Please fix the YAML syntax.")
     
     def get_llm_config(self, llm_type: str = 'primary') -> Dict[str, Any]:
         """Get LLM configuration for specific type
@@ -130,15 +122,8 @@ class ConfigLoader:
             # logger.info(f"🔍 CONFIG TRACE 7: Final returned config = {type_config}")
             return type_config
         
-        # Fallback to default Ollama config
-        return {
-            'type': 'ollama',
-            'config': {
-                'base_url': OLLAMA_DEFAULT_BASE_URL,
-                'model': DEFAULT_PRIMARY_MODEL,
-                'timeout': DEFAULT_SECONDARY_TIMEOUT
-            }
-        }
+        # No hardcoded fallback! All configuration must come from llm_config.yaml
+        raise ValueError(f"LLM type '{llm_type}' not found in configuration. Please check your llm_config.yaml file.")
     
     def get_platform_config(self) -> Dict[str, Any]:
         """Get platform-specific configuration
@@ -191,66 +176,8 @@ class ConfigLoader:
         
         return config
     
-    def _get_default_config(self) -> Dict[str, Any]:
-        """Get default configuration when no config file exists
-        
-        Returns:
-            Default configuration dictionary
-        """
-        return {
-            'llm': {
-                'primary': {
-                    'type': 'ollama',
-                    'config': {
-                        'base_url': OLLAMA_DEFAULT_BASE_URL,
-                        'model': DEFAULT_PRIMARY_MODEL,
-                        'timeout': DEFAULT_PRIMARY_TIMEOUT,
-                        'temperature': DEFAULT_PRIMARY_TEMPERATURE,
-                        'stream': True
-                    }
-                },
-                'tool_calling': {
-                    'type': 'ollama',
-                    'config': {
-                        'base_url': OLLAMA_DEFAULT_BASE_URL,
-                        'model': DEFAULT_TOOL_CALLING_MODEL,
-                        'timeout': DEFAULT_SECONDARY_TIMEOUT,
-                        'temperature': DEFAULT_SECONDARY_TEMPERATURE,
-                        'stream': False
-                    }
-                },
-                'image_processing': {
-                    'type': 'ollama',
-                    'config': {
-                        'base_url': OLLAMA_DEFAULT_BASE_URL,
-                        'model': DEFAULT_IMAGE_PROCESSING_MODEL,
-                        'timeout': DEFAULT_SECONDARY_TIMEOUT,
-                        'temperature': DEFAULT_SECONDARY_TEMPERATURE,
-                        'stream': False,
-                        'context_window_size': DEFAULT_CONTEXT_WINDOW_SIZE,
-                        'max_tokens': DEFAULT_IMAGE_PROCESSING_MAX_TOKENS
-                    }
-                },
-                'fallback': {
-                    'enabled': False,
-                    'order': ['ollama']
-                }
-            },
-            'platform': {
-                'temp_dir': str(platform_paths.get_temp_dir()),
-                'config_dir': str(platform_paths.get_config_dir()),
-                'log_dir': str(platform_paths.get_log_dir())
-            },
-            'security': {
-                'api_key_encryption': False,
-                'audit_logging': True
-            },
-            'performance': {
-                'connection_pool_size': 10,
-                'request_timeout': 600,
-                'max_concurrent_requests': 5
-            }
-        }
+    # _get_default_config method removed - no hardcoded fallbacks allowed!
+    # All configuration must come from llm_config.yaml
     
     def save_config(self, config: Dict[str, Any]):
         """Save configuration to file

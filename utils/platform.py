@@ -9,6 +9,12 @@ from pathlib import Path
 from typing import Dict, Any
 import logging
 
+try:
+    from dotenv import load_dotenv
+    _DOTENV_AVAILABLE = True
+except ImportError:
+    _DOTENV_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 class PlatformDetector:
@@ -191,6 +197,24 @@ class EnvironmentManager:
     @staticmethod
     def expand_env_vars(text: str) -> str:
         """Expand environment variables in text"""
+        # Load .env file if available and not already loaded
+        if _DOTENV_AVAILABLE and not hasattr(EnvironmentManager, '_dotenv_loaded'):
+            try:
+                # Look for .env file in current directory and parent directories
+                env_file = Path.cwd() / '.env'
+                if env_file.exists():
+                    load_dotenv(env_file)
+                    logger.info(f"🔧 Loaded environment variables from {env_file}")
+                else:
+                    # Try parent directory
+                    parent_env = Path.cwd().parent / '.env'
+                    if parent_env.exists():
+                        load_dotenv(parent_env)
+                        logger.info(f"🔧 Loaded environment variables from {parent_env}")
+                EnvironmentManager._dotenv_loaded = True
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to load .env file: {e}")
+
         return os.path.expandvars(text)
     
     @staticmethod
