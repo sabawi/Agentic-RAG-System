@@ -69,7 +69,18 @@ log_step() {
 
 # Version management functions
 get_current_version() {
-    if [ -f "VERSION" ]; then
+    # Use centralized version system from version.py (authoritative source)
+    if [ -f "version.py" ]; then
+        python3 -c "import sys; sys.path.append('.'); from version import VERSION; print(VERSION)" 2>/dev/null || {
+            # Fallback to old VERSION file if version.py import fails
+            if [ -f "VERSION" ]; then
+                cat VERSION | tr -d '\n\r'
+            else
+                echo "unknown"
+            fi
+        }
+    elif [ -f "VERSION" ]; then
+        # Legacy fallback for older installations
         cat VERSION | tr -d '\n\r'
     else
         echo "unknown"
