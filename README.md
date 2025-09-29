@@ -1,14 +1,15 @@
-# Agentic-RAG Server v1.0.2.63
+# Agentic-RAG Server v1.0.2.88
 
-An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, and vision capabilities.
+An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, vision capabilities, and intelligent email management.
 
-[![Version](https://img.shields.io/badge/version-1.0.2.63-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.2.63)
+[![Version](https://img.shields.io/badge/version-1.0.2.88-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.2.88)
 [![Python](https://img.shields.io/badge/python-3.8+-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
 
 ## 🚀 Features
 
+- **🚀 NEW: Intelligent Email Management**: Advanced email retrieval and optimization with 84% context reduction
 - **Multi-LLM Architecture**: Primary, tool-calling, arbitration, and vision models working together
 - **OpenAI-Compatible API**: Full compatibility with OpenAI client libraries
 - **Vision Processing**: Image analysis and OCR capabilities with qwen2.5vl:3b
@@ -16,6 +17,7 @@ An advanced AI-powered server with multi-LLM orchestration, tool calling, docume
 - **Tool Calling System**: Extensible user tools for calendar, email, web scraping, and more
 - **Real-time Streaming**: Support for streaming responses
 - **Auto-fallback**: Automatic failover between LLM providers
+- **HTML Content Optimization**: Revolutionary HTML-to-text conversion with formatting preservation
 
 ## 📚 Documentation
 
@@ -50,6 +52,21 @@ pip install -r requirements.txt
 python fastapi_server_complete.py
 ```
 
+## ⭐ What's New in V1.0.2.87
+
+### 🚀 Major Enhancement: HTML Email Optimization System
+- **84% Context Reduction**: Revolutionary email processing from 37,000 → 6,000 tokens
+- **Advanced HTML-to-Text Conversion**: Preserves formatting while removing noise
+- **Multi-Provider Email Support**: Gmail, Outlook, Yahoo, iCloud, Exchange, IMAP
+- **Smart Content Selection**: Prioritizes plain text, converts HTML when necessary
+- **Performance Breakthrough**: Sub-second email processing with maintained quality
+
+### 🔧 System Improvements
+- **Centralized Version Management**: Single source of truth for version tracking
+- **Enhanced Security Hooks**: Advanced credential detection with environment variable support
+- **Version Detection Fix**: Accurate upgrade progress messages (fixed "1.0.2.5 → 1.0.2.5" bug)
+- **Configuration Management**: Improved config validation and error handling
+
 ## ⭐ What's New in V1.0.2.1
 
 ### 🔧 Dependency Hotfix
@@ -79,7 +96,7 @@ python fastapi_server_complete.py
 Once installed, test the API:
 ```bash
 # Test basic connectivity
-curl http://localhost:8000/health
+curl http://localhost:5000/health
 
 # Test chat completion
 curl -X POST http://localhost:5000/v1/chat/completions \
@@ -113,12 +130,15 @@ The system automatically handles multi-model orchestration internally, using loc
 ## 🛠️ Available Tools
 
 - **📅 Calendar**: Google Calendar integration
-- **📧 Email**: SMTP email sending
-- **🌐 Web Scraping**: Content extraction
-- **📄 Document Processing**: OCR and text extraction  
-- **🗂️ File Operations**: Local file management
-- **🖼️ Image Analysis**: Vision processing with OCR
-- **🔍 Search**: Web search capabilities
+- **📧 Email Retrieval**: 🚀 NEW: Advanced email retrieval with HTML optimization (Gmail, Outlook, Yahoo, iCloud)
+- **📧 Email Sending**: Professional SMTP email sending with attachments
+- **🌐 Web Scraping**: Content extraction and analysis
+- **📄 Document Processing**: OCR and text extraction with FAISS indexing
+- **🗂️ File Operations**: Local file management and processing
+- **🖼️ Image Analysis**: Vision processing with OCR capabilities
+- **🔍 Search**: Web search and academic paper retrieval
+- **📊 Financial Tools**: Stock analysis and market data retrieval
+- **📰 News Analysis**: Real-time news gathering and summarization
 
 ## 🏆 Competitive Advantages
 
@@ -135,9 +155,11 @@ The system automatically handles multi-model orchestration internally, using loc
 
 **Key Differentiators:**
 - ✅ **Zero-Config Agentic Behavior**: Works out-of-the-box with autonomous tool selection
+- ✅ **Revolutionary Email Optimization**: 84% context reduction with HTML-to-text conversion
 - ✅ **Hybrid Local+Cloud**: Best of both worlds - privacy + power
 - ✅ **True OpenAI Drop-in**: Existing OpenAI code works immediately
 - ✅ **Production Focus**: From prototype to production in minutes
+- ✅ **Intelligent Content Processing**: Advanced HTML optimization preserves meaning while reducing noise
 
 ## 🚀 Impressive Demo Examples
 
@@ -213,14 +235,32 @@ response = client.chat.completions.create(
 )
 ```
 
-### 📧 Smart Communication
+### 📧 Smart Email Management & Communication
 
 ```python
+# 🚀 NEW: Advanced Email Retrieval with HTML Optimization
+response = client.chat.completions.create(
+    model="Agentic-RAG-Model1",
+    messages=[{"role": "user", "content": "Summarize my last 5 emails from Gmail and highlight any urgent items"}]
+)
+
 # AI composes and sends professional emails
 response = client.chat.completions.create(
     model="Agentic-RAG-Model1",
     messages=[{"role": "user", "content": "Send a professional email to sarah@company.example about scheduling a project review meeting next week. Include availability options and meeting agenda."}]
 )
+```
+
+### 📊 Email Analytics & Processing
+
+```bash
+# AI analyzes email patterns and provides insights
+curl -X POST http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "Find all unread emails from work about the quarterly review and create a summary report"}]
+  }'
 ```
 
 ### 📅 Calendar Integration
@@ -380,6 +420,29 @@ sudo systemctl restart agentic-rag-server
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 📝 Recent Updates
+
+### 2025-09-28 - HTML Email Optimization & Version Management v1.0.2.87
+**🚀 MAJOR: Revolutionary Email Processing System**
+
+- **HTML Email Optimization System**:
+  - 84% context reduction: 37,000 → 6,000 tokens for email processing
+  - Advanced HTML-to-text conversion preserving links and formatting
+  - Multi-provider email support: Gmail, Outlook, Yahoo, iCloud, Exchange, IMAP
+  - Smart content prioritization: plain text preferred, HTML converted when needed
+  - Sub-second processing with maintained content quality
+
+- **Version Management Enhancement**:
+  - Fixed version detection bug in install.sh upgrade messages
+  - Centralized version system using version.py as single source of truth
+  - Accurate upgrade progress display (fixed "1.0.2.5 → 1.0.2.5" issue)
+  - Enhanced security hooks with environment variable detection
+
+- **System Improvements**:
+  - Enhanced git pre-commit hooks with intelligent credential detection
+  - Improved configuration management and validation
+  - Comprehensive documentation updates across all guides
+
+**Impact**: Dramatically improved email productivity, accurate version tracking, enhanced security
 
 ### 2025-09-09 - PDF Format Selection & Header/Footer Enhancement
 **🎯 ENHANCED: Smart format selection and proper PDF headers/footers**
