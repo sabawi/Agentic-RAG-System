@@ -3,6 +3,72 @@
 - ALL DOCUMENTATIONS AND HELP INFORMATION SHOULD GO UNER THE ./docs DIRECTORY UNDER APPROPRIATE LOCATION AND POSSIBLY MERGED WIHIN THE MAIN DOCUMENTATION FILES
 - ALL TEST SCRIPTS AND TESTING CODE SHOULD GO UNDER THE ./tests DIRECTORY UNDER APPROPRIATE SUBDIRECTORY STRUCTURE
 
+# 📁 MANDATORY PROJECT DIRECTORY ORGANIZATION
+
+## ROOT DIRECTORY - Keep Clean and Essential Only
+- **README.md** - Main project documentation (REQUIRED)
+- **CLAUDE.md** - Project directives and rules (REQUIRED)
+- **Core Python modules with active dependencies** - http_helpers.py, http_pool_manager.py, text_chunker.py, document_interrogator.py, signature_image_detection.py (KEEP IN ROOT - critical imports)
+- **fastapi_server_complete.py** - Main server file (REQUIRED)
+- **version.py** - Centralized version management (REQUIRED)
+
+## DIRECTORY STRUCTURE RULES - STRICTLY ENFORCE
+
+### /docs/ - Development Documentation
+```
+docs/
+├── production/          # REQUIRED - User/Admin/Developer/Installation guides
+├── housekeeping/        # NEW - Project management, internal docs
+│   ├── procedures/      # Emergency procedures, test checklists
+│   ├── status-tracking/ # Project status, phase reviews, changelogs
+│   └── workflow-automation/ # Internal workflow tools, optimization
+├── archive/             # Historical docs, validation reports
+└── *.md                 # Technical documentation (HTML_EMAIL_CONVERSION_SYSTEM.md, etc.)
+```
+
+### /tests/ - All Testing Code
+```
+tests/
+├── utilities/           # Test utilities, API testing scripts
+├── vision_regression/   # Image/vision testing
+├── integration/         # Integration testing
+└── data/               # Test data files
+```
+
+### /archive/experimental/ - Development/Debug Files
+- analyze_*.py, debug_*.py, improved_*.py files
+- Experimental implementations not in production
+
+## FILE PLACEMENT RULES
+
+### HOUSEKEEPING DOCUMENTATION (→ docs/housekeeping/)
+**Project management docs NOT relevant to code development:**
+- Status tracking: PHASE_STATUS_*.md, PROJECT_CHANGELOG.md, *_STATUS.md
+- Procedures: ROLLBACK_PROCEDURE*.md, *_TEST_CHECKLIST.md, UNTESTED_CHANGES.md
+- Workflow: AUTOMATION_*PLAN.md, CLI_*QUICKSTART.md
+
+### DEVELOPMENT DOCUMENTATION (→ docs/)
+**Technical docs relevant to developers:**
+- Configuration guides: LLM_CONFIGURATION_GUIDE.md, PROJECT_CONFIGURATION_DIRECTIVE.md
+- Technical specs: HTML_EMAIL_CONVERSION_SYSTEM.md, VERSION_MANAGEMENT.md
+- Implementation plans: *_IMPLEMENTATION_PLAN.md
+
+### TEST FILES (→ tests/appropriate_subdir/)
+- test_*.py files go to tests/utilities/ or tests/vision_regression/ or tests/integration/
+- Never leave test files in root directory
+
+### DEBUG/ANALYSIS FILES (→ archive/experimental/)
+- debug_*.py, analyze_*.py, improved_*.py files
+- Experimental implementations
+- Development analysis scripts
+
+## ENFORCEMENT RULES
+1. **NEVER leave housekeeping docs in root or docs/ main directory**
+2. **NEVER leave test files in root directory**
+3. **ALWAYS check dependencies before moving Python files** (use comprehensive grep analysis)
+4. **ALWAYS document moves as "UNTESTED" until validation complete**
+5. **PRESERVE all core development documentation in proper locations**
+
 # 🚨 MANDATORY PROJECT CONFIGURATION DIRECTIVE 🚨
 ## ZERO TOLERANCE FOR HARDCODED CONFIGURATION VALUES
 

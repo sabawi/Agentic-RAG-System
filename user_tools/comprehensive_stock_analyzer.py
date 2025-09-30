@@ -44,7 +44,7 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
     def description(self) -> str:
         # 🚨 PROTECTED: Clean description without aggressive language or conflicts  
         # NEVER add emojis, "PRIMARY", "ULTIMATE" or redirections - breaks multi-tool calling
-        return "INDIVIDUAL STOCK ANALYSIS ONLY - Requires exact ticker symbol (AAPL, MSFT, etc). Do NOT use for: general market news, market summaries, multiple stocks, or news searches. Only for analyzing ONE specific stock ticker."
+        return "COMPLETE individual stock analysis including real-time data, fundamentals, news analysis, and sentiment for ONE specific ticker (AAPL, MSFT, etc). INCLUDES relevant company news and analysis. Do NOT use for: general market news, market summaries, multiple stocks. This tool provides ALL needed data for single stock analysis."
     
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -225,7 +225,7 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
                 return "N/A"
         except:
             return str(dividend_yield)
-    
+
     def _format_large_number(self, number) -> str:
         """Format large numbers safely with commas"""
         if number is None or number == "N/A":
@@ -536,14 +536,14 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
         """Fetch raw financial data for the specified ticker"""
         try:
             ticker = kwargs.get("ticker", "").upper().strip()
-            
+
             if not ticker:
                 return {
                     "success": False,
                     "error": "❌ TOOL MISUSE: This tool requires a specific stock ticker symbol (e.g., AAPL, MSFT). For general market news, use web search tools instead.",
                     "result": None
                 }
-            
+
             # Detect if tool is being misused for general market analysis
             general_market_tickers = ["MARKET", "NEWS", "GENERAL", "STOCK", "STOCKS", "INDEX", "SP500", "DOW", "NASDAQ"]
             if ticker.upper() in general_market_tickers:
@@ -552,7 +552,7 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
                     "error": f"❌ TOOL MISUSE: '{ticker}' is not a valid individual stock ticker. This tool analyzes specific companies only (AAPL, MSFT, etc). For general market news, use web search instead.",
                     "result": None
                 }
-            
+
             # Validate ticker format
             if not ticker.isalpha() or len(ticker) > 5:
                 return {
@@ -560,31 +560,31 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
                     "error": f"❌ INVALID TICKER: '{ticker}' is not a valid stock symbol format. Use standard symbols like AAPL, MSFT, GOOGL, etc.",
                     "result": None
                 }
-            
+
             # Get real-time data
             real_time_data = self._get_real_time_data(ticker)
-            
+
             if "error" in real_time_data:
                 return {
                     "success": False,
                     "error": real_time_data["error"],
                     "result": None
                 }
-            
+
             # Get company news and sentiment analysis
             company_name = real_time_data.get('company_name', ticker)
             news_items = self._get_company_news(ticker, company_name)
             news_sentiment = self._analyze_news_sentiment(news_items, ticker)
-            
+
             # Return ONLY raw data - no analysis, no file creation
             raw_data_report = self._analyze_data(real_time_data, ticker, news_items, news_sentiment)
-            
+
             return {
                 "success": True,
                 "result": raw_data_report,
                 "error": None
             }
-            
+
         except Exception as e:
             return {
                 "success": False,

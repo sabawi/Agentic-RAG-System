@@ -196,10 +196,10 @@ from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:5000/v1", api_key="not-required")
 
-# AI gets stock data, analyzes trends, and creates charts automatically
+# AI performs comprehensive stock analysis with charts and investment recommendations
 response = client.chat.completions.create(
     model="Agentic-RAG-Model1",
-    messages=[{"role": "user", "content": "Get Apple and Microsoft stock prices for the last month, analyze the performance, and create a comparison chart"}]
+    messages=[{"role": "user", "content": "Using the provided research tool, look up available company and financial data on AMZN stock then:\n1.  Plot the stock chart for the last year and highlight percent change\n    \n2.  Perform full and thorough analysis on it's potential for growth and profit, and make reasoned recommendations whether to Buy, Hold, or Sell its stock for the next 6 months to 2 years investment horizon.\n    \n3.  In your conclusion, state clearly your final recommendation and why."}]
 )
 ```
 
@@ -213,6 +213,34 @@ curl -X POST http://localhost:5000/v1/chat/completions \
     "model": "Agentic-RAG-Model1",
     "messages": [{"role": "user", "content": "Using the provided research tool, look up available company and financial data on MRNA, AMGN, JNJ stocks and perform full and thorough analysis on its potential for growth and profit, and make reasoned recommendations whether to Buy, Hold, or Sell its stock for the next 6 months to 2 years investment horizon. In your conclusion, state clearly your final recommendation and why."}]
   }'
+```
+
+### 📊 Statistical & Mathematical Visualizations
+
+```python
+# AI creates advanced statistical visualizations with annotations
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:5000/v1", api_key="not-required")
+
+response = client.chat.completions.create(
+    model="Agentic-RAG-Model1",
+    messages=[{"role": "user", "content": "What is the difference between normal distribution and binomial distribution. Plot both distributions side by side and add annotation and segmentation of probabilities through background colors"}]
+)
+```
+
+### 📈 Mathematical Function Plotting
+
+```python
+# AI generates mathematical function plots with proper scaling and labels
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:5000/v1", api_key="not-required")
+
+response = client.chat.completions.create(
+    model="Agentic-RAG-Model1",
+    messages=[{"role": "user", "content": "Create a Plot for the equation y=3x³-2x²-10x+10"}]
+)
 ```
 
 ### 🔍 Smart Document Search

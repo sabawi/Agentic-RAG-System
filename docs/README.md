@@ -1,6 +1,6 @@
-# 📚 Agentic RAG System v1.0.2.57 - Documentation Overview
+# 📚 Agentic RAG System v1.0.2.88 - Documentation Overview
 
-Welcome to the comprehensive documentation for the **Agentic RAG System v1.0.2.57** - a production-ready FastAPI-based agentic system with **Hybrid LLM Architecture** and advanced tool calling capabilities.
+Welcome to the comprehensive documentation for the **Agentic RAG System v1.0.2.88** - a production-ready FastAPI-based agentic system with **Hybrid LLM Architecture**, advanced tool calling capabilities, and intelligent email management.
 
 ## 🎯 Quick Start - Choose Your Guide
 
@@ -18,6 +18,26 @@ Welcome to the comprehensive documentation for the **Agentic RAG System v1.0.2.5
 **Location: [`./docs/production/`](./production/)**
 
 These are the **comprehensive, production-ready guides** that consolidate all essential information:
+
+### **🏠 Housekeeping Documentation** (Project Management)
+**Location: [`./docs/housekeeping/`](./housekeeping/)**
+
+Internal project management documentation organized by purpose:
+
+#### **[📋 procedures/](./housekeeping/procedures/)**
+- Emergency procedures, rollback instructions
+- Test checklists and validation protocols
+- Untested changes documentation
+
+#### **[📊 status-tracking/](./housekeeping/status-tracking/)**
+- Project phase reviews and status updates
+- Feature completion tracking and changelogs
+- Post-mortem analysis and lessons learned
+
+#### **[⚙️ workflow-automation/](./housekeeping/workflow-automation/)**
+- Internal automation tools and CLI guides
+- Optimization plans and performance analysis
+- Development workflow documentation
 
 #### **[📋 ADMINISTRATOR_GUIDE.md](./production/ADMINISTRATOR_GUIDE.md)** (46KB)
 *Complete administrator resource covering installation through maintenance*

@@ -83,11 +83,23 @@ secure_email_sender(...) if email sending is requested.
 Trigger phrases: "Here is my resume:", "my resume:", email + phone in prompt.
 
 E. Stock / Company Analysis
+ALWAYS call these tools in order:
+
 get_the_secret_tool()
 
-stock_analyzer(ticker="[symbol]")
+comprehensive_stock_analyzer(ticker="[symbol]")
 
-get_news_summaries(filter="[company or sector]")
+🎯 IF CHART/PLOT/VISUALIZATION IS REQUESTED: Add this third tool:
+analytical_visualizer(prompt="Create [type] chart for [ticker] showing [timeframe] with [specific requirements]")
+
+✅ STOCK CHART EXAMPLES:
+User: "Analyze AMZN and plot the price chart"
+→ get_the_secret_tool() + comprehensive_stock_analyzer(ticker="AMZN") + analytical_visualizer(prompt="Create price chart for AMZN showing last year performance")
+
+User: "Get AAPL data and create chart showing percent change"
+→ get_the_secret_tool() + comprehensive_stock_analyzer(ticker="AAPL") + analytical_visualizer(prompt="Create chart for AAPL showing percent change over last year")
+
+DO NOT call get_news_summaries() after comprehensive_stock_analyzer() - it already includes complete news analysis and sentiment for the specific stock.
 
 Never use get_stock_and_company_data() for analysis.
 

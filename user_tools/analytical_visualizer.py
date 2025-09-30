@@ -106,12 +106,11 @@ class AnalyticalVisualizerTool(BaseUserTool):
 
 **Execution Status**: {result.get('description', 'Visualization completed successfully')}
 """
-                
-                # Add inline image if base64 conversion was successful
+
+                # Include base64 image data in response for server extraction
                 if base64_image:
-                    logger.info(f"✅ DEBUG: Adding base64 image to response (length: {len(base64_image)})")
-                    response += f'\n{base64_image}\n'
-                    response += "\n**📊 The visualization is displayed above and can be referenced in your analysis.**"
+                    logger.info(f"✅ DEBUG: Base64 image generated (length: {len(base64_image[:100])}...)")
+                    response += f"\n**📊 Chart successfully generated and will be displayed to the user. Reference this chart in your analysis.**\n\n<img src=\"{base64_image}\" alt=\"Generated Chart\" style=\"max-width: 100%; height: auto;\">"
                 else:
                     logger.warning(f"⚠️ DEBUG: No base64 image available for response")
                     response += f"\n**Integration Note**: This visualization is saved as {os.path.basename(result.get('output_path', 'visualization_output.png'))} and can be referenced in your response."
@@ -236,6 +235,43 @@ class AnalyticalVisualizerTool(BaseUserTool):
         system_prompt = """You are an expert Python data visualization specialist with deep knowledge of matplotlib, scientific computing, and domain expertise across physics, chemistry, biology, economics, mathematics, and engineering.
 
 Your task: Generate complete, executable Python code using matplotlib to create the most appropriate visualization for the user's request.
+
+🚨 CRITICAL STOCK CHART FIX:
+For stock charts, NEVER use fill_between() - it causes matplotlib errors with pandas data. Use this bulletproof pattern:
+```python
+import yfinance as yf
+import matplotlib.pyplot as plt
+import numpy as np
+
+ticker = "AMZN"  # Use the actual requested ticker
+data = yf.download(ticker, period='1y', auto_adjust=True)
+
+# BULLETPROOF: Flatten all data to pure numpy arrays
+prices = np.array(data['Close'].values).flatten()
+dates = np.array(data.index.values)
+
+# Calculate percentage change if requested
+start_price = prices[0]
+pct_change = ((prices - start_price) / start_price) * 100
+
+# Create simple, reliable stock chart
+plt.figure(figsize=(12, 8))
+plt.plot(dates, prices, linewidth=3, color='#2E86C1', label=f'{ticker} Stock Price')
+
+# Professional styling
+plt.title(f'{ticker} Stock Price - Last Year Performance', fontsize=16, fontweight='bold')
+plt.xlabel('Date', fontsize=12)
+plt.ylabel('Price ($)', fontsize=12)
+plt.legend(fontsize=10)
+plt.grid(True, alpha=0.3)
+
+# Add percentage change annotation if requested
+plt.figtext(0.02, 0.02, f'Total Change: {pct_change[-1]:.1f}%', fontsize=10)
+
+# DO NOT USE fill_between() - it fails with pandas data structures
+```
+
+🚨 ABSOLUTE RULE: NEVER use fill_between() with stock data - only use plt.plot() for stock charts!
 
 IMPORTANT REQUIREMENTS:
 1. Generate complete, runnable Python code - no placeholders, no "..." shortcuts
@@ -621,20 +657,33 @@ async def analytical_visualizer(prompt: str) -> str:
 **Execution Status**: {result.get('description', 'Visualization completed successfully')}
 """
         
-        # Add inline image if base64 conversion was successful
+        # DO NOT add base64 to LLM context - only reference the chart
         if base64_image:
-            logger.info(f"✅ DEBUG: Adding base64 image to response (length: {len(base64_image)})")
-            response += f'\n{base64_image}\n'
-            response += "\n**📊 The visualization is displayed above and can be referenced in your analysis.**"
+            logger.info(f"✅ DEBUG: Base64 image available (length: {len(base64_image[:100])}...)")
+            response += "\n**📊 Chart successfully generated and will be displayed to the user. Reference this chart in your analysis.**"
         else:
             logger.warning(f"⚠️ DEBUG: No base64 image available for response")
             response += f"\n**Integration Note**: This visualization is saved as {os.path.basename(result.get('output_path', 'visualization_output.png'))} and can be referenced in your response."
         
         logger.info(f"🔧 DEBUG: Final response length: {len(response)}")
-        return response
+
+        # Return dict structure with base64 for server image injection
+        return {
+            "success": True,
+            "result": response,
+            "base64_image": base64_image,  # Critical: Include base64 for server display
+            "output_path": result.get('output_path'),
+            "description": response
+        }
     else:
         logger.error(f"❌ DEBUG: Visualization failed: {result.get('error')}")
-        return f"❌ **Visualization Generation Failed**: {result['error']}"
+        error_msg = f"❌ **Visualization Generation Failed**: {result['error']}"
+        return {
+            "success": False,
+            "result": error_msg,
+            "base64_image": None,
+            "description": error_msg
+        }
 
 if __name__ == "__main__":
     # Test the tool
