@@ -117,15 +117,23 @@ class SecureEmailSenderTool(BaseUserTool):
     
     def _load_email_config(self):
         """Load email configuration from file or environment variables"""
+        # 🔧 SMART FALLBACK: Support multiple env var naming conventions
+        gmail_email = (os.getenv("GMAIL_SENDER_EMAIL") or
+                      os.getenv("GMAIL_PRIMARY_EMAIL") or
+                      os.getenv("GMAIL_EMAIL"))
+        gmail_password = (os.getenv("GMAIL_APP_PASSWORD") or
+                         os.getenv("GMAIL_PRIMARY_APP_PASSWORD") or
+                         os.getenv("GMAIL_PASSWORD"))
+
         self.config = {
             "gmail": {
                 "smtp_server": "smtp.gmail.com",
                 "smtp_port": 587,
-                "sender_email": os.getenv("GMAIL_SENDER_EMAIL"),
-                "app_password": os.getenv("GMAIL_APP_PASSWORD")
+                "sender_email": gmail_email,
+                "app_password": gmail_password
             },
             "outlook": {
-                "smtp_server": "smtp-mail.outlook.com", 
+                "smtp_server": "smtp-mail.outlook.com",
                 "smtp_port": 587,
                 "sender_email": os.getenv("OUTLOOK_SENDER_EMAIL"),
                 "app_password": os.getenv("OUTLOOK_APP_PASSWORD")
@@ -1038,7 +1046,13 @@ class SecureEmailSenderTool(BaseUserTool):
             cc_emails = self._parse_email_list(parsed_args.get("cc_emails", ""))
             bcc_emails = self._parse_email_list(parsed_args.get("bcc_emails", ""))
             priority = parsed_args.get("priority", "normal").lower()
-            provider = parsed_args.get("provider", "sendmail").lower()
+
+            # 🔧 SMART DEFAULT: Try Gmail SMTP first if configured, fallback to sendmail
+            # Check if Gmail credentials are available
+            gmail_configured = (self.config.get("gmail", {}).get("sender_email") and
+                               self.config.get("gmail", {}).get("app_password"))
+            default_provider = "gmail" if gmail_configured else "sendmail"
+            provider = parsed_args.get("provider", default_provider).lower()
             
             # Parse attachments with security sanitization
             attachment_paths = []
@@ -1185,15 +1199,38 @@ class SecureEmailSenderTool(BaseUserTool):
                             f.write(datetime.now().isoformat())
                     except:
                         pass  # Don't fail email sending if timestamp recording fails
-                    
+
                     # 🧹 AUTO-CLEANUP: Remove successfully emailed generated files
                     self._cleanup_generated_files(attachment_paths)
-                        
+
                     recipients = [to_email] + cc_emails + bcc_emails
                     message = f"✅ Email sent successfully via {provider} to {len(recipients)} recipient(s)"
                     return {"success": True, "result": message, "error": None}
                 else:
-                    return {"success": False, "error": f"Failed to send email via {provider} SMTP", "result": None}
+                    # 🔧 FALLBACK: Try sendmail if SMTP fails
+                    print(f"⚠️ {provider} SMTP failed, attempting sendmail fallback...")
+                    sender_email = os.getenv("DEFAULT_SENDER_EMAIL", "agent@localhost")
+                    fallback_msg = self._create_email_message(
+                        to_email, subject, body, cc_emails, bcc_emails,
+                        attachment_paths, priority, sender_email
+                    )
+
+                    if self._send_via_sendmail(fallback_msg):
+                        self._cleanup_generated_files(attachment_paths)
+                        recipients = [to_email] + cc_emails + bcc_emails
+                        attachment_summary = []
+                        if attachment_paths:
+                            for path in attachment_paths:
+                                if os.path.exists(path):
+                                    size = os.path.getsize(path)
+                                    attachment_summary.append(f"{path} ({size}B)")
+                                else:
+                                    attachment_summary.append(f"{path} (NOT FOUND)")
+
+                        message = f"✅ Email sent successfully via sendmail (fallback after {provider} failed)\n📧 TO: {to_email}\n📧 SUBJECT: {subject}\n📧 BODY: {body[:100]}...\n📎 ATTACHMENTS: {attachment_summary if attachment_summary else 'None'}\n📊 RECIPIENTS: {len(recipients)}"
+                        return {"success": True, "result": message, "error": None}
+                    else:
+                        return {"success": False, "error": f"Failed to send email via {provider} SMTP and sendmail fallback also failed", "result": None}
             
         except Exception as e:
             return {"success": False, "error": f"Email sending failed: {str(e)}", "result": None}

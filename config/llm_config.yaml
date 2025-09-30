@@ -52,7 +52,7 @@ llm:
     type: openai
     config:
       model: gpt-4o-mini
-      timeout: 60
+      timeout: 120
       context_window_size: 4096
       temperature: 0.1  # Lower for tool calling
       max_tokens: 1024
