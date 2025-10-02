@@ -196,10 +196,59 @@ class ConfigLoader:
             self._config_cache = None
             
             logger.info(f"✅ Configuration saved to {self.config_file}")
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to save config to {self.config_file}: {e}")
             raise
+
+    def get_plugin_config(self) -> Dict[str, Any]:
+        """🔌 Get plugin system configuration
+
+        Returns:
+            Dict with plugin configuration including defaults
+        """
+        config = self.load_config()
+
+        # Get plugin configuration or use fallback
+        plugin_config = config.get('plugins', {})
+
+        # Ensure required structure
+        if 'plugin_defaults' not in plugin_config:
+            # Provide minimal fallback configuration
+            logger.warning("⚠️  No plugin configuration found in llm_config.yaml, using defaults")
+            plugin_config = {
+                'plugin_defaults': {
+                    'execution': {
+                        'timeout': 60,
+                        'memory_limit': 256,
+                        'cpu_limit': 1.0,
+                        'max_timeout': 300,
+                        'max_memory_limit': 2048
+                    },
+                    'security': {
+                        'input_validation': {
+                            'max_string_length': 102400,
+                            'max_array_length': 1000
+                        },
+                        'output_validation': {
+                            'max_output_size': 10485760
+                        }
+                    },
+                    'error_handling': {
+                        'retry': {
+                            'enabled': True,
+                            'max_attempts': 3
+                        },
+                        'degraded_mode': {
+                            'enabled': True,
+                            'disable_after_failures': 5
+                        }
+                    }
+                },
+                'python_executable': 'python3'
+            }
+
+        return plugin_config
 
 # Global config loader instance
 config_loader = ConfigLoader()

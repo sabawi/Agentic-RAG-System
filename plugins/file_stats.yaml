@@ -1,0 +1,70 @@
+metadata:
+  name: "file_stats"
+  version: "1.0.0"
+  category: "system"
+  author: "Agentic-RAG System"
+  description: |
+    Get file or directory statistics including size, permissions, modification time, and line count.
+    Use this when user asks about file size, file info, or directory contents.
+  license: "MIT"
+  tags:
+    - files
+    - filesystem
+    - statistics
+
+execution:
+  type: "python"
+  handler: "handlers/file_stats.py"
+  entrypoint: "execute"
+  timeout: 30
+  memory_limit: 128
+  cpu_limit: 0.5
+  environment: {}
+
+parameters:
+  type: "object"
+  properties:
+    path:
+      type: "string"
+      description: "Absolute path to file or directory"
+      minLength: 1
+      maxLength: 4096
+    include_hidden:
+      type: "boolean"
+      description: "Include hidden files in directory listings"
+      default: false
+    recursive:
+      type: "boolean"
+      description: "Recursively analyze directory contents"
+      default: false
+  required:
+    - path
+
+security:
+  network:
+    enabled: false
+  filesystem:
+    read_only: true
+    allowed_paths:
+      - /home/sabawi/Development
+      - /tmp
+      - /var/log
+    blocked_paths:
+      - /etc/shadow
+      - /root
+      - /home/sabawi/.ssh
+
+monitoring:
+  log_level: "INFO"
+  log_execution: true
+  log_parameters: true
+
+error_handling:
+  retry:
+    enabled: false
+  degraded_mode:
+    enabled: true
+    disable_after_failures: 5
+
+dependencies:
+  python_packages: []

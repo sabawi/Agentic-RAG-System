@@ -1,0 +1,102 @@
+# =============================================================================
+# Fortune Message Plugin - Example Plugin for Agentic-RAG Server
+# =============================================================================
+# This plugin demonstrates the simplified plugin architecture by calling
+# the Linux "fortune" command to generate random funny/inspirational messages.
+#
+# Created: 2025-10-02
+# Version: 1.0.0
+# Category: productivity
+# =============================================================================
+
+metadata:
+  name: "fortune_message"
+  version: "1.0.0"
+  category: "productivity"
+  author: "Agentic-RAG System"
+  description: |
+    Generate random funny, inspirational, or philosophical messages using
+    the classic Linux fortune command. Returns a formatted message with
+    optional category filtering (funny, wisdom, literature, etc.).
+  license: "MIT"
+  tags:
+    - fortune
+    - random
+    - humor
+    - inspiration
+    - entertainment
+
+execution:
+  type: "python"
+  handler: "handlers/fortune_message.py"
+  entrypoint: "execute"
+  timeout: 10
+  memory_limit: 128
+  cpu_limit: 0.5
+  environment:
+    FORTUNE_PATH: "/usr/games/fortune"
+
+parameters:
+  type: "object"
+  properties:
+    category:
+      type: "string"
+      description: "Optional fortune category filter"
+      enum: ["any", "short", "long", "offensive"]
+      default: "any"
+    format_style:
+      type: "string"
+      description: "Output formatting style"
+      enum: ["plain", "boxed", "quoted"]
+      default: "boxed"
+  required: []
+
+security:
+  input_validation:
+    max_string_length: 100
+    max_array_length: 10
+    allowed_types: ["string"]
+
+  output_validation:
+    max_output_size: 10240
+    allowed_content_types: ["text/plain"]
+
+  network:
+    enabled: false
+
+  filesystem:
+    read_only: true
+    allowed_paths:
+      - "/usr/games"
+      - "/usr/share/games/fortunes"
+    blocked_paths:
+      - "/etc"
+      - "/root"
+      - "/home"
+
+monitoring:
+  log_level: "INFO"
+  log_execution: true
+  log_outputs: false
+  metrics:
+    track_execution_time: true
+    track_success_rate: true
+    alert_on_failure_rate: 0.1
+
+dependencies:
+  system_packages:
+    - fortune-mod
+  checks:
+    - type: "executable"
+      path: "/usr/games/fortune"
+      required: true
+
+error_handling:
+  retry:
+    enabled: false
+  fallback:
+    enabled: false
+  degraded_mode:
+    enabled: true
+    disable_after_failures: 3
+    cooldown_period: 60

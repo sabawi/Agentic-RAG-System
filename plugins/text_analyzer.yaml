@@ -1,0 +1,74 @@
+metadata:
+  name: "text_analyzer"
+  version: "1.0.0"
+  category: "data"
+  author: "Agentic-RAG System"
+  description: |
+    Analyze text for word count, character count, reading time, sentiment, and common words.
+    Use this when user asks to analyze text, count words, or assess readability.
+  license: "MIT"
+  tags:
+    - text
+    - analysis
+    - nlp
+    - statistics
+
+execution:
+  type: "python"
+  handler: "handlers/text_analyzer.py"
+  entrypoint: "execute"
+  timeout: 30
+  memory_limit: 256
+  cpu_limit: 1.0
+  environment: {}
+
+parameters:
+  type: "object"
+  properties:
+    text:
+      type: "string"
+      description: "Text to analyze"
+      minLength: 1
+      maxLength: 100000
+    analysis_type:
+      type: "string"
+      description: "Type of analysis to perform"
+      enum:
+        - basic
+        - detailed
+        - readability
+      default: "basic"
+    top_words_count:
+      type: "integer"
+      description: "Number of top frequent words to show"
+      minimum: 5
+      maximum: 50
+      default: 10
+  required:
+    - text
+
+security:
+  network:
+    enabled: false
+  filesystem:
+    read_only: true
+    allowed_paths: []
+    blocked_paths:
+      - /etc
+      - /root
+      - /home
+
+monitoring:
+  log_level: "INFO"
+  log_execution: true
+  log_parameters: false  # Don't log text content
+
+error_handling:
+  retry:
+    enabled: false
+  degraded_mode:
+    enabled: true
+    disable_after_failures: 5
+
+dependencies:
+  python_packages: []

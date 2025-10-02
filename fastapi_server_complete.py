@@ -397,7 +397,7 @@ async def get_db_connection():
 
 class AsyncToolManager:
     """Async version of the original tool manager"""
-    
+
     def __init__(self):
         # Always make functions available - they handle missing dependencies gracefully
         self.available_functions = {
@@ -409,15 +409,19 @@ class AsyncToolManager:
             'lookup_website': self.lookup_website,
             'secure_email_sender': self.secure_email_sender
         }
-        
+
         # Load user-defined tools - defer to async initialization
         self.user_tools = []
         self.user_tools_loaded = False
-        
+
+        # 🔌 PLUGIN SYSTEM: Initialize plugin manager
+        self.plugin_manager = None
+        self.plugins_loaded = False
+
         # 🖼️ IMAGE CONTEXT: Store image data for tools that need it
         self.current_images = []
         self.current_request_context = {}
-            
+
         logger.info(f"AsyncToolManager initialized with {len(self.available_functions)} tools")
     
     def set_image_context(self, images: list, context: dict = None):
@@ -431,28 +435,75 @@ class AsyncToolManager:
         """Load user tools asynchronously"""
         if self.user_tools_loaded:
             return
-            
+
         try:
             from user_tools import discover_user_tools
             self.user_tools = await discover_user_tools()
-            
+
             # Add user tools to available functions
             for tool in self.user_tools:
                 self.available_functions[tool.name] = self._create_user_tool_wrapper(tool)
-            
+
             if self.user_tools:
                 logger.info(f"Loaded {len(self.user_tools)} user-defined tools: {[t.name for t in self.user_tools]}")
-            
+
             self.user_tools_loaded = True
             logger.info(f"AsyncToolManager now has {len(self.available_functions)} tools total")
         except Exception as e:
             logger.warning(f"Failed to load user tools: {e}")
             self.user_tools_loaded = True  # Don't keep trying
+
+    async def _load_plugins_async(self):
+        """🔌 Load plugin system asynchronously"""
+        if self.plugins_loaded:
+            return
+
+        try:
+            from pathlib import Path
+            from plugins.plugin_manager import PluginManager
+
+            # Get plugins directory
+            plugins_dir = Path(__file__).parent / 'plugins'
+
+            # Get plugin configuration from llm_config.yaml
+            plugin_config = config_loader.get_plugin_config()
+
+            # Initialize plugin manager
+            self.plugin_manager = PluginManager(plugins_dir, plugin_config)
+
+            # Discover and validate plugins
+            init_result = await self.plugin_manager.initialize()
+
+            if init_result['success']:
+                # Add plugin wrappers to available functions
+                for plugin_name in self.plugin_manager.plugins.keys():
+                    self.available_functions[plugin_name] = self._create_plugin_wrapper(plugin_name)
+
+                logger.info(
+                    f"🔌 Loaded {init_result['plugins_loaded']} plugins in "
+                    f"{init_result['initialization_time']:.3f}s"
+                )
+
+                if init_result['plugins_disabled'] > 0:
+                    logger.warning(f"🔌 {init_result['plugins_disabled']} plugins disabled due to errors")
+
+            else:
+                logger.error(f"🔌 Plugin system initialization failed: {init_result['errors']}")
+
+            self.plugins_loaded = True
+            logger.info(f"AsyncToolManager now has {len(self.available_functions)} tools total (including plugins)")
+
+        except Exception as e:
+            logger.warning(f"🔌 Failed to load plugins: {e}")
+            self.plugins_loaded = True  # Don't keep trying
     
     async def get_tools_definitions(self, exclude_file_email_tools: bool = False) -> list:
         """Get tools definitions for Ollama tool calling"""
         # Load user tools if not already loaded
         await self._load_user_tools_async()
+
+        # 🔌 Load plugins if not already loaded
+        await self._load_plugins_async()
         
         # 🚨 CRITICAL MULTI-TOOL CALLING PROTECTION 🚨
         # NEVER MODIFY tool descriptions without checking CRITICAL_MULTI_TOOL_CALLING_PROTECTION.md
@@ -571,12 +622,12 @@ class AsyncToolManager:
         # Add user-defined tools to the definitions
         # 🚨 CRITICAL ARCHITECTURE: Exclude file/email tools during tool calling phase
         excluded_tools = {"sandboxed_executor", "secure_email_sender"} if exclude_file_email_tools else set()
-        
+
         for tool in self.user_tools:
             if tool.name in excluded_tools:
                 logger.info(f"🚫 EXCLUDING {tool.name} from tool calling phase - deferred auto-execution will handle it")
                 continue
-                
+
             tool_def = tool.get_function_definition()
             formatted_def = {
                 "type": "function",
@@ -587,9 +638,62 @@ class AsyncToolManager:
                 }
             }
             tools_definitions.append(formatted_def)
-        
+
+        # 🔌 Add plugin tools to the definitions
+        if self.plugin_manager and self.plugins_loaded:
+            plugins = self.plugin_manager.get_available_plugins()
+
+            for plugin in plugins:
+                plugin_def = {
+                    "type": "function",
+                    "function": {
+                        "name": plugin["name"],
+                        "description": plugin["description"],
+                        "parameters": plugin["parameters"]
+                    }
+                }
+                tools_definitions.append(plugin_def)
+                logger.debug(f"🔌 Added plugin tool: {plugin['name']}")
+
         return tools_definitions
     
+    def _create_plugin_wrapper(self, plugin_name: str):
+        """🔌 Create an async wrapper for plugin execution"""
+        async def wrapper(args = "") -> str:
+            import json
+            try:
+                # Handle different argument types from Ollama
+                if isinstance(args, dict):
+                    params = args
+                elif isinstance(args, str) and args.strip():
+                    if args.strip().startswith('{'):
+                        params = json.loads(args)
+                    else:
+                        # Simple string argument - try to map to first parameter
+                        params = {"query": args}
+                else:
+                    params = {}
+
+                # Execute plugin through PluginManager
+                result = await self.plugin_manager.execute_plugin(plugin_name, params)
+
+                if result.get("success", False):
+                    # Return the formatted result
+                    plugin_result = result.get("result", "")
+                    return str(plugin_result)
+                else:
+                    # Return error message
+                    error_msg = result.get("error", "Unknown error")
+                    return f"Plugin '{plugin_name}' error: {error_msg}"
+
+            except json.JSONDecodeError:
+                return f"Plugin '{plugin_name}' error: Invalid JSON arguments"
+            except Exception as e:
+                logger.error(f"🔌 Error executing plugin '{plugin_name}': {e}")
+                return f"Plugin '{plugin_name}' error: {str(e)}"
+
+        return wrapper
+
     def _create_user_tool_wrapper(self, tool):
         """Create an async wrapper for user tools to match the expected function signature"""
         async def wrapper(args = "") -> str:

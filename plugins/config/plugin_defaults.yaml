@@ -1,0 +1,68 @@
+# =============================================================================
+# Plugin System Default Configuration
+# =============================================================================
+# This file contains default settings for all plugins in the Agentic-RAG server.
+# Individual plugins can override these settings in their YAML definitions.
+#
+# IMPORTANT: This file is required for fail-fast configuration compliance.
+# DO NOT hardcode these values in Python code.
+#
+# Created: 2025-10-02
+# Version: 1.0.0
+# =============================================================================
+
+execution:
+  timeout: 60                          # Default max execution time (seconds)
+  memory_limit: 256                    # Default max memory (MB)
+  cpu_limit: 1.0                       # Default max CPU cores
+
+security:
+  input_validation:
+    max_string_length: 1024            # Max length for string inputs
+    max_array_length: 100              # Max array size
+    allowed_types:                     # Allowed parameter types
+      - string
+      - number
+      - boolean
+      - array
+      - object
+
+  output_validation:
+    max_output_size: 1048576           # 1MB max output size
+    allowed_content_types:
+      - application/json
+      - text/plain
+
+  network:
+    enabled: false                     # Network access disabled by default
+    allowed_domains: []                # Whitelist of allowed domains
+    allowed_ports: []                  # Whitelist of allowed ports
+    block_private_ips: true            # Block RFC1918 private IP ranges
+
+  filesystem:
+    read_only: true                    # Filesystem read-only by default
+    allowed_paths: []                  # Whitelist of allowed paths
+    blocked_paths:                     # Blacklist of blocked paths
+      - /etc
+      - /root
+      - /home
+
+monitoring:
+  log_level: INFO                      # Default log level
+  log_execution: true                  # Log each plugin execution
+  log_outputs: false                   # Don't log outputs (may contain sensitive data)
+  metrics:
+    track_execution_time: true         # Track execution time metrics
+    track_success_rate: true           # Track success/failure rates
+
+error_handling:
+  retry:
+    enabled: true                      # Enable retry by default
+    max_attempts: 3                    # Max retry attempts
+    backoff_strategy: exponential      # Backoff strategy (linear|exponential|fixed)
+    initial_delay: 1                   # Initial delay in seconds
+
+  degraded_mode:
+    enabled: true                      # Enable degraded mode by default
+    disable_after_failures: 5          # Disable plugin after N consecutive failures
+    cooldown_period: 300               # Cooldown period in seconds (5 minutes)

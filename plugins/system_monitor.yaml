@@ -1,0 +1,71 @@
+metadata:
+  name: "system_monitor"
+  version: "1.0.0"
+  category: "system"
+  author: "Agentic-RAG System"
+  description: |
+    Monitor system resources including CPU usage, memory, disk space, and running processes.
+    Use this when user asks about system performance, resource usage, or running processes.
+  license: "MIT"
+  tags:
+    - system
+    - monitoring
+    - performance
+    - resources
+
+execution:
+  type: "python"
+  handler: "handlers/system_monitor.py"
+  entrypoint: "execute"
+  timeout: 20
+  memory_limit: 256
+  cpu_limit: 0.5
+  environment: {}
+
+parameters:
+  type: "object"
+  properties:
+    metric:
+      type: "string"
+      description: "System metric to monitor"
+      enum:
+        - cpu
+        - memory
+        - disk
+        - processes
+        - all
+      default: "all"
+    process_limit:
+      type: "integer"
+      description: "Number of top processes to show (for 'processes' or 'all')"
+      minimum: 1
+      maximum: 50
+      default: 10
+
+security:
+  network:
+    enabled: false
+  filesystem:
+    read_only: true
+    allowed_paths:
+      - /proc
+      - /sys
+    blocked_paths:
+      - /etc/shadow
+      - /root
+
+monitoring:
+  log_level: "INFO"
+  log_execution: true
+  log_parameters: true
+
+error_handling:
+  retry:
+    enabled: false
+  degraded_mode:
+    enabled: true
+    disable_after_failures: 5
+
+dependencies:
+  python_packages:
+    - psutil

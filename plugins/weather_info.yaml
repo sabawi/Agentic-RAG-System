@@ -1,0 +1,78 @@
+metadata:
+  name: "weather_info"
+  version: "1.0.0"
+  category: "productivity"
+  author: "Agentic-RAG System"
+  description: |
+    Get current weather information for a specified city using wttr.in service.
+    Returns temperature, conditions, humidity, and wind speed.
+    Use this when user asks about weather, temperature, or current conditions.
+  license: "MIT"
+  tags:
+    - weather
+    - api
+    - information
+
+execution:
+  type: "python"
+  handler: "handlers/weather_info.py"
+  entrypoint: "execute"
+  timeout: 15
+  memory_limit: 128
+  cpu_limit: 0.5
+  environment: {}
+
+parameters:
+  type: "object"
+  properties:
+    city:
+      type: "string"
+      description: "City name (e.g., 'London', 'New York', 'Tokyo')"
+      minLength: 1
+      maxLength: 100
+    units:
+      type: "string"
+      description: "Temperature units: metric (Celsius) or imperial (Fahrenheit)"
+      enum: ["metric", "imperial"]
+      default: "metric"
+    format:
+      type: "string"
+      description: "Output format: brief or detailed"
+      enum: ["brief", "detailed"]
+      default: "brief"
+  required:
+    - city
+
+security:
+  network:
+    enabled: true
+    allowed_domains:
+      - wttr.in
+    allowed_ports:
+      - 80
+      - 443
+  filesystem:
+    read_only: true
+    allowed_paths: []
+    blocked_paths:
+      - /etc
+      - /root
+      - /home
+
+monitoring:
+  log_level: "INFO"
+  log_execution: true
+  log_parameters: true
+
+error_handling:
+  retry:
+    enabled: true
+    max_attempts: 3
+    backoff_multiplier: 1.5
+  degraded_mode:
+    enabled: true
+    disable_after_failures: 5
+
+dependencies:
+  python_packages:
+    - requests
