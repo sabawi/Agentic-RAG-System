@@ -30,9 +30,9 @@ class DocumentSearchTool(BaseUserTool):
     def name(self) -> str:
         return "document_search"
     
-    @property 
+    @property
     def description(self) -> str:
-        return """Search through PRE-INDEXED document database to find relevant information. This tool searches a database of documents that have been previously indexed and stored. IMPORTANT: This tool CANNOT read individual files by path. Use 'sandboxed_executor' with 'read_file' action to read specific files like /path/to/file.pdf. Use document_search only when you need to find information across multiple documents in the indexed collection."""
+        return """Search through PRE-INDEXED document database to find relevant information. This tool searches a database of documents that have been previously indexed and stored. IMPORTANT: This tool CANNOT read individual files by path. Use 'sandboxed_executor' with 'read_file' action to read specific files like /path/to/file.pdf. Use document_search only when you need to find information across multiple documents in the indexed collection. TIP: When extracting comprehensive lists or detailed content from documents, request max_results between 15-20 to ensure complete coverage."""
     
     @property
     def parameters(self) -> dict:
@@ -45,14 +45,14 @@ class DocumentSearchTool(BaseUserTool):
                 },
                 "max_results": {
                     "type": "integer",
-                    "description": "Maximum number of document chunks to return (default: 5)",
-                    "default": 5
+                    "description": "Maximum number of document chunks to return (default: 10, max: 20)",
+                    "default": 10
                 }
             },
             "required": ["query"]
         }
     
-    async def execute(self, query: str, max_results: int = 5) -> Dict[str, Any]:
+    async def execute(self, query: str, max_results: int = 10) -> Dict[str, Any]:
         """
         Execute document search using the FAISS document interrogator
         Enhanced with filename-based lookup and improved search strategies
@@ -65,7 +65,8 @@ class DocumentSearchTool(BaseUserTool):
             Dict with success, result, and error fields as expected by BaseUserTool
         """
         # 🎯 ENFORCE REASONABLE LIMITS: Prevent massive output
-        max_results = min(max_results, 10)
+        # Increased from 10 to 20 to capture comprehensive document content
+        max_results = min(max_results, 20)
         logger.info(f"🔍 Document search with max_results limited to: {max_results}")
         try:
             # Import here to avoid import errors if document interrogation isn't available
