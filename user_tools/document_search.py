@@ -91,7 +91,14 @@ class DocumentSearchTool(BaseUserTool):
                 }
             
             logger.info(f"🔍 Document search tool executing: {query}")
-            
+
+            # Strategy 0: Check if this is a comprehensive "ALL" query for a specific document
+            # If query contains "ALL" or "complete list", increase max_results and try filename lookup
+            is_comprehensive_query = any(keyword in query.upper() for keyword in ["ALL", "COMPLETE", "ENTIRE", "EVERY", "COMPREHENSIVE"])
+            if is_comprehensive_query:
+                logger.info(f"🔍 Detected comprehensive query - increasing max_results to capture all content")
+                max_results = 20  # Use maximum allowed for comprehensive queries
+
             # Strategy 1: Check if query contains a filename and do direct lookup
             filename_result = await self._try_filename_lookup(query, max_results)
             if filename_result:
@@ -187,7 +194,10 @@ class DocumentSearchTool(BaseUserTool):
             filename_patterns = [
                 r'([A-Za-z0-9_\-\s]+\.(jpg|jpeg|png|pdf|docx?|xlsx?|txt))',
                 r'([A-Za-z0-9_\-\s]+_[A-Za-z0-9_\-\s]*\.(jpg|jpeg|png|pdf))',
-                r'([A-Za-z0-9]+[_\-][A-Za-z0-9_\-\s]*\.(jpg|jpeg|png|pdf))'
+                r'([A-Za-z0-9]+[_\-][A-Za-z0-9_\-\s]*\.(jpg|jpeg|png|pdf))',
+                # Also match long document titles (e.g., "The Most Promising... for 2025-2027")
+                r'"([^"]+\.(pdf|docx|xlsx|txt))"',  # Quoted filenames
+                r'([A-Z][A-Za-z0-9\s\-]+(?:for|through|by|in)\s+\d{4}[-\s]\d{4})',  # Document titles with year ranges
             ]
             
             potential_filenames = []
