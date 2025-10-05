@@ -94,7 +94,8 @@ Installs all packages from `requirements.txt` including:
 - Prompts for Ollama API URL (default: `http://127.0.0.1:11434`)
 - Tests API connectivity
 - Verifies required models:
-  - `qwen3:8b` (Primary LLM)
+  - `deepseek-v3.1:671b-cloud` (Primary LLM - Cloud)
+  - `qwen3:8b` (Local alternative LLM)
   - `qwen2.5vl:3b` (Vision model)
   - `bakllava:latest` (Fallback vision model)
 - Updates `config/llm_config.yaml` with your Ollama URL
@@ -108,6 +109,7 @@ curl -fsSL https://ollama.ai/install.sh | sh
 ollama serve
 
 # Pull required models
+ollama pull deepseek-v3.1:671b-cloud
 ollama pull qwen3:8b
 ollama pull qwen2.5vl:3b
 ollama pull bakllava:latest
@@ -200,6 +202,7 @@ curl http://localhost:11434/api/tags
 ollama serve
 
 # Pull required models
+ollama pull deepseek-v3.1:671b-cloud
 ollama pull qwen3:8b
 ollama pull qwen2.5vl:3b
 ollama pull bakllava:latest
