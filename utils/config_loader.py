@@ -250,5 +250,47 @@ class ConfigLoader:
 
         return plugin_config
 
+    def get_news_config(self) -> Dict[str, Any]:
+        """📰 Get news sources configuration
+
+        Returns:
+            Dict with news sources, category mappings, and keyword mappings
+        """
+        # Try to load from dedicated news_sources.yaml file (preferred)
+        news_config_file = self.config_file.parent / "news_sources.yaml"
+
+        if news_config_file.exists():
+            try:
+                with open(news_config_file, 'r') as f:
+                    news_config = yaml.safe_load(f)
+
+                # Validate structure
+                if news_config and isinstance(news_config, dict):
+                    logger.info(f"✅ News sources loaded from {news_config_file}")
+                    return news_config
+                else:
+                    logger.warning(f"⚠️  News config file exists but is empty or invalid: {news_config_file}")
+            except Exception as e:
+                logger.error(f"❌ Failed to load news config from {news_config_file}: {e}")
+                # Fall through to main config
+
+        # Fallback: Check main llm_config.yaml for 'news' section
+        try:
+            config = self.load_config()
+            if 'news' in config:
+                logger.info("✅ News sources loaded from llm_config.yaml")
+                return config['news']
+        except Exception as e:
+            logger.warning(f"⚠️  Could not load main config for news fallback: {e}")
+
+        # Final fallback: Return empty structure (caller will use hardcoded defaults)
+        logger.warning("⚠️  No news configuration found in news_sources.yaml or llm_config.yaml")
+        logger.info("📋 Using hardcoded news sources as fallback")
+        return {
+            'news_sources': {},
+            'category_mapping': {},
+            'keyword_mappings': {}
+        }
+
 # Global config loader instance
 config_loader = ConfigLoader()

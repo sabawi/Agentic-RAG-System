@@ -859,9 +859,48 @@ class AsyncToolManager:
                 
                 # Get the filter keyword (like original implementation)
                 newsFilter = data.get('filter', '').lower().strip()
-                
-                # Enhanced news category mapping with diverse, reliable sources
-                NEWS_URLS = {
+
+                # 📰 LOAD NEWS CONFIGURATION (with fallback to hardcoded)
+                # Try to load from config/news_sources.yaml for user customization
+                try:
+                    news_config = config_loader.get_news_config()
+
+                    # Use config if it has data, otherwise fallback to hardcoded
+                    NEWS_URLS_FROM_CONFIG = news_config.get('news_sources', {})
+                    CATEGORY_MAPPING_FROM_CONFIG = news_config.get('category_mapping', {})
+                    KEYWORD_MAPPINGS_FROM_CONFIG = news_config.get('keyword_mappings', {})
+
+                    # Convert YAML lists to Python sets for category mapping (for performance)
+                    if CATEGORY_MAPPING_FROM_CONFIG:
+                        for cat, config in CATEGORY_MAPPING_FROM_CONFIG.items():
+                            if 'primary_terms' in config and isinstance(config['primary_terms'], list):
+                                config['primary_terms'] = set(config['primary_terms'])
+                            if 'secondary_terms' in config and isinstance(config['secondary_terms'], list):
+                                config['secondary_terms'] = set(config['secondary_terms'])
+                            if 'compound_phrases' in config and isinstance(config['compound_phrases'], list):
+                                config['compound_phrases'] = set(config['compound_phrases'])
+                            # Handle crossover terms
+                            for key in ['financial_crossover', 'tech_crossover', 'business_crossover', 'geo_specific', 'finance_crossover', 'geo_indicators']:
+                                if key in config and isinstance(config[key], list):
+                                    config[key] = set(config[key])
+
+                    # Decide: use config or fallback to hardcoded
+                    use_config = bool(NEWS_URLS_FROM_CONFIG or CATEGORY_MAPPING_FROM_CONFIG or KEYWORD_MAPPINGS_FROM_CONFIG)
+
+                    if use_config:
+                        logger.info("📰 Using news sources from configuration file")
+                    else:
+                        logger.info("📋 News config empty, using hardcoded defaults")
+
+                except Exception as e:
+                    logger.warning(f"⚠️  Failed to load news config: {e}, using hardcoded defaults")
+                    NEWS_URLS_FROM_CONFIG = {}
+                    CATEGORY_MAPPING_FROM_CONFIG = {}
+                    KEYWORD_MAPPINGS_FROM_CONFIG = {}
+                    use_config = False
+
+                # 🔄 FALLBACK: Enhanced news category mapping with diverse, reliable sources (HARDCODED)
+                NEWS_URLS = NEWS_URLS_FROM_CONFIG if NEWS_URLS_FROM_CONFIG else {
                     "world": [
                         # Mainstream reliable sources
                         "https://apnews.com/world-news",
@@ -1003,8 +1042,8 @@ class AsyncToolManager:
                 
                 # 🎯 ENHANCED INTELLIGENT CATEGORY DETECTION SYSTEM
                 # Multi-factor analysis with phrase detection, weights, and intent recognition
-                
-                ENHANCED_CATEGORY_MAPPING = {
+
+                ENHANCED_CATEGORY_MAPPING = CATEGORY_MAPPING_FROM_CONFIG if CATEGORY_MAPPING_FROM_CONFIG else {
                     "crypto": {
                         "primary_terms": {"crypto", "cryptocurrency", "bitcoin", "btc", "ethereum", "eth", "blockchain"},
                         "secondary_terms": {"defi", "nft", "altcoin", "mining", "wallet", "exchange", "digital currency", "web3", "solana", "cardano", "polygon", "binance", "coinbase"},
@@ -1270,7 +1309,7 @@ class AsyncToolManager:
                     Extract specific keywords that map to specialized sources
                     Example: "stock market" -> stock market specific RSS feeds
                     """
-                    keyword_mappings = {
+                    keyword_mappings = KEYWORD_MAPPINGS_FROM_CONFIG if KEYWORD_MAPPINGS_FROM_CONFIG else {
                         "stock market": ["finance", "economy"],
                         "federal reserve": ["economy"],
                         "fed rates": ["economy"],

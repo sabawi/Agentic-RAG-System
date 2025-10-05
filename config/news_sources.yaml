@@ -1,0 +1,541 @@
+# ================================================================================
+# NEWS SOURCES CONFIGURATION
+# ================================================================================
+#
+# This file contains all news sources, category mappings, and keyword detection
+# rules for the get_news_summaries() tool.
+#
+# Users can edit this file to:
+# - Add/remove news RSS feeds
+# - Customize category detection terms
+# - Modify keyword mappings
+# - Adjust category weights and fallbacks
+#
+# Changes take effect immediately without code modification or server restart.
+#
+# ================================================================================
+
+# ================================================================================
+# NEWS SOURCES - RSS/Feed URLs by Category
+# ================================================================================
+#
+# Add or remove URLs from each category to customize news sources.
+# The system will automatically fetch from these sources based on user queries.
+#
+news_sources:
+
+  # World/International News
+  world:
+    - https://apnews.com/world-news
+    - https://feeds.bbci.co.uk/news/world/rss.xml
+    - https://www.aljazeera.com/xml/rss/all.xml
+    - https://rss.dw.com/atom/rss-en-all
+    - https://www.theguardian.com/world/rss
+    - https://theintercept.com/feed/
+    - https://www.france24.com/en/rss
+    - https://www.euronews.com/rss?level=vertical&name=news
+    - https://www.scmp.com/rss/feed/
+
+  # National/US News
+  national:
+    - https://apnews.com/us-news
+    - https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml
+    - https://www.npr.org/sections/national/
+    - https://www.propublica.org/feeds/propublica/main
+    - https://www.axios.com/feeds/articles.rss
+    - https://apnews.com/hub/ap-top-news
+    - https://www.npr.org/sections/news/
+    - https://www.usatoday.com/rss/news/
+    - https://www.cbsnews.com/latest/rss/main
+    - https://www.nbcnews.com/feeds/
+    - https://abcnews.go.com/abcnews/topstories
+
+  # Business News
+  business:
+    - https://www.npr.org/sections/business/
+    - https://feeds.bbci.co.uk/news/business/rss.xml
+    - https://www.axios.com/feeds/business.rss
+    - https://www.zerohedge.com/fullrss2.xml
+    - https://feeds.bloomberg.com/markets/news.rss
+    - https://www.businessinsider.com/rss
+
+  # Finance/Markets
+  finance:
+    - https://www.cnbc.com/id/100003114/device/rss/rss.html
+    - https://finance.yahoo.com/news/rssindex
+    - https://feeds.bloomberg.com/markets/news.rss
+    - https://www.marketwatch.com/rss/topstories
+    - https://feeds.a.dj.com/rss/RSSMarketsMain.xml
+    - https://feeds.bbci.co.uk/news/business/rss.xml
+    - https://www.cnbc.com/id/20910258/device/rss/rss.html
+    - https://www.federalreserve.gov/feeds/press_all.xml
+    - https://www.investing.com/rss/news.rss
+    - https://seekingalpha.com/feed.xml
+    - https://www.fool.com/feeds/index.aspx
+    - https://www.zerohedge.com/fullrss2.xml
+    - https://finance.yahoo.com/rss/topstories
+    - https://www.reuters.com/business/finance/
+
+  # Economy/Economic Policy
+  economy:
+    - https://www.cnbc.com/id/20910258/device/rss/rss.html
+    - https://www.federalreserve.gov/feeds/press_all.xml
+    - https://feeds.bbci.co.uk/news/business/rss.xml
+    - https://www.reuters.com/business/
+    - https://www.bloomberg.com/economics
+    - https://www.economist.com/finance-and-economics/rss.xml
+    - https://www.wsj.com/xml/rss/3_7085.xml
+
+  # Technology
+  technology:
+    - https://arstechnica.com/feed/
+    - https://thehackernews.com/feeds/posts/default?alt=rss
+    - https://techcrunch.com/feed/
+    - https://www.techdirt.com/feed/
+    - https://www.theregister.com/headlines.atom
+    - https://www.wired.com/feed/rss
+    - https://www.zdnet.com/news/rss.xml
+
+  # Cryptocurrency
+  crypto:
+    - https://www.coindesk.com/arc/outboundfeeds/rss/
+    - https://decrypt.co/feed
+    - https://www.theblock.co/rss.xml
+    - https://cointelegraph.com/rss
+
+  # Science
+  science:
+    - https://feeds.bbci.co.uk/news/science_and_environment/rss.xml
+    - https://www.sciencenews.org/feed
+    - https://www.npr.org/sections/science/
+    - https://arstechnica.com/science/feed/
+
+  # Politics
+  politics:
+    - https://www.politico.com/rss/politicopicks.xml
+    - https://thehill.com/news/feed/
+    - https://www.propublica.org/feeds/propublica/main
+    - https://theintercept.com/feed/
+
+  # General News
+  news:
+    - https://apnews.com/hub/ap-top-news
+    - https://feeds.bbci.co.uk/news/rss.xml
+    - https://www.npr.org/sections/news/
+    - https://www.axios.com/feeds/articles.rss
+    - https://www.propublica.org/feeds/propublica/main
+
+  # Local/Regional News
+  local:
+    - https://www.latimes.com/rss2.0.xml
+    - https://www.sfgate.com/rss/feed/Chronicle-News-940.php
+    - https://www.chicagotribune.com/arcio/rss/
+    - https://www.nytimes.com/services/xml/rss/nyt/HomePage.xml
+    - https://www.washingtonpost.com/rss/
+    - https://www.dallasnews.com/feed/
+
+  # Default (fallback sources)
+  default:
+    - https://apnews.com/hub/ap-top-news
+    - https://feeds.bbci.co.uk/news/rss.xml
+    - https://www.axios.com/feeds/articles.rss
+
+
+# ================================================================================
+# CATEGORY MAPPING - Intelligent Category Detection
+# ================================================================================
+#
+# Defines how user queries are mapped to news categories using:
+# - primary_terms: Core keywords (high weight)
+# - secondary_terms: Related keywords (medium weight)
+# - compound_phrases: Multi-word phrases (highest weight)
+# - weight: Category priority (0.0 to 1.0)
+# - fallback_categories: Alternative categories if primary fails
+#
+category_mapping:
+
+  crypto:
+    primary_terms:
+      - crypto
+      - cryptocurrency
+      - bitcoin
+      - btc
+      - ethereum
+      - eth
+      - blockchain
+    secondary_terms:
+      - defi
+      - nft
+      - altcoin
+      - mining
+      - wallet
+      - exchange
+      - digital currency
+      - web3
+      - solana
+      - cardano
+      - polygon
+      - binance
+      - coinbase
+    compound_phrases:
+      - crypto news
+      - bitcoin price
+      - ethereum update
+      - blockchain technology
+      - digital assets
+      - crypto market
+      - defi protocol
+    financial_crossover:
+      - crypto stocks
+      - bitcoin etf
+      - cryptocurrency investment
+      - digital asset trading
+    tech_crossover:
+      - blockchain development
+      - smart contracts
+      - cryptocurrency technology
+    weight: 1.0
+    fallback_categories:
+      - finance
+      - technology
+
+  finance:
+    primary_terms:
+      - finance
+      - financial
+      - stocks
+      - market
+      - markets
+      - stock
+    secondary_terms:
+      - securities
+      - financing
+      - bonds
+      - wall street
+      - nasdaq
+      - dow jones
+      - trading
+      - investment
+      - earnings
+    compound_phrases:
+      - stock market
+      - financial news
+      - market update
+      - earnings report
+      - market analysis
+      - stock trading
+    business_crossover:
+      - corporate earnings
+      - business finance
+      - company stocks
+    weight: 0.9
+    fallback_categories:
+      - business
+
+  economy:
+    primary_terms:
+      - economy
+      - economic
+      - inflation
+      - recession
+      - gdp
+      - unemployment
+    secondary_terms:
+      - interest rates
+      - fed rates
+      - federal reserve
+      - monetary policy
+      - fiscal policy
+      - economic growth
+      - economic indicators
+      - consumer price index
+      - cpi
+    compound_phrases:
+      - economic news
+      - fed meeting
+      - economic indicators
+      - monetary policy
+      - economic growth
+      - inflation report
+      - unemployment rate
+    finance_crossover:
+      - economic market
+      - financial economy
+      - market economy
+    weight: 0.9
+    fallback_categories:
+      - finance
+
+  technology:
+    primary_terms:
+      - technology
+      - tech
+      - ai
+      - artificial intelligence
+      - software
+      - hardware
+      - digital
+    secondary_terms:
+      - machine learning
+      - computer
+      - internet
+      - cybersecurity
+      - startup
+      - innovation
+      - gadgets
+      - devices
+      - cloud
+      - data
+      - programming
+      - app
+      - platform
+    compound_phrases:
+      - tech news
+      - ai development
+      - software update
+      - tech startup
+      - digital transformation
+      - cyber attack
+      - tech earnings
+    business_crossover:
+      - tech companies
+      - software business
+      - tech industry
+    weight: 0.8
+    fallback_categories:
+      - business
+
+  business:
+    primary_terms:
+      - business
+      - trade
+      - commerce
+      - commercial
+      - corporate
+      - company
+      - companies
+    secondary_terms:
+      - retail
+      - enterprise
+      - industry
+      - sector
+      - revenue
+      - profit
+      - ceo
+      - merger
+      - acquisition
+      - ipo
+    compound_phrases:
+      - business news
+      - corporate earnings
+      - company update
+      - industry analysis
+      - market sector
+    weight: 0.7
+    fallback_categories:
+      - finance
+
+  world:
+    primary_terms:
+      - world
+      - global
+      - international
+      - foreign
+      - abroad
+    secondary_terms:
+      - europe
+      - asia
+      - africa
+      - china
+      - russia
+      - uk
+      - japan
+      - india
+      - brazil
+      - canada
+      - mexico
+    compound_phrases:
+      - world news
+      - international affairs
+      - global economy
+      - foreign policy
+      - international relations
+    geo_specific:
+      - european union
+      - middle east
+      - south america
+      - southeast asia
+    weight: 0.9
+    fallback_categories:
+      - national
+
+  national:
+    primary_terms:
+      - national
+      - nation
+      - domestic
+      - us
+      - usa
+      - american
+      - homeland
+      - united states
+    secondary_terms:
+      - congress
+      - senate
+      - house
+      - washington
+      - federal
+      - state
+      - local
+      - governor
+      - mayor
+    compound_phrases:
+      - national news
+      - us news
+      - american politics
+      - domestic policy
+      - homeland security
+    weight: 0.8
+    fallback_categories:
+      - politics
+
+  politics:
+    primary_terms:
+      - politics
+      - political
+      - government
+      - election
+      - campaign
+      - policy
+      - legislation
+    secondary_terms:
+      - democrat
+      - republican
+      - biden
+      - trump
+      - vote
+      - voting
+      - ballot
+      - candidate
+      - senator
+      - representative
+    compound_phrases:
+      - political news
+      - election update
+      - campaign news
+      - government policy
+      - political analysis
+    weight: 0.8
+    fallback_categories:
+      - national
+
+  science:
+    primary_terms:
+      - science
+      - scientific
+      - research
+      - study
+      - discovery
+      - experiment
+    secondary_terms:
+      - physics
+      - chemistry
+      - biology
+      - nasa
+      - space
+      - medicine
+      - health
+      - climate
+      - environment
+    compound_phrases:
+      - scientific breakthrough
+      - research findings
+      - space exploration
+      - medical research
+      - climate change
+    weight: 0.6
+    fallback_categories:
+      - technology
+
+  local:
+    primary_terms:
+      - local
+      - regional
+      - city
+      - town
+      - community
+      - neighborhood
+    secondary_terms:
+      - metro
+      - county
+      - municipal
+      - downtown
+      - suburb
+      - district
+      - area
+      - vicinity
+      - nearby
+    compound_phrases:
+      - local news
+      - regional update
+      - city news
+      - community events
+      - metro area
+      - local government
+    geo_indicators:
+      - california
+      - texas
+      - new york
+      - florida
+      - chicago
+      - los angeles
+      - houston
+      - phoenix
+      - philadelphia
+      - san antonio
+    weight: 0.7
+    fallback_categories:
+      - national
+
+
+# ================================================================================
+# KEYWORD MAPPINGS - Specific Keyword → Category Mapping
+# ================================================================================
+#
+# Maps specific keywords/phrases directly to categories for precise targeting.
+# Used when exact keyword matches are more important than fuzzy term detection.
+#
+keyword_mappings:
+  stock market:
+    - finance
+    - economy
+  federal reserve:
+    - economy
+  fed rates:
+    - economy
+  inflation:
+    - economy
+  gdp:
+    - economy
+  unemployment:
+    - economy
+  earnings:
+    - finance
+  nasdaq:
+    - finance
+  dow jones:
+    - finance
+  s&p 500:
+    - finance
+  cryptocurrency:
+    - crypto
+  bitcoin:
+    - crypto
+  florida:
+    - local
+  california:
+    - local
+  texas:
+    - local
+  new york:
+    - local

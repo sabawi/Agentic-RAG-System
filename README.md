@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.2.98
+# Agentic-RAG Server v1.0.2.99
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, vision capabilities, intelligent email management, and **extensible plugin system**.
 
-[![Version](https://img.shields.io/badge/version-1.0.2.98-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.2.98)
+[![Version](https://img.shields.io/badge/version-1.0.2.99-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.2.99)
 [![Python](https://img.shields.io/badge/python-3.8+-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -30,6 +30,7 @@ An advanced AI-powered server with multi-LLM orchestration, tool calling, docume
 
 ### Quick Reference
 - **[Main Documentation Hub](docs/README.md)** - Central navigation and overview
+- **[News Sources Configuration](docs/NEWS_SOURCES_CONFIGURATION.md)** - Customize news sources without code changes
 
 ## 🚀 Quick Start
 
