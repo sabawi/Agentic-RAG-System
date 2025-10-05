@@ -7,7 +7,7 @@ set -e
 echo "🚀 Starting FastAPI Server..."
 
 # Activate virtual environment
-source venv_fastapi/bin/activate
+source venv/bin/activate
 
 # Set environment variables if .env exists
 if [ -f ".env" ]; then

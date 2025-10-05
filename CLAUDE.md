@@ -88,3 +88,14 @@ tests/
 - ENFORCE fail-fast behavior when configuration is missing
 
 **Before making ANY configuration changes, read /docs/PROJECT_CONFIGURATION_DIRECTIVE.md**
+- WHEN PROMPTED TO INVESTIGATE A BUG/PROBLEM ALWAYS START BY REVIEWING THE LOGS AND COMPARING IT TO THE EXPECTED SERVER BEHAVIOUR ACCORDING THE ARCHITECURE AND DESIGN
+- NEVER ASSUMES THE FIX WORKS UNLESS THE HUMAN USER TELLS YOU IT DOES
+- ALWAYS FOLLOW THE DOCUMENTED PROJECT DIRECTORY ORGANIZATION WHEN CREATING AND MOVING FILES
+- ALWAYS TEST YOUR FIX THROUGH PROMPTS TO THE SERVER FROM END-TO-END
+- ALWAYS FOLLOW THE RULE OF ALL RULES AND NEVER FORGET IT: Read and understand CLAUDE.md FULLY. Second, I want you to read ALL the architecture, design, and development documentations in /docs very carefully and learn about ALL ASPECTS OF ARCHITECTURE AND DESIGN OF THE SERVER BEFORE ATTAMPTING TO ANSWER ANY QUESTION. IT IS PROHIBITED TO MAKE ANY CODE CHANGES IF YOU HAVE NOT 'RECENTLY' READ AND UNDERSTOOD THE ARCHITECTURE AND DESIGN
+- DO NOT MAKE ASSUMPTIONS AND BASE ANYTHING ON THEM WITHOUT INVESTIGATING AND TESTING THEM FIRST
+- WHEN INDOUBT, ALWAYS EXPLAIN THE ISSUE AND ASK GUIDANCE FROM HUMAN USER
+- BEFORE WRITING A NEW UTILITY FUNCTION, SEARCH THE CODEBASE IF THERE IS A WORKING FUNCTION ALREADY WRITTEN TO DO THE SAME WORK. ALWAYS, REUSED EXITING CODE AND IMPROVE IT
+- KEEP INVESTIGATING THE ROOT CAUSE OF A BUG/ISSUE UNTIL YOU HAVE NEAR ~100% OF THE CORRECT AND FULL ROOT CAUSE THEN REPORT IT TO USER
+- NEVER ATTEMPT A CODE FIX UNTIL (1) YOU HAVE SATISFIED THE REQUIREMENTS OF INVESTIGATING THE ROOT CAUSE (2) YOU HAVE PLANNED/ANALYZED/RESEARCH/EXPERIMENTED WITH AND VERIFIED THAT THE FIX WILL WORK WITH HIGH CONFIDENCE (NEAR ~100%)
+- CHECKPOINT PROTOCOL: FOLLOW A STRICT PLAN TO STAGE AND COMMIT FILES TO REPO: review all the code change in this current project diectory and list all changed files tracked and untracked. Examine all current documentations for requiring updates/correction and update them as result of changes (README.md, ./docs/production, other files in ./docs etc). Ensure the directory organization is strictly followed. Ensure security issues are resolved 100% (no passwords/keys/credintials etc)  Update the version numbers to be consistant across ALL files and gitbub README.md, as well as the 'About' box version number on github site. Add core/required files (tracked and new if required only) and stage them for check-in. Ensure the dependencies (./requirements.tx) is uptodate for any new imports. Commit and Push changes.

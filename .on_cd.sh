@@ -9,7 +9,7 @@
 # Function to find and activate virtual environment
 activate_venv() {
     # Common virtual environment directory names (in order of preference)
-    local venv_names=("venv" "venv_fastapi" ".venv" "env" ".env" "virtualenv")
+    local venv_names=("venv" ".venv" "env" ".env" "virtualenv")
     
     for venv_name in "${venv_names[@]}"; do
         if [ -d "$venv_name" ] && [ -f "$venv_name/bin/activate" ]; then
@@ -43,7 +43,7 @@ else
     project_venv_path=""
 
     # Find the project's virtual environment path
-    venv_names=("venv" "venv_fastapi" ".venv" "env" ".env" "virtualenv")
+    venv_names=("venv" ".venv" "env" ".env" "virtualenv")
     for venv_name in "${venv_names[@]}"; do
         if [ -d "$venv_name" ] && [ -f "$venv_name/bin/activate" ]; then
             project_venv_path="$(pwd)/$venv_name"

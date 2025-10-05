@@ -69,7 +69,7 @@ flaskserver/
 ├── testing/                      # Comprehensive test suite
 │   ├── TestingReadme.md          # Testing documentation
 │   └── test_*.py                 # Individual test files
-└── venv_fastapi/                 # Virtual environment
+└── venv/                 # Virtual environment
 ```
 
 ## 🛠 Installation
@@ -100,8 +100,8 @@ sudo apt-get install jq bc
 ### Manual Setup
 ```bash
 # Create virtual environment
-python3 -m venv venv_fastapi
-source venv_fastapi/bin/activate
+python3 -m venv venv
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt

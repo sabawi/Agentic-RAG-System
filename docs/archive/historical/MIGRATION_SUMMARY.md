@@ -49,7 +49,7 @@ I have successfully converted your Flask server to a modern, high-performance Fa
 cd /home/sabawi/Development/flaskserver
 
 # 1. Activate environment
-source venv_fastapi/bin/activate
+source venv/bin/activate
 
 # 2. Start the server
 ./start_server.sh
@@ -57,7 +57,7 @@ source venv_fastapi/bin/activate
 
 ### **Manual Start**
 ```bash
-source venv_fastapi/bin/activate
+source venv/bin/activate
 python fastapi_server_simple.py
 ```
 
@@ -71,7 +71,7 @@ python fastapi_server_simple.py
 
 ```bash
 # Test the server
-source venv_fastapi/bin/activate
+source venv/bin/activate
 python test_simple.py
 
 # Run comprehensive tests  

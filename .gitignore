@@ -1,6 +1,5 @@
 # Virtual environments
 venv/
-venv_fastapi/
 env/
 ENV/
 
@@ -63,6 +62,11 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Backup files
+*.backup
+*.backup_*
+*backup_before_*
 
 # Jupyter Notebook
 .ipynb_checkpoints

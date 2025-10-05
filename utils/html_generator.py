@@ -169,15 +169,70 @@ li { margin-bottom: 6px; }
             if parent.name == 'p':
                 parent.unwrap()
 
-        # CRITICAL FIX: Re-escape HTML entities in text content after BeautifulSoup processing
-        # BeautifulSoup automatically unescapes entities, so we need to escape them back
-        for element in soup.find_all(text=True):
-            if element.parent.name not in ['script', 'style']:  # Skip script/style tags
-                # Replace the text content with escaped version
-                escaped_text = html_module.escape(str(element), quote=True)
-                element.replace_with(escaped_text)
+        # Note: Removed aggressive HTML escaping that was breaking formatted content
+        # BeautifulSoup handles entities correctly, no need to re-escape everything
 
         return str(soup)
+
+    def _convert_markdown_to_html(self, markdown_text: str) -> str:
+        """Convert basic markdown syntax to HTML"""
+        import re
+
+        html = markdown_text
+
+        # Convert headers (must be done before other conversions)
+        html = re.sub(r'^### (.+)$', r'<h3>\1</h3>', html, flags=re.MULTILINE)
+        html = re.sub(r'^## (.+)$', r'<h2>\1</h2>', html, flags=re.MULTILINE)
+        html = re.sub(r'^# (.+)$', r'<h1>\1</h1>', html, flags=re.MULTILINE)
+
+        # Convert links [text](url) to <a href="url">text</a>
+        html = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', html)
+
+        # Convert bold **text** to <strong>text</strong>
+        html = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', html)
+
+        # Convert italic *text* to <em>text</em>
+        html = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', html)
+
+        # Convert bullet lists - → <li>
+        lines = html.split('\n')
+        in_list = False
+        result = []
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('- ') or stripped.startswith('* '):
+                if not in_list:
+                    result.append('<ul>')
+                    in_list = True
+                result.append(f'<li>{stripped[2:]}</li>')
+            else:
+                if in_list:
+                    result.append('</ul>')
+                    in_list = False
+                result.append(line)
+
+        if in_list:
+            result.append('</ul>')
+
+        html = '\n'.join(result)
+
+        # Convert paragraphs (double newlines) to <p> tags
+        # But don't wrap block elements
+        paragraphs = html.split('\n\n')
+        formatted_paras = []
+        for para in paragraphs:
+            para = para.strip()
+            if para:
+                # Check if it's already a block element
+                if para.startswith(('<h1>', '<h2>', '<h3>', '<ul>', '<ol>', '<div>')):
+                    formatted_paras.append(para)
+                else:
+                    # Regular paragraph - wrap in <p> and convert single newlines to <br>
+                    para = para.replace('\n', '<br>')
+                    formatted_paras.append(f'<p>{para}</p>')
+
+        return '\n'.join(formatted_paras)
 
     def generate_html_report(
         self,
@@ -192,7 +247,32 @@ li { margin-bottom: 6px; }
         try:
             template = self._load_template()
 
-            # Clean content
+            # 🔧 FIX: Detect and convert markdown to HTML
+            # Check if content looks like markdown (has ## headers, [](links), etc.)
+            has_markdown_headers = '##' in content or '###' in content
+            has_markdown_links = '](' in content
+            has_markdown_formatting = '**' in content or content.count('*') > 2
+            has_markdown_lists = '\n- ' in content or '\n* ' in content
+
+            is_markdown = has_markdown_headers or has_markdown_links or has_markdown_formatting or has_markdown_lists
+
+            if is_markdown:
+                # Convert markdown to HTML
+                content = self._convert_markdown_to_html(content)
+            elif not ('<' in content and '>' in content):
+                # Plain text - convert newlines to paragraphs
+                import html as html_module
+                paragraphs = content.strip().split('\n\n')
+                formatted_content = ""
+                for para in paragraphs:
+                    if para.strip():
+                        # Escape HTML entities and convert single newlines to <br>
+                        escaped_para = html_module.escape(para.strip())
+                        escaped_para = escaped_para.replace('\n', '<br>')
+                        formatted_content += f"<p>{escaped_para}</p>\n"
+                content = formatted_content
+
+            # Clean content (only for HTML content)
             content = self._clean_html_content(content)
 
             # Prepare disclaimer

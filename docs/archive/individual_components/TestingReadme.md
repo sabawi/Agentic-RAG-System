@@ -78,7 +78,7 @@ This directory contains comprehensive tests for the Agentic RAG System FastAPI s
 ### Prerequisites
 ```bash
 # Activate virtual environment
-source venv_fastapi/bin/activate
+source venv/bin/activate
 
 # Ensure server is running
 ./start_complete_server.sh

@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.2.90
+# Agentic-RAG Server v1.0.2.98
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, vision capabilities, intelligent email management, and **extensible plugin system**.
 
-[![Version](https://img.shields.io/badge/version-1.0.2.90-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.2.90)
+[![Version](https://img.shields.io/badge/version-1.0.2.98-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.2.98)
 [![Python](https://img.shields.io/badge/python-3.8+-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)

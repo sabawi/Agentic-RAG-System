@@ -13,12 +13,12 @@ if [ ! -f "fastapi_server_complete.py" ]; then
 fi
 
 # Activate virtual environment
-if [ ! -d "venv_fastapi" ]; then
+if [ ! -d "venv" ]; then
     echo "❌ Error: Virtual environment not found. Run ./setup_fastapi.sh first"
     exit 1
 fi
 
-source venv_fastapi/bin/activate
+source venv/bin/activate
 
 # Check if Ollama is running
 echo "🔍 Checking Ollama service..."

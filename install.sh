@@ -28,7 +28,7 @@ AUTO_UPGRADE=false  # For non-interactive upgrades
 UPGRADE_STRATEGY=""  # "safe" or "stash" for automated upgrades
 
 # Required Ollama models
-REQUIRED_MODELS=("qwen3:8b" "qwen2.5vl:3b" "bakllava:latest")
+REQUIRED_MODELS=("deepseek-v3.1:671b-cloud" "qwen3:8b" "qwen2.5vl:3b" "bakllava:latest")
 
 # System dependencies
 SYSTEM_DEPS=("tesseract-ocr" "wkhtmltopdf" "build-essential" "python3-dev" "python3-venv" "curl" "git")
@@ -493,7 +493,7 @@ setup_virtual_environment() {
     log_header "Virtual Environment Setup"
     
     # Find existing virtual environment or create new one
-    VENV_NAMES=("venv_fastapi" "venv" ".venv" "env")
+    VENV_NAMES=("venv" ".venv" "env")
     VENV_DIR=""
     
     for venv_name in "${VENV_NAMES[@]}"; do
@@ -505,7 +505,7 @@ setup_virtual_environment() {
     done
     
     if [ -z "$VENV_DIR" ]; then
-        VENV_DIR="venv_fastapi"
+        VENV_DIR="venv"
         execute_command "python3 -m venv $VENV_DIR" "Creating virtual environment: $VENV_DIR"
     fi
     
@@ -725,7 +725,7 @@ verify_installation() {
     local verification_failed=false
     
     # Check virtual environment
-    if [ -n "$VIRTUAL_ENV" ] || [ -d "venv_fastapi" ] || [ -d "venv" ]; then
+    if [ -n "$VIRTUAL_ENV" ] || [ -d "venv" ]; then
         log_success "Virtual environment: OK"
     else
         log_error "Virtual environment: Missing"

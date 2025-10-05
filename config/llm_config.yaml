@@ -38,12 +38,12 @@ llm:
   primary:
     type: ollama
     config:
-      model: qwen3:8b
+      model: deepseek-v3.1:671b-cloud
       timeout: 3600  # 60 minutes for local models with large contexts
-      context_window_size: 8192
+      context_window_size: 32768  # Increased from 8192 to support comprehensive document searches
       temperature: 0.7
       num_predict: 16384
-      max_tokens: 8192
+      max_tokens: 32768  # Increased to match context_window_size
       base_url: http://127.0.0.1:11434
       api_key: null
       stream: true

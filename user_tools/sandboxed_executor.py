@@ -97,7 +97,7 @@ class SandboxedExecutorTool(BaseUserTool):
                 },
                 "filename": {
                     "type": "string",
-                    "description": "Filename for file operations (for create_file, append_file, read_file, delete_file, run_code actions)"
+                    "description": "Relative path to file within sandbox (e.g., 'script.py' or 'data/report.txt'). DO NOT include 'sandbox_workspace/' prefix as files are automatically created in the sandbox directory."
                 },
                 "content": {
                     "type": "string",
@@ -755,7 +755,8 @@ This is a secure sandboxed environment for code execution and system commands.
             filename = kwargs.get("filename", "").strip()
             content = kwargs.get("content", "")
             convert_to_pdf = kwargs.get("convert_to_pdf", False)
-            
+            skip_report_format = kwargs.get("skip_report_format", False)  # For raw LLM content
+
             # 🚀 PHASE 1 ENHANCEMENT: Support custom directory
             custom_directory = kwargs.get("directory", None)
             verify_location = kwargs.get("verify_location", True)
@@ -801,7 +802,7 @@ This is a secure sandboxed environment for code execution and system commands.
             return await self._create_real_md_file(filename, content)
         elif filename_lower.endswith('.txt'):
             print("💥💥💥 _CREATE_FILE: Detected .txt extension -> calling _create_real_txt_file")
-            return await self._create_real_txt_file(filename, content)
+            return await self._create_real_txt_file(filename, content, skip_report_format=skip_report_format)
         else:
             print("💥💥💥 _CREATE_FILE: ❌ No file type auto-detection matched -> continuing to regular file creation")
         
@@ -1270,21 +1271,27 @@ This is a secure sandboxed environment for code execution and system commands.
             print(f"❌ Markdown creation error: {e}")
             return {"success": False, "error": f"Markdown creation error: {str(e)}", "result": None}
     
-    async def _create_real_txt_file(self, filename: str, content: str) -> Dict[str, Any]:
-        """Create a clean, properly formatted text file"""
+    async def _create_real_txt_file(self, filename: str, content: str, skip_report_format: bool = False) -> Dict[str, Any]:
+        """Create a clean, properly formatted text file
+
+        Args:
+            filename: Name of file to create
+            content: File content
+            skip_report_format: If True, write raw content without report wrapper
+        """
         try:
             print(f"🔧 AUTO-TXT: Detected .txt request, creating clean text file")
-            
+
             # Validate path
             is_valid, file_path = self._validate_path(filename)
             if not is_valid:
                 return {"success": False, "error": file_path, "result": None}
-            
+
             # Create parent directories if needed
             Path(file_path).parent.mkdir(parents=True, exist_ok=True)
-            
+
             # Clean and format text content
-            clean_content = self._clean_text_content(content)
+            clean_content = self._clean_text_content(content, skip_report_format=skip_report_format)
             
             # Write text file
             with open(file_path, 'w', encoding='utf-8') as f:
@@ -1574,29 +1581,65 @@ This is a secure sandboxed environment for code execution and system commands.
         """Format content for use with shared HTML template"""
         import re
         import html
-        
-        # FIRST: Escape HTML entities to prevent injection and display issues
-        body = html.escape(content, quote=True)
-        
+
+        # 🌐 DETECT WEB ARTICLE CONTENT: Check if this is formatted output from lookup_website
+        is_web_article = ('SOURCE BLOCK' in content and '═══' in content) or \
+                        ('📄 SOURCE BLOCK' in content) or \
+                        ('🔗 MANDATORY CITATION URL:' in content)
+
+        if is_web_article:
+            # Special handling for web article content
+            return self._format_web_article_content(content)
+
+        # 📝 DETECT CREATIVE/NARRATIVE CONTENT: Check if this is a story or creative writing
+        # Creative content has narrative elements and shouldn't be HTML-escaped
+        creative_indicators = [
+            # Story structure indicators
+            content.count('\n\n') > 3,  # Multiple paragraphs
+            len(content) > 500,  # Substantial length
+            # Narrative style indicators (past tense verbs common in stories)
+            any(word in content.lower() for word in [' was ', ' were ', ' had ', ' would ']),
+            # No technical/data markers
+            not any(marker in content for marker in ['```', 'http://', 'https://', '==', '```'])
+        ]
+        is_creative_content = sum(creative_indicators) >= 2
+
+        # FIRST: Handle HTML entities for creative vs technical content
+        if is_creative_content:
+            # Creative content: UNESCAPE any existing HTML entities, then only escape <>&
+            # This fixes cases where content already has &quot; or &#x27; from previous processing
+            body = html.unescape(content)  # Convert &quot; → " and &#x27; → '
+
+            # Now only escape the minimal set: <>&
+            # Do in correct order to avoid double-escaping
+            body = body.replace('<', '&lt;')
+            body = body.replace('>', '&gt;')
+            # Only escape & if not part of an entity (though there shouldn't be any after unescape)
+            import re
+            body = re.sub(r'&(?![a-zA-Z]+;|#[0-9]+;|#x[0-9a-fA-F]+;)', '&amp;', body)
+        else:
+            # Technical/data content: full HTML escaping
+            body = html.escape(content, quote=True)
+
         # THEN: Convert markdown-like elements to HTML (now working on escaped content)
-        
+
         # Convert headers
         body = re.sub(r'^# (.+)$', r'<h1>\1</h1>', body, flags=re.MULTILINE)
         body = re.sub(r'^## (.+)$', r'<h2>\1</h2>', body, flags=re.MULTILINE)
         body = re.sub(r'^### (.+)$', r'<h3>\1</h3>', body, flags=re.MULTILINE)
-        
+
         # Convert bold and italic
         body = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', body)
         body = re.sub(r'\*(.+?)\*', r'<em>\1</em>', body)
-        
+
         # Enhanced code block processing
         body = self._process_html_code_blocks(body)
-        
-        # Convert lists (basic) 
+
+        # Convert lists (basic)
         lines = body.split('\n')
         in_list = False
         processed_lines = []
-        
+
         for line in lines:
             stripped = line.strip()
             if stripped.startswith('- ') or stripped.startswith('* '):
@@ -1617,17 +1660,289 @@ This is a secure sandboxed environment for code execution and system commands.
                     processed_lines.append(f'<p>{stripped}</p>')
                 else:
                     processed_lines.append('<br>')
-        
+
         if in_list:
             processed_lines.append('</ul>')
-        
+
         body = '\n'.join(processed_lines)
-        
+
         # Remove empty paragraphs
         body = re.sub(r'<p></p>', '', body)
-        
+
         return body
-        
+
+    def _format_web_article_content(self, content: str) -> str:
+        """Format web article content from lookup_website for clean HTML display"""
+        import re
+        import html
+
+        # Extract key components from source block format
+        lines = content.split('\n')
+        formatted_parts = []
+
+        # Extract metadata
+        article_url = None
+        article_title = None
+        publish_date = None
+        author = None
+        article_content = []
+        in_content = False
+
+        for line in lines:
+            if '🔗 MANDATORY CITATION URL:' in line:
+                article_url = line.split('🔗 MANDATORY CITATION URL:')[-1].strip()
+            elif line.startswith('Title:'):
+                article_title = line.split('Title:', 1)[-1].strip()
+            elif '📅 Published:' in line:
+                publish_date = line.split('📅 Published:')[-1].strip()
+            elif line.startswith('Author:') or line.startswith('By '):
+                author = line.split('Author:', 1)[-1].strip() if 'Author:' in line else line.replace('By ', '', 1).strip()
+            elif line.startswith('Published:') and not publish_date:
+                # Extract date from "Published: YYYY-MM-DD" format
+                date_match = re.search(r'Published:\s*(\d{4}-\d{2}-\d{2})', line)
+                if date_match:
+                    publish_date = date_match.group(1)
+            elif line.startswith('CONTENT:') or line.startswith('Content:'):
+                in_content = True
+                continue
+            elif in_content and not line.startswith('═') and line.strip():
+                article_content.append(line)
+
+        # 🧹 CLEAN CONTENT: Filter out ads and promotional content
+        cleaned_content = self._filter_promotional_content(article_content)
+
+        # Build clean HTML structure
+        if article_title:
+            formatted_parts.append(f'<div class="article-header">')
+            formatted_parts.append(f'<h1 class="article-title">{html.escape(article_title)}</h1>')
+
+            if author or publish_date:
+                formatted_parts.append(f'<div class="article-meta">')
+                if author:
+                    formatted_parts.append(f'<span class="author">By {html.escape(author)}</span>')
+                if publish_date:
+                    formatted_parts.append(f'<span class="date">{html.escape(publish_date)}</span>')
+                formatted_parts.append(f'</div>')
+
+            if article_url:
+                formatted_parts.append(f'<div class="article-source"><a href="{html.escape(article_url)}" target="_blank">View Original Article</a></div>')
+
+            formatted_parts.append(f'</div>')
+
+        # Format article content - IMPROVED paragraph and heading detection
+        if cleaned_content:
+            formatted_parts.append(f'<div class="article-content">')
+
+            # Process content with intelligent paragraph breaks
+            processed_html = self._process_article_paragraphs(cleaned_content)
+            formatted_parts.append(processed_html)
+
+            formatted_parts.append(f'</div>')
+
+        # Add custom CSS for article styling
+        css_block = '''
+<style>
+.article-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e0e0e0;
+}
+.article-title {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: #1a1a1a;
+}
+.article-meta {
+    font-size: 0.9rem;
+    color: #666;
+    margin: 0.5rem 0;
+}
+.article-meta .author {
+    margin-right: 1rem;
+    font-style: italic;
+}
+.article-meta .date {
+    color: #999;
+}
+.article-source {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+}
+.article-source a {
+    color: #4a90e2;
+    text-decoration: none;
+}
+.article-source a:hover {
+    text-decoration: underline;
+}
+.article-content {
+    margin-top: 2rem;
+    line-height: 1.7;
+}
+.article-content p {
+    margin: 1rem 0;
+    text-align: justify;
+}
+.section-heading {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 1.5rem 0 0.75rem 0;
+    color: #2a2a2a;
+}
+</style>
+'''
+
+        return css_block + '\n'.join(formatted_parts)
+
+    def _filter_promotional_content(self, lines: list) -> list:
+        """Filter out ads, promotional content, and navigation elements"""
+        import re
+
+        # Patterns that indicate promotional/ad content
+        skip_patterns = [
+            r'subscribe',
+            r'get the app',
+            r'download',
+            r'sign up',
+            r'join (now|today|free)',
+            r'upgrade to',
+            r'premium',
+            r'become a member',
+            r'your (brain|mind) (comes up|will)',
+            r'please get comfortable',
+            r'be bored more often',
+            r'you always own',
+            r'this only happens',
+            r'donald trump',
+            r'app for independent',
+            r'editorial control',
+            r'gatekeepers',
+            r'(listen|paid|saved|history)',
+            r'^(all|listen|paid|saved|history|sort by|priority|recent)$',
+            r'thanks for reading',
+            r'(free|paid)\s+(subscription|tier)',
+        ]
+
+        filtered = []
+        skip_next = 0
+
+        for i, line in enumerate(lines):
+            if skip_next > 0:
+                skip_next -= 1
+                continue
+
+            line_lower = line.lower().strip()
+
+            # Skip empty lines
+            if not line_lower:
+                filtered.append(line)
+                continue
+
+            # Check if line matches promotional patterns
+            is_promo = any(re.search(pattern, line_lower, re.IGNORECASE) for pattern in skip_patterns)
+
+            # Skip very short lines that might be navigation
+            if len(line_lower) < 4 and not line_lower.endswith('.'):
+                continue
+
+            # Skip if promotional
+            if is_promo:
+                # Skip this line and potentially the next few if they're short
+                skip_next = 1 if len(line_lower) < 50 else 0
+                continue
+
+            filtered.append(line)
+
+        return filtered
+
+    def _process_article_paragraphs(self, lines: list) -> str:
+        """Process article content with proper paragraph breaks and heading detection"""
+        import re
+        import html
+
+        result = []
+        current_paragraph = []
+
+        # Patterns for section headings
+        heading_patterns = [
+            r'^[A-Z][a-z]+(?: [A-Z][a-z]+)*:',  # "Title Case Word:"
+            r'^[A-Z][A-Z\s]+$',  # "ALL CAPS"
+            r'^\d+\.\s+[A-Z]',  # "1. Title"
+        ]
+
+        # Common academic/article section titles
+        section_titles = {
+            'introduction', 'conclusion', 'abstract', 'summary', 'background',
+            'methods', 'methodology', 'results', 'discussion', 'references',
+            'acknowledgments', 'appendix', 'notes'
+        }
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+
+            if not stripped:
+                # Empty line - paragraph break
+                if current_paragraph:
+                    para_text = ' '.join(current_paragraph)
+                    result.append(f'<p>{html.escape(para_text)}</p>')
+                    current_paragraph = []
+                continue
+
+            # Check if this is a heading
+            is_heading = False
+
+            # Method 1: Pattern matching
+            if any(re.match(pattern, stripped) for pattern in heading_patterns):
+                is_heading = True
+
+            # Method 2: Check against known section titles
+            if stripped.lower().rstrip(':') in section_titles:
+                is_heading = True
+
+            # Method 3: Short line without ending punctuation (but not too short)
+            if 10 < len(stripped) < 80 and not stripped[-1] in '.!?,;:)"\'':
+                # Check if next line starts with capital (continuation check)
+                next_line = lines[i+1].strip() if i+1 < len(lines) else ''
+                if next_line and (next_line[0].isupper() or not next_line):
+                    is_heading = True
+
+            # Method 4: Line ends with colon (section intro)
+            if stripped.endswith(':') and len(stripped) < 100:
+                is_heading = True
+
+            if is_heading:
+                # Flush current paragraph
+                if current_paragraph:
+                    para_text = ' '.join(current_paragraph)
+                    result.append(f'<p>{html.escape(para_text)}</p>')
+                    current_paragraph = []
+                # Add heading
+                result.append(f'<h2 class="section-heading">{html.escape(stripped)}</h2>')
+            else:
+                # Regular line - check if it's a continuation or new paragraph
+                # If line starts with capital and previous paragraph exists, might be new paragraph
+                if current_paragraph and len(' '.join(current_paragraph)) > 200:
+                    # Current paragraph is getting long
+                    if stripped[0].isupper() and not any(word in stripped[:30].lower() for word in ['however', 'therefore', 'furthermore', 'moreover', 'additionally']):
+                        # Might be new paragraph - flush current
+                        para_text = ' '.join(current_paragraph)
+                        result.append(f'<p>{html.escape(para_text)}</p>')
+                        current_paragraph = [stripped]
+                    else:
+                        # Continuation
+                        current_paragraph.append(stripped)
+                else:
+                    # Add to current paragraph
+                    current_paragraph.append(stripped)
+
+        # Flush final paragraph
+        if current_paragraph:
+            para_text = ' '.join(current_paragraph)
+            result.append(f'<p>{html.escape(para_text)}</p>')
+
+        return '\n'.join(result)
+
     def _convert_to_html_fallback(self, content: str, title: str) -> str:
         """Fallback HTML generation method (original implementation)"""
         import re
@@ -1908,17 +2223,26 @@ This is a secure sandboxed environment for code execution and system commands.
         
         return False
     
-    def _clean_text_content(self, content: str) -> str:
-        """Clean and format text content for better readability with code block support"""
+    def _clean_text_content(self, content: str, skip_report_format: bool = False) -> str:
+        """Clean and format text content for better readability with code block support
+
+        Args:
+            content: Text content to clean
+            skip_report_format: If True, skip report wrapper and return raw content
+        """
         import re
-        
+
+        # If skip_report_format, return content with minimal cleanup
+        if skip_report_format:
+            return content.strip()
+
         lines = content.split('\n')
         cleaned_lines = []
-        
+
         # Enhanced code block detection for text
         in_code_block = False
         code_block_lines = []
-        
+
         # Add header with timestamp
         cleaned_lines.extend([
             '=' * 70,

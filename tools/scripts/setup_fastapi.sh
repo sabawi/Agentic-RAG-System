@@ -18,14 +18,14 @@ if [ ! -f "fastapi_server_complete.py" ]; then
 fi
 
 # Create virtual environment if it doesn't exist
-if [ ! -d "venv_fastapi" ]; then
+if [ ! -d "venv" ]; then
     echo "📦 Creating virtual environment..."
-    python3 -m venv venv_fastapi
+    python3 -m venv venv
 fi
 
 # Activate virtual environment
 echo "🔧 Activating virtual environment..."
-source venv_fastapi/bin/activate
+source venv/bin/activate
 
 # Upgrade pip
 echo "⬆️ Upgrading pip..."

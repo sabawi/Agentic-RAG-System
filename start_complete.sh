@@ -14,7 +14,7 @@ fi
 echo "🚀 Starting FastAPI Complete Server with Optimizations..."
 
 # Activate virtual environment and start server
-source venv_fastapi/bin/activate
+source venv/bin/activate
 
 # 🎯 DEFAULT OPTIMIZATIONS ENABLED
 # These optimizations are enabled by default for production performance

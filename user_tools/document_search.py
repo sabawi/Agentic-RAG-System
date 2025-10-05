@@ -32,7 +32,7 @@ class DocumentSearchTool(BaseUserTool):
     
     @property
     def description(self) -> str:
-        return """Search through PRE-INDEXED document database to find relevant information. This tool searches a database of documents that have been previously indexed and stored. IMPORTANT: This tool CANNOT read individual files by path. Use 'sandboxed_executor' with 'read_file' action to read specific files like /path/to/file.pdf. Use document_search only when you need to find information across multiple documents in the indexed collection. TIP: When extracting comprehensive lists or detailed content from documents, request max_results between 15-20 to ensure complete coverage."""
+        return """Search indexed document database for relevant information. This tool searches documents from watched directories including: /home/sabawi/Documents (personal documents, resumes, PDFs), /var/www/html/silicon_dreams/stories (story collection), and /home/sabawi/Development/flaskserver/docs (technical documentation). Use this tool to retrieve content from ANY document in these directories - simply describe what you're looking for (e.g., 'resume', 'Al Sabawi resume', 'cover letter', etc.) and the tool will semantically search indexed content. For files OUTSIDE watched directories OR within sandbox workspace, use 'sandboxed_executor' with 'read_file' action. TIP: When extracting comprehensive information from documents, request max_results between 15-20 to ensure complete coverage."""
     
     @property
     def parameters(self) -> dict:

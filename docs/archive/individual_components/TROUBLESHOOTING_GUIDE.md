@@ -55,7 +55,7 @@ pkill -f fastapi_server_complete.py
 
 **C. Check dependencies:**
 ```bash
-source venv_fastapi/bin/activate
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 

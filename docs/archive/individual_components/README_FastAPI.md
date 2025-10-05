@@ -34,8 +34,8 @@ cd /home/sabawi/Development/flaskserver
 ### Option 2: Manual Setup
 ```bash
 # Create virtual environment
-python3 -m venv venv_fastapi
-source venv_fastapi/bin/activate
+python3 -m venv venv
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements_fastapi.txt

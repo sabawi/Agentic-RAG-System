@@ -1,7 +1,10 @@
 # 🧠 Arbitrator System Architecture Documentation
 
 ## **Overview**
-The Arbitrator System is a critical component that eliminates hallucinated responses by detecting tool execution failures and intelligently correcting them before results reach the Primary LLM.
+The Arbitrator System is a critical component of the Agentic-RAG architecture that serves two primary functions:
+
+1. **Error Detection & Correction**: Eliminates hallucinated responses by detecting tool execution failures and intelligently correcting them before results reach the Primary LLM
+2. **Tool Chaining & Data Flow**: Enables automatic tool chaining by providing successful tool results as context when regenerating failed tools, allowing seamless data flow between sequential tool calls
 
 ## **🔄 Complete Data Flow Architecture**
 
@@ -150,6 +153,132 @@ Execution completed with return code: {result_json['return_code']}"""
             final_results[task_index] = f"Tool: {tool_name}\nResult: {formatted_result}\n\n"
     return final_results
 ```
+
+## **🔗 Tool Chaining Architecture (Agentic Workflow)**
+
+### **Core Principle: Automatic Data Flow Between Tools**
+The Arbitrator enables seamless tool chaining by making successful tool results available when regenerating failed tools. This allows complex multi-step workflows without manual parameter passing.
+
+### **How Tool Chaining Works**
+
+```
+User Request: "Fetch article from URL, save to file, email the file"
+           ↓
+┌─────────────────────────────────────────────────────────────┐
+│ PHASE 1: Initial Tool Execution                            │
+├─────────────────────────────────────────────────────────────┤
+│ Tool 1: lookup_website(url="https://...")                  │
+│         → SUCCESS: Returns 10,219 chars of article content │
+│                                                              │
+│ Tool 2: sandboxed_executor(action="create_file",           │
+│                            content="{{WEBPAGE_CONTENT}}")   │
+│         → FAILURE: Content is placeholder, not real data   │
+│                                                              │
+│ Tool 3: secure_email_sender(attachments="file.html")       │
+│         → NOT EXECUTED: Waiting for Tool 2                 │
+└─────────────────────────────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────────────────────────────┐
+│ PHASE 2: Arbitrator Validation & Chaining                  │
+├─────────────────────────────────────────────────────────────┤
+│ Arbitrator analyzes results:                                │
+│ ✅ lookup_website: GOOD (has article content)              │
+│ ❌ sandboxed_executor: BAD (placeholder content)           │
+│ ⏸️  secure_email_sender: PENDING                           │
+│                                                              │
+│ Arbitrator builds regeneration context:                     │
+│ ┌─────────────────────────────────────────────────┐        │
+│ │ USER PROMPT: "Fetch article, save, email"       │        │
+│ │                                                  │        │
+│ │ SUCCESSFUL TOOLS (for context):                 │        │
+│ │ ✅ lookup_website: <10,219 chars of content>    │        │
+│ │                                                  │        │
+│ │ FAILED TOOLS REQUIRING REGENERATION:            │        │
+│ │ ❌ sandboxed_executor:                          │        │
+│ │    Error: Content is placeholder                │        │
+│ │    Feedback: Use actual content from lookup     │        │
+│ │                                                  │        │
+│ │ 🎯 REGENERATION INSTRUCTIONS:                   │        │
+│ │ Fix parameters using successful tool results    │        │
+│ └─────────────────────────────────────────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────────────────────────────┐
+│ PHASE 3: Intelligent Regeneration                          │
+├─────────────────────────────────────────────────────────────┤
+│ Tool Calling LLM receives context and regenerates:          │
+│                                                              │
+│ sandboxed_executor(                                         │
+│   action="create_file",                                     │
+│   filename="article.html",                                  │
+│   content="<actual 10,219 chars from lookup_website>"       │
+│ )                                                            │
+│         → SUCCESS: File created with real content           │
+└─────────────────────────────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────────────────────────────┐
+│ PHASE 4: Continue Chain                                    │
+├─────────────────────────────────────────────────────────────┤
+│ Tool 3: secure_email_sender(attachments="article.html")    │
+│         → SUCCESS: Email sent with attachment              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### **Key Implementation Details**
+
+**Location**: `fastapi_server_complete.py:4488-4519` (`_build_regeneration_context()`)
+
+```python
+# Arbitrator provides successful tool results to regeneration LLM
+for i, (tool_name, result) in enumerate(zip(tools_called, tools_results_list)):
+    if not any(c["task_index"] == i for c in retry_candidates):
+        context += f"""
+✅ {tool_name}: {result}
+"""
+
+context += f"""
+🎯 REGENERATION INSTRUCTIONS:
+2. CORRECT: Fix the parameters using information from successful tools
+"""
+```
+
+### **Why This Matters for Agentic Workflows**
+
+1. **No Manual Chaining Required**: Developers don't need to explicitly pass data between tools
+2. **LLM-Driven Intelligence**: The Tool Calling LLM automatically extracts needed data from successful results
+3. **Robust Error Recovery**: If chaining fails, Arbitrator provides context for intelligent retry
+4. **Scalable**: Works for chains of any length (lookup → process → transform → save → email, etc.)
+
+### **Example Chaining Scenarios**
+
+**Scenario 1: Web Content → File → Email**
+```
+lookup_website() → [content] → sandboxed_executor(content=<from lookup>) →
+                                → secure_email_sender(attachment=<from sandboxed>)
+```
+
+**Scenario 2: Document Search → Code Generation → Execution**
+```
+document_search() → [code template] → sandboxed_executor(code=<from search>) →
+                                     → sandboxed_executor(execute=<previous file>)
+```
+
+**Scenario 3: Image Analysis → Report → Storage**
+```
+image_to_text() → [analysis] → sandboxed_executor(content=<from analysis>) →
+                              → document_interrogator(index=<from sandboxed>)
+```
+
+### **Arbitrator's Role Summary**
+
+| Function | Purpose | Benefit |
+|----------|---------|---------|
+| **Success Tracking** | Records all successful tool outputs | Enables data availability for chaining |
+| **Context Building** | Provides successful results to regeneration LLM | LLM can extract needed data automatically |
+| **Intelligent Retry** | Suggests using successful tool data | Fixes parameter errors caused by placeholders |
+| **Workflow Continuity** | Ensures failed steps don't break entire chain | Robust multi-step operations |
+
+---
 
 ## **🚨 Critical Bug Fixed: sandboxed_executor Args Parameter**
 

@@ -2961,16 +2961,16 @@ def _build_enhanced_primary_system_prompt(original_system, tools_were_executed=F
     enhanced_instructions = """
 
 CRITICAL WORKFLOW INSTRUCTIONS:
-- Tools have already been executed and completed their tasks
-- Your role is to REPORT and ANALYZE the results, NOT to redo the work
-- DO NOT recreate, rewrite, or duplicate what the tools have already accomplished
-- Focus on summarizing what was accomplished and suggesting next steps
-- Present the results clearly and offer analysis or follow-up options
+- Tools have already been executed and their work is complete
+- For DATA-GATHERING tools (search, news, research, wikipedia, etc.): USE the tool results to comprehensively fulfill the user's original request with all details they asked for
+- For ACTION tools (email sending, chart creation, file operations): Simply confirm completion without redoing the action
+- Be thorough and detailed when presenting information from data-gathering tools
+- Organize and analyze the data to directly address what the user requested
 
 TOOLS EXECUTION SUMMARY:
 """ + tools_results_summary + """
 
-Remember: The work is DONE. Your job is to present the results and provide insights, not to start over.
+Remember: Use data from search/research tools to create comprehensive responses. Only action tools need simple confirmation.
 """
     
     # Combine base system + user system (if provided) + enhanced instructions
@@ -6599,9 +6599,11 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {result.get('error')}\n\n"
                 else:
                     logger.error(f"❌ POST-LLM: Could not find sandboxed_executor tool instance")
-            
-            # secure_email_sender: No special processing - use original tool-calling approach
-                
+
+            elif tool_name == "secure_email_sender":
+                # Detect HTML email request and execute email sending
+                html_email_request = await _detect_html_email_request(tools_results, user_prompt)
+
                 if html_email_request:
                     logger.info(f"🎯 POST-LLM HTML EMAIL: Using fallback detection")
                     # Generate complete HTML file using HTMLReportGenerator
@@ -8748,253 +8750,253 @@ END OF CONTEXT
                                         except:
                                             pass
                         
-                        # Output condition: PRIMARY LLM completed
-                        llm_duration = time.time() - llm_start_time
-                        logger.info(f"🤖 PRIMARY LLM: COMPLETE | {llm_duration:.2f}s | Output: {len(complete_llm_response)} chars")
+                    # Output condition: PRIMARY LLM completed
+                    llm_duration = time.time() - llm_start_time
+                    logger.info(f"🤖 PRIMARY LLM: COMPLETE | {llm_duration:.2f}s | Output: {len(complete_llm_response)} chars")
                         
-                        # Post-processing phase
-                        logger.info(f"🔍🔍🔍 CRITICAL: Reached post-processing section!")
-                        logger.info(f"🔍 PRE-POST-PROCESSING: email_intercepted={email_intercepted}")
-                        logger.info(f"🔍 PRE-POST-PROCESSING: intercepted_email_params={intercepted_email_params}")
+                    # Post-processing phase
+                    logger.info(f"🔍🔍🔍 CRITICAL: Reached post-processing section!")
+                    logger.info(f"🔍 PRE-POST-PROCESSING: email_intercepted={email_intercepted}")
+                    logger.info(f"🔍 PRE-POST-PROCESSING: intercepted_email_params={intercepted_email_params}")
                         
-                        # 🎯 NEW POST-PROCESSING: Handle intercepted email calls first
-                        if email_intercepted:
-                            # 🚨 CRITICAL FIX: Block email execution for programming tasks and fabricated emails
-                            should_block = False
+                    # 🎯 NEW POST-PROCESSING: Handle intercepted email calls first
+                    if email_intercepted:
+                        # 🚨 CRITICAL FIX: Block email execution for programming tasks and fabricated emails
+                        should_block = False
                             
-                            # Block known problematic patterns
-                            if verification_result and verification_result.get('pattern') == 'programming_task':
-                                should_block = True
+                        # Block known problematic patterns
+                        if verification_result and verification_result.get('pattern') == 'programming_task':
+                            should_block = True
                                 
-                            # Block fabricated email addresses
-                            to_email = intercepted_email_params.get('to_email', '')
-                            fabricated_indicators = [
-                                'recipient@example.com', 'example@example.com', 'user@example.com',
-                                'test@test.com', 'demo@demo.com', '@example.'
-                            ]
+                        # Block fabricated email addresses
+                        to_email = intercepted_email_params.get('to_email', '')
+                        fabricated_indicators = [
+                            'recipient@example.com', 'example@example.com', 'user@example.com',
+                            'test@test.com', 'demo@demo.com', '@example.'
+                        ]
                             
-                            if any(indicator in to_email.lower() for indicator in fabricated_indicators):
-                                should_block = True
-                                logger.warning(f"🚨 FABRICATED EMAIL DETECTED: {to_email}")
+                        if any(indicator in to_email.lower() for indicator in fabricated_indicators):
+                            should_block = True
+                            logger.warning(f"🚨 FABRICATED EMAIL DETECTED: {to_email}")
                             
-                            if should_block:
-                                logger.warning(f"🛡️ PROGRAMMING TASK EMAIL BLOCK: Preventing fabricated email execution")
-                                logger.warning(f"🛡️ Blocked email params: {intercepted_email_params}")
-                                logger.warning(f"🛡️ Task pattern: {verification_result.get('pattern')} - {verification_result.get('reason')}")
-                                logger.info(f"🔍 POST-PROCESSING SKIPPED: Programming task email blocked")
-                            else:
-                                logger.info(f"📧 POST-LLM EMAIL: Processing deferred email")
-                                logger.info(f"📧 POST-LLM: Processing intercepted email call")
-                                logger.info(f"🎯 Complete LLM response length: {len(complete_llm_response)} characters")
-                            
-                                try:
-                                    logger.info(f"🔄 STEP 1: Extracting filename from intercepted parameters")
-                                    # Extract filename from intercepted parameters - DEFAULT TO HTML
-                                    attachments = intercepted_email_params.get('attachments', 'report.html')
-                                    logger.info(f"🔄 STEP 1A: Raw attachments = '{attachments}'")
-                                    
-                                    # Handle both list and string attachment formats
-                                    if isinstance(attachments, list):
-                                        filename = attachments[0] if attachments else 'report.html'
-                                        logger.info(f"🔄 STEP 1B: List format attachments, using first: '{filename}'")
-                                    elif isinstance(attachments, str):
-                                        if ',' in attachments:
-                                            filename = attachments.split(',')[0].strip()  # Take first file
-                                            logger.info(f"🔄 STEP 1C: Multiple attachments detected, using first: '{filename}'")
-                                        else:
-                                            filename = attachments.strip()
-                                            logger.info(f"🔄 STEP 1D: Single attachment: '{filename}'")
-                                    else:
-                                        filename = 'report.html'  # Fallback
-                                        logger.info(f"🔄 STEP 1E: Unknown attachment format, using fallback: '{filename}'")
-                                    
-                                    # Determine if PDF conversion is needed based on file extension
-                                    convert_to_pdf = filename.lower().endswith('.pdf')
-                                    logger.info(f"🔄 STEP 1F: File extension check - convert_to_pdf: {convert_to_pdf}")
-                                    
-                                    # Keep original filename - don't force PDF extension
-                                    logger.info(f"🔄 STEP 1G: Using original filename: '{filename}'")
-                                    
-                                    logger.info(f"🔄 STEP 2: About to create file with Primary LLM content")
-                                    
-                                    # Save Primary LLM response as native Markdown first
-                                    base_filename = filename.rsplit('.', 1)[0]  # Remove extension
-                                    markdown_filename = f"{base_filename}.md"
-                                    logger.info(f"📄 Creating Markdown file: {markdown_filename}")
-                                    
-                                    # Create Markdown file with Primary LLM content
-                                    md_result = await tool_manager.safe_function_call("sandboxed_executor", {
-                                        "action": "create_file",
-                                        "filename": markdown_filename,
-                                        "content": complete_llm_response.strip(),
-                                        "convert_to_pdf": False
-                                    })
-                                    
-                                    # Check if user requested a specific file type that should be preserved
-                                    original_ext = filename.lower().split('.')[-1] if '.' in filename else ''
-                                    preserve_original_format = original_ext in ['py', 'js', 'java', 'cpp', 'c', 'h', 'sql', 'sh', 'yaml', 'yml', 'json', 'xml', 'csv', 'txt']
-                                    
-                                    # CRITICAL FIX: Check if ANY file already exists from tool calling phase - REGARDLESS of extension
-                                    file_already_exists = False
-                                    existing_file_path = None
-                                    
-                                    # Get sandbox tool instance from user_tools
-                                    sandbox_tool = None
-                                    if hasattr(tool_manager, 'user_tools') and tool_manager.user_tools:
-                                        for tool in tool_manager.user_tools:
-                                            if tool.name == "sandboxed_executor":
-                                                sandbox_tool = tool
-                                                break
-                                    
-                                    if sandbox_tool and hasattr(sandbox_tool, 'sandbox_path'):
-                                        workspace_path = sandbox_tool.sandbox_path
-                                        full_path = workspace_path / filename
-                                        
-                                        if full_path.exists():
-                                            file_already_exists = True
-                                            existing_file_path = full_path
-                                            existing_size = full_path.stat().st_size
-                                            logger.info(f"🔒 EXISTING FILE DETECTED: {full_path} exists ({existing_size} bytes) - will preserve")
-                                        else:
-                                            logger.info(f"🔍 FILE CHECK: {full_path} does not exist - will create new")
-                                    else:
-                                        logger.warning(f"⚠️ Could not get sandbox tool instance for workspace path check")
-                                    
-                                    if file_already_exists:
-                                        # File already exists - ALWAYS preserve, regardless of extension or format
-                                        logger.info(f"🔒 PRESERVING EXISTING FILE: {existing_file_path} already exists from tool calling phase")
-                                        file_result = {"filename": filename, "preserved": True, "size_bytes": existing_size}
-                                    elif convert_to_pdf:
-                                        logger.info(f"📄 Creating PDF file for email: {filename}")
-                                        file_result = await tool_manager.safe_function_call("sandboxed_executor", {
-                                            "action": "create_file",
-                                            "filename": filename,
-                                            "content": complete_llm_response.strip(),
-                                            "convert_to_pdf": True
-                                        })
-                                    elif preserve_original_format:
-                                        # User requested a specific code/data file type - create it with LLM content
-                                        logger.info(f"📄 Creating preserved format file: {filename} (extension: {original_ext})")
-                                        file_result = await tool_manager.safe_function_call("sandboxed_executor", {
-                                            "action": "create_file",
-                                            "filename": filename,
-                                            "content": complete_llm_response.strip(),
-                                            "convert_to_pdf": False
-                                        })
-                                        # Keep original filename - don't change it
-                                    else:
-                                        # Create HTML version for email attachment (default behavior for reports)
-                                        html_filename = f"{base_filename}.html"
-                                        logger.info(f"📄 Creating HTML file for email: {html_filename}")
-                                        file_result = await tool_manager.safe_function_call("sandboxed_executor", {
-                                            "action": "create_file", 
-                                            "filename": html_filename,
-                                            "content": complete_llm_response.strip(),
-                                            "convert_to_pdf": False
-                                        })
-                                        # Update filename for email attachment
-                                        filename = html_filename
-                                    
-                                    logger.info(f"🔄 STEP 2A: File creation completed")
-                                    logger.info(f"📄 File creation result: {file_result}")
-                                    
-                                    logger.info(f"🔄 STEP 3: Checking file creation success")
-                                    # file_result is a string from safe_function_call, need to parse it if it's JSON
-                                    try:
-                                        if isinstance(file_result, str) and file_result.strip().startswith('{'):
-                                            file_result_dict = json.loads(file_result)
-                                            logger.info(f"🔄 STEP 3A-PARSE: Successfully parsed JSON file_result")
-                                        else:
-                                            file_result_dict = file_result
-                                            logger.info(f"🔄 STEP 3A-PARSE: Using file_result as-is (type: {type(file_result)})")
-                                    except json.JSONDecodeError as e:
-                                        logger.error(f"🔄 STEP 3A-PARSE: JSON parse failed: {e}, using raw result")
-                                        file_result_dict = file_result
-                                    
-                                    # Check for successful file creation (JSON result contains filename and success indicators)
-                                    file_success = (isinstance(file_result_dict, dict) and 
-                                                  file_result_dict.get("filename") and 
-                                                  (file_result_dict.get("pdf_generated") == True or 
-                                                   file_result_dict.get("html_generated") == True or
-                                                   file_result_dict.get("preserved") == True or
-                                                   file_result_dict.get("size_bytes", 0) > 0)) or "successfully created" in str(file_result).lower()
-                                    logger.info(f"🔄 STEP 3A: File success check result: {file_success}")
-                                    
-                                    if file_success:
-                                        logger.info(f"🔄 STEP 3A: File creation successful, proceeding to email")
-                                        # Update email params with the correct filename for attachment
-                                        updated_email_params = intercepted_email_params.copy()
-                                        
-                                        # 🚨 CRITICAL FIX: Preserve all attachments, don't overwrite with just first one
-                                        original_attachments = intercepted_email_params.get('attachments', '')
-                                        if isinstance(original_attachments, str) and ',' in original_attachments:
-                                            # Multiple attachments provided - preserve all of them
-                                            updated_email_params['attachments'] = original_attachments
-                                            logger.info(f"🔧 MULTI-ATTACHMENT FIX: Preserving all attachments: {original_attachments}")
-                                        else:
-                                            # Single attachment or file generation workflow - use processed filename
-                                            updated_email_params['attachments'] = filename
-                                        
-                                        # Ensure body is not empty - add fallback if missing
-                                        if not updated_email_params.get('body') or updated_email_params.get('body').strip() == '':
-                                            updated_email_params['body'] = f"Please find the attached file: {filename.split('/')[-1]}"
-                                            logger.info(f"🔄 STEP 4: Added fallback email body")
-                                        
-                                        logger.info(f"🔄 STEP 4: About to send email with updated attachment: {filename}")
-                                        logger.info(f"🔄 STEP 4: Email params: {updated_email_params}")
-                                        email_result = await tool_manager.safe_function_call("secure_email_sender", updated_email_params)
-                                        logger.info(f"🔄 STEP 4A: Email sending completed")
-                                        logger.info(f"📧 Email sent: {email_result}")
-                                        
-                                        # Add to stream response
-                                        logger.info(f"🔄 STEP 5: Adding completion message to stream")
-                                        yield f'data: {{"post_processing": "completed", "tools_executed": ["sandboxed_executor", "secure_email_sender"]}}\n\n'
-                                        logger.info(f"🚪 EXIT: Post-processing completed successfully")
-                                    else:
-                                        logger.error(f"❌ STEP 3B: File creation failed: {file_result}")
-                                        logger.info(f"🚪 EXIT: Post-processing failed at file creation")
-                                        
-                                except Exception as e:
-                                    logger.error(f"❌ Email post-processing error: {e}")
-                                    logger.error(f"❌ Exception traceback: {traceback.format_exc()}")
-                                    logger.info(f"🚪 EXIT: Post-processing failed with exception")
+                        if should_block:
+                            logger.warning(f"🛡️ PROGRAMMING TASK EMAIL BLOCK: Preventing fabricated email execution")
+                            logger.warning(f"🛡️ Blocked email params: {intercepted_email_params}")
+                            logger.warning(f"🛡️ Task pattern: {verification_result.get('pattern')} - {verification_result.get('reason')}")
+                            logger.info(f"🔍 POST-PROCESSING SKIPPED: Programming task email blocked")
                         else:
-                            logger.info(f"🔍 POST-PROCESSING SKIPPED: email_intercepted=False")
-                        
-                        # 🎯 POST-LLM AUTO-EXECUTION: Execute missing tools with complete content (legacy)
-                        logger.info(f"🔍 DEBUG: pending_auto_execution={pending_auto_execution}, verification_result={verification_result}")
-                        if pending_auto_execution and verification_result:
-                            logger.info(f"🎯 POST-LLM AUTO-EXECUTION: Primary LLM completed, executing missing tools")
+                            logger.info(f"📧 POST-LLM EMAIL: Processing deferred email")
+                            logger.info(f"📧 POST-LLM: Processing intercepted email call")
                             logger.info(f"🎯 Complete LLM response length: {len(complete_llm_response)} characters")
                             
                             try:
-                                # Execute missing tools with complete LLM response as content
-                                additional_results = await _execute_missing_tools_post_llm(
-                                    verification_result['missing_tools'], 
-                                    tool_manager, 
-                                    tools_results,
-                                    complete_llm_response,
-                                    user_prompt
-                                )
-                                logger.info(f"✅ POST-LLM AUTO-EXECUTION COMPLETED: {additional_results}")
-                                
-                                # Optionally stream completion notification
-                                completion_msg = json.dumps({
-                                    "post_processing": "completed",
-                                    "tools_executed": verification_result['missing_tools']
+                                logger.info(f"🔄 STEP 1: Extracting filename from intercepted parameters")
+                                # Extract filename from intercepted parameters - DEFAULT TO HTML
+                                attachments = intercepted_email_params.get('attachments', 'report.html')
+                                logger.info(f"🔄 STEP 1A: Raw attachments = '{attachments}'")
+                                    
+                                # Handle both list and string attachment formats
+                                if isinstance(attachments, list):
+                                    filename = attachments[0] if attachments else 'report.html'
+                                    logger.info(f"🔄 STEP 1B: List format attachments, using first: '{filename}'")
+                                elif isinstance(attachments, str):
+                                    if ',' in attachments:
+                                        filename = attachments.split(',')[0].strip()  # Take first file
+                                        logger.info(f"🔄 STEP 1C: Multiple attachments detected, using first: '{filename}'")
+                                    else:
+                                        filename = attachments.strip()
+                                        logger.info(f"🔄 STEP 1D: Single attachment: '{filename}'")
+                                else:
+                                    filename = 'report.html'  # Fallback
+                                    logger.info(f"🔄 STEP 1E: Unknown attachment format, using fallback: '{filename}'")
+                                    
+                                # Determine if PDF conversion is needed based on file extension
+                                convert_to_pdf = filename.lower().endswith('.pdf')
+                                logger.info(f"🔄 STEP 1F: File extension check - convert_to_pdf: {convert_to_pdf}")
+                                    
+                                # Keep original filename - don't force PDF extension
+                                logger.info(f"🔄 STEP 1G: Using original filename: '{filename}'")
+                                    
+                                logger.info(f"🔄 STEP 2: About to create file with Primary LLM content")
+                                    
+                                # Save Primary LLM response as native Markdown first
+                                base_filename = filename.rsplit('.', 1)[0]  # Remove extension
+                                markdown_filename = f"{base_filename}.md"
+                                logger.info(f"📄 Creating Markdown file: {markdown_filename}")
+                                    
+                                # Create Markdown file with Primary LLM content
+                                md_result = await tool_manager.safe_function_call("sandboxed_executor", {
+                                    "action": "create_file",
+                                    "filename": markdown_filename,
+                                    "content": complete_llm_response.strip(),
+                                    "convert_to_pdf": False
                                 })
-                                yield (completion_msg + '\n').encode()
-                                
+                                    
+                                # Check if user requested a specific file type that should be preserved
+                                original_ext = filename.lower().split('.')[-1] if '.' in filename else ''
+                                preserve_original_format = original_ext in ['py', 'js', 'java', 'cpp', 'c', 'h', 'sql', 'sh', 'yaml', 'yml', 'json', 'xml', 'csv', 'txt']
+                                    
+                                # CRITICAL FIX: Check if ANY file already exists from tool calling phase - REGARDLESS of extension
+                                file_already_exists = False
+                                existing_file_path = None
+                                    
+                                # Get sandbox tool instance from user_tools
+                                sandbox_tool = None
+                                if hasattr(tool_manager, 'user_tools') and tool_manager.user_tools:
+                                    for tool in tool_manager.user_tools:
+                                        if tool.name == "sandboxed_executor":
+                                            sandbox_tool = tool
+                                            break
+                                    
+                                if sandbox_tool and hasattr(sandbox_tool, 'sandbox_path'):
+                                    workspace_path = sandbox_tool.sandbox_path
+                                    full_path = workspace_path / filename
+                                        
+                                    if full_path.exists():
+                                        file_already_exists = True
+                                        existing_file_path = full_path
+                                        existing_size = full_path.stat().st_size
+                                        logger.info(f"🔒 EXISTING FILE DETECTED: {full_path} exists ({existing_size} bytes) - will preserve")
+                                    else:
+                                        logger.info(f"🔍 FILE CHECK: {full_path} does not exist - will create new")
+                                else:
+                                    logger.warning(f"⚠️ Could not get sandbox tool instance for workspace path check")
+                                    
+                                if file_already_exists:
+                                    # File already exists - ALWAYS preserve, regardless of extension or format
+                                    logger.info(f"🔒 PRESERVING EXISTING FILE: {existing_file_path} already exists from tool calling phase")
+                                    file_result = {"filename": filename, "preserved": True, "size_bytes": existing_size}
+                                elif convert_to_pdf:
+                                    logger.info(f"📄 Creating PDF file for email: {filename}")
+                                    file_result = await tool_manager.safe_function_call("sandboxed_executor", {
+                                        "action": "create_file",
+                                        "filename": filename,
+                                        "content": complete_llm_response.strip(),
+                                        "convert_to_pdf": True
+                                    })
+                                elif preserve_original_format:
+                                    # User requested a specific code/data file type - create it with LLM content
+                                    logger.info(f"📄 Creating preserved format file: {filename} (extension: {original_ext})")
+                                    file_result = await tool_manager.safe_function_call("sandboxed_executor", {
+                                        "action": "create_file",
+                                        "filename": filename,
+                                        "content": complete_llm_response.strip(),
+                                        "convert_to_pdf": False
+                                    })
+                                    # Keep original filename - don't change it
+                                else:
+                                    # Create HTML version for email attachment (default behavior for reports)
+                                    html_filename = f"{base_filename}.html"
+                                    logger.info(f"📄 Creating HTML file for email: {html_filename}")
+                                    file_result = await tool_manager.safe_function_call("sandboxed_executor", {
+                                        "action": "create_file", 
+                                        "filename": html_filename,
+                                        "content": complete_llm_response.strip(),
+                                        "convert_to_pdf": False
+                                    })
+                                    # Update filename for email attachment
+                                    filename = html_filename
+                                    
+                                logger.info(f"🔄 STEP 2A: File creation completed")
+                                logger.info(f"📄 File creation result: {file_result}")
+                                    
+                                logger.info(f"🔄 STEP 3: Checking file creation success")
+                                # file_result is a string from safe_function_call, need to parse it if it's JSON
+                                try:
+                                    if isinstance(file_result, str) and file_result.strip().startswith('{'):
+                                        file_result_dict = json.loads(file_result)
+                                        logger.info(f"🔄 STEP 3A-PARSE: Successfully parsed JSON file_result")
+                                    else:
+                                        file_result_dict = file_result
+                                        logger.info(f"🔄 STEP 3A-PARSE: Using file_result as-is (type: {type(file_result)})")
+                                except json.JSONDecodeError as e:
+                                    logger.error(f"🔄 STEP 3A-PARSE: JSON parse failed: {e}, using raw result")
+                                    file_result_dict = file_result
+                                    
+                                # Check for successful file creation (JSON result contains filename and success indicators)
+                                file_success = (isinstance(file_result_dict, dict) and 
+                                              file_result_dict.get("filename") and 
+                                              (file_result_dict.get("pdf_generated") == True or 
+                                               file_result_dict.get("html_generated") == True or
+                                               file_result_dict.get("preserved") == True or
+                                               file_result_dict.get("size_bytes", 0) > 0)) or "successfully created" in str(file_result).lower()
+                                logger.info(f"🔄 STEP 3A: File success check result: {file_success}")
+                                    
+                                if file_success:
+                                    logger.info(f"🔄 STEP 3A: File creation successful, proceeding to email")
+                                    # Update email params with the correct filename for attachment
+                                    updated_email_params = intercepted_email_params.copy()
+                                        
+                                    # 🚨 CRITICAL FIX: Preserve all attachments, don't overwrite with just first one
+                                    original_attachments = intercepted_email_params.get('attachments', '')
+                                    if isinstance(original_attachments, str) and ',' in original_attachments:
+                                        # Multiple attachments provided - preserve all of them
+                                        updated_email_params['attachments'] = original_attachments
+                                        logger.info(f"🔧 MULTI-ATTACHMENT FIX: Preserving all attachments: {original_attachments}")
+                                    else:
+                                        # Single attachment or file generation workflow - use processed filename
+                                        updated_email_params['attachments'] = filename
+                                        
+                                    # Ensure body is not empty - add fallback if missing
+                                    if not updated_email_params.get('body') or updated_email_params.get('body').strip() == '':
+                                        updated_email_params['body'] = f"Please find the attached file: {filename.split('/')[-1]}"
+                                        logger.info(f"🔄 STEP 4: Added fallback email body")
+                                        
+                                    logger.info(f"🔄 STEP 4: About to send email with updated attachment: {filename}")
+                                    logger.info(f"🔄 STEP 4: Email params: {updated_email_params}")
+                                    email_result = await tool_manager.safe_function_call("secure_email_sender", updated_email_params)
+                                    logger.info(f"🔄 STEP 4A: Email sending completed")
+                                    logger.info(f"📧 Email sent: {email_result}")
+                                        
+                                    # Add to stream response
+                                    logger.info(f"🔄 STEP 5: Adding completion message to stream")
+                                    yield f'data: {{"post_processing": "completed", "tools_executed": ["sandboxed_executor", "secure_email_sender"]}}\n\n'
+                                    logger.info(f"🚪 EXIT: Post-processing completed successfully")
+                                else:
+                                    logger.error(f"❌ STEP 3B: File creation failed: {file_result}")
+                                    logger.info(f"🚪 EXIT: Post-processing failed at file creation")
+                                        
                             except Exception as e:
-                                logger.error(f"❌ POST-LLM AUTO-EXECUTION FAILED: {e}")
-                                error_msg = json.dumps({
-                                    "post_processing": "failed", 
-                                    "error": str(e)
-                                })
-                                yield (error_msg + '\n').encode()
-                        else:
-                            error_msg = f"Ollama error: {response.status}"
-                            yield json.dumps({"error": error_msg}).encode() + b'\n'
+                                logger.error(f"❌ Email post-processing error: {e}")
+                                logger.error(f"❌ Exception traceback: {traceback.format_exc()}")
+                                logger.info(f"🚪 EXIT: Post-processing failed with exception")
+                    else:
+                        logger.info(f"🔍 POST-PROCESSING SKIPPED: email_intercepted=False")
+                        
+                    # 🎯 POST-LLM AUTO-EXECUTION: Execute missing tools with complete content (legacy)
+                    logger.info(f"🔍 DEBUG: pending_auto_execution={pending_auto_execution}, verification_result={verification_result}")
+                    if pending_auto_execution and verification_result:
+                        logger.info(f"🎯 POST-LLM AUTO-EXECUTION: Primary LLM completed, executing missing tools")
+                        logger.info(f"🎯 Complete LLM response length: {len(complete_llm_response)} characters")
+                            
+                        try:
+                            # Execute missing tools with complete LLM response as content
+                            additional_results = await _execute_missing_tools_post_llm(
+                                verification_result['missing_tools'], 
+                                tool_manager, 
+                                tools_results,
+                                complete_llm_response,
+                                user_prompt
+                            )
+                            logger.info(f"✅ POST-LLM AUTO-EXECUTION COMPLETED: {additional_results}")
+                                
+                            # Optionally stream completion notification
+                            completion_msg = json.dumps({
+                                "post_processing": "completed",
+                                "tools_executed": verification_result['missing_tools']
+                            })
+                            yield (completion_msg + '\n').encode()
+                                
+                        except Exception as e:
+                            logger.error(f"❌ POST-LLM AUTO-EXECUTION FAILED: {e}")
+                            error_msg = json.dumps({
+                                "post_processing": "failed", 
+                                "error": str(e)
+                            })
+                            yield (error_msg + '\n').encode()
+                    else:
+                        error_msg = f"Ollama error: {response.status}"
+                        yield json.dumps({"error": error_msg}).encode() + b'\n'
                             
                 except asyncio.TimeoutError:
                     logger.error("🕒 PRIMARY LLM: Request timed out after 10 minutes")

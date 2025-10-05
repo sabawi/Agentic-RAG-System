@@ -59,7 +59,7 @@ def check_tool_imports():
         
         print()
         print("💡 Solutions:")
-        print("1. Activate virtual environment: source venv_fastapi/bin/activate")
+        print("1. Activate virtual environment: source venv/bin/activate")
         print("2. Install missing packages:")
         for module, _, _ in missing:
             if module == 'duckduckgo_search':

@@ -77,8 +77,8 @@ brew install tesseract wkhtmltopdf python3
 ```
 
 ### 3. Virtual Environment Setup
-- Automatically detects existing virtual environments (`venv_fastapi`, `venv`, `.venv`, `env`)
-- Creates `venv_fastapi` if none exists
+- Automatically detects existing virtual environments (`venv`, `.venv`, `env`)
+- Creates `venv` if none exists
 - Upgrades pip to latest version
 
 ### 4. Python Dependencies
@@ -151,7 +151,7 @@ QWEN_API_KEY="your_qwen_api_key_here"
 ### Start the Server
 ```bash
 # Activate virtual environment (if not already active)
-source venv_fastapi/bin/activate
+source venv/bin/activate
 
 # Start the server
 ./start_complete.sh
@@ -216,7 +216,7 @@ ollama pull bakllava:latest
 chmod +x install.sh
 
 # Fix virtual environment permissions
-sudo chown -R $USER:$USER venv_fastapi/
+sudo chown -R $USER:$USER venv/
 ```
 
 ### Getting Help

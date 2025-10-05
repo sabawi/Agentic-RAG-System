@@ -46,7 +46,7 @@ Complete async implementation of all original tools:
 cd /home/sabawi/Development/flaskserver
 
 # 1. Activate environment (already set up)
-source venv_fastapi/bin/activate
+source venv/bin/activate
 
 # 2. Start the complete server with Ollama
 ./start_complete_server.sh
