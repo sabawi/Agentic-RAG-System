@@ -2577,9 +2577,8 @@ def _format_source_block(source_url: str, title: str, content: str, source_num: 
 
     return f"""
 ───────────────────────────────────────────────────────
-📄 SOURCE BLOCK #{source_num} [REQUIRED CITATION: {source_url}]
-Title: {title}
-🔗 MANDATORY CITATION URL: {source_url}
+📄 SOURCE: {title}
+🔗 CITATION URL: {source_url}
 {date_line}{accessibility_indicator}CONTENT: {content}
 ───────────────────────────────────────────────────────
 """

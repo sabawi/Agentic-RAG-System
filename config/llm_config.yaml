@@ -38,7 +38,7 @@ llm:
   primary:
     type: ollama
     config:
-      model: deepseek-v3.1:671b-cloud
+      model: deepseek-v3.1:671b-cloud 
       timeout: 3600  # 60 minutes for local models with large contexts
       context_window_size: 32768  # Increased from 8192 to support comprehensive document searches
       temperature: 0.7

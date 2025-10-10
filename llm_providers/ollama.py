@@ -49,7 +49,10 @@ class OllamaProvider(LLMProvider):
         self._response_started = False
 
         session = await self._get_session()
-        
+
+        # Extract system prompt from kwargs if provided
+        system_prompt = kwargs.get('system_prompt')
+
         payload = {
             "model": model,
             "prompt": prompt,
@@ -61,10 +64,16 @@ class OllamaProvider(LLMProvider):
                 "num_predict": kwargs.get('num_predict', self.get_num_predict())
             }
         }
-        
+
+        # Add system prompt to payload if provided (critical for instruction following)
+        if system_prompt:
+            payload["system"] = system_prompt
+            logger.info(f"📋 System prompt included ({len(system_prompt)} chars)")
+
         think_enabled = payload.get('think', False)
         think_status = "🧠 THINK ON" if think_enabled else "⚡ THINK OFF"
-        logger.info(f"🦙 Ollama streaming request: model={model}, prompt_len={len(prompt)}, num_ctx={payload['options']['num_ctx']}, num_predict={payload['options']['num_predict']}, {think_status}")
+        system_status = f"📋 SYSTEM PROMPT: {len(system_prompt)} chars" if system_prompt else "⚠️ NO SYSTEM PROMPT"
+        logger.info(f"🦙 Ollama streaming request: model={model}, prompt_len={len(prompt)}, num_ctx={payload['options']['num_ctx']}, num_predict={payload['options']['num_predict']}, {think_status}, {system_status}")
 
         try:
             async with session.post(
