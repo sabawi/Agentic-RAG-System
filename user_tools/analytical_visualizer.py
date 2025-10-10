@@ -97,14 +97,22 @@ class AnalyticalVisualizerTool(BaseUserTool):
                     if base64_image:
                         result["base64_image"] = base64_image
                 
-                # Create formatted response
+                # Get the full output path for attachment reference
+                full_output_path = result.get('output_path', '/home/sabawi/Development/flaskserver/sandbox_workspace/visualization_output.png')
+                filename = os.path.basename(full_output_path)
+
+                # Create formatted response with EXPLICIT attachment instructions
                 response = f"""✅ **Analytical Visualization Generated with LLM**
 
-**Figure Created**: {os.path.basename(result['output_path']) if 'output_path' in result else 'visualization_output.png'}
+**Figure Created**: {filename}
+**Full Path**: {full_output_path}
+**File Type**: PNG image
 **Generation Method**: {"LLM-driven dynamic code generation" if result.get('llm_generated') else "Pattern-based"}
 **Original Prompt**: {result.get('original_prompt', 'N/A')}
 
 **Execution Status**: {result.get('description', 'Visualization completed successfully')}
+
+📎 **ATTACHMENT INSTRUCTION FOR EMAIL**: To attach this file to an email, use exactly: attachments: "{filename}"
 """
 
                 # Include base64 image data in response for server extraction
@@ -113,7 +121,7 @@ class AnalyticalVisualizerTool(BaseUserTool):
                     response += f"\n**📊 Chart successfully generated and will be displayed to the user. Reference this chart in your analysis.**\n\n<img src=\"{base64_image}\" alt=\"Generated Chart\" style=\"max-width: 100%; height: auto;\">"
                 else:
                     logger.warning(f"⚠️ DEBUG: No base64 image available for response")
-                    response += f"\n**Integration Note**: This visualization is saved as {os.path.basename(result.get('output_path', 'visualization_output.png'))} and can be referenced in your response."
+                    response += f"\n**Integration Note**: This visualization is saved and ready for attachment."
                 
                 logger.info(f"🔧 DEBUG: Final response length: {len(response)}")
                 
@@ -648,22 +656,30 @@ async def analytical_visualizer(prompt: str) -> str:
             tool_instance = AnalyticalVisualizerTool()
             base64_image = tool_instance._image_to_base64(result['output_path'])
         
+        # Get the full output path for attachment reference
+        full_output_path = result.get('output_path', '/home/sabawi/Development/flaskserver/sandbox_workspace/visualization_output.png')
+        filename = os.path.basename(full_output_path)
+
         response = f"""✅ **Analytical Visualization Generated with LLM**
 
-**Figure Created**: {os.path.basename(result['output_path']) if 'output_path' in result else 'visualization_output.png'}
+**Figure Created**: {filename}
+**Full Path**: {full_output_path}
+**File Type**: PNG image
 **Generation Method**: {"LLM-driven dynamic code generation" if result.get('llm_generated') else "Pattern-based"}
 **Original Prompt**: {result.get('original_prompt', 'N/A')}
 
 **Execution Status**: {result.get('description', 'Visualization completed successfully')}
+
+📎 **ATTACHMENT INSTRUCTION FOR EMAIL**: To attach this file to an email, use exactly: attachments: "{filename}"
 """
-        
+
         # DO NOT add base64 to LLM context - only reference the chart
         if base64_image:
             logger.info(f"✅ DEBUG: Base64 image available (length: {len(base64_image[:100])}...)")
             response += "\n**📊 Chart successfully generated and will be displayed to the user. Reference this chart in your analysis.**"
         else:
             logger.warning(f"⚠️ DEBUG: No base64 image available for response")
-            response += f"\n**Integration Note**: This visualization is saved as {os.path.basename(result.get('output_path', 'visualization_output.png'))} and can be referenced in your response."
+            response += f"\n**Integration Note**: This visualization is saved and ready for attachment."
         
         logger.info(f"🔧 DEBUG: Final response length: {len(response)}")
 
