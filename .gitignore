@@ -123,3 +123,4 @@ document_store/faiss.index
 watched_directories.json
 logs/
 runtime/
+venv_*/
