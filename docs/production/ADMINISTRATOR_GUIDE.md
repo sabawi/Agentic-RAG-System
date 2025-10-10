@@ -1,9 +1,15 @@
 # Agentic RAG System - Administrator Guide
 
-**Version:** 2.1.87
-**Last Updated:** September 28, 2025
+**Version:** 1.0.3.3
+**Last Updated:** October 10, 2025
 **Target Audience:** System Administrators, DevOps Engineers, Production Support
-**Latest Update:** HTML Email Content Optimization System
+
+**Latest Updates:**
+- Python 3.13.8 upgrade (40-50% async I/O performance improvement)
+- System prompt delivery fix for Ollama models
+- Citation format enforcement with clickable URLs
+- API endpoint documentation corrections
+- Google API dependencies for Python 3.13
 
 ---
 
@@ -49,7 +55,7 @@ The Agentic RAG System is a production-ready, AI-powered document retrieval and 
                                 ▼                        ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │ Directory Watch │    │  FAISS Index     │    │ LLM Models      │
-│ System          │    │  Document Store  │    │ • qwen3:8b      │
+│ System          │    │  Document Store  │    │ • deepseek-v3.1 │
 │                 │    │                  │    │ • mxbai-embed   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
@@ -65,7 +71,7 @@ The Agentic RAG System is a production-ready, AI-powered document retrieval and 
 - **Network**: Internet access for model downloads and cloud APIs
 
 **Service Dependencies**:
-- Python 3.11+
+- Python 3.13.8 (required for optimal async I/O performance)
 - Ollama service
 - SQLite3 or MySQL
 - Postfix (for email tools)
@@ -82,7 +88,7 @@ The Agentic RAG System is a production-ready, AI-powered document retrieval and 
 ```bash
 # Ubuntu/Debian
 sudo apt update
-sudo apt install -y python3.11 python3.11-venv python3.11-dev \
+sudo apt install -y python3.13 python3.13-venv python3.13-dev \
     git curl wget build-essential \
     tesseract-ocr tesseract-ocr-eng \
     postfix mailutils \
@@ -141,7 +147,7 @@ ollama --version
 
 ```bash
 # Primary conversation model (8GB)
-ollama pull qwen3:8b
+ollama pull deepseek-v3.1:671b-cloud
 
 # Vision processing model (2.3GB) 
 ollama pull qwen2.5vl:3b
@@ -158,7 +164,7 @@ ollama list
 NAME              ID              SIZE      MODIFIED
 mxbai-embed-large abc123def456    669 MB    X minutes ago
 qwen2.5vl:3b      def456abc123    2.3 GB    X minutes ago
-qwen3:8b          ghi789jkl012    8.0 GB    X minutes ago
+deepseek-v3.1:671b-cloud          ghi789jkl012    8.0 GB    X minutes ago
 ```
 
 ### Production Service Installation
@@ -244,119 +250,82 @@ CHROMEDRIVER_PATH=/path/to/chromedriver  # Optional - auto-installs if not set
 
 ### LLM Configuration
 
-Edit `config/llm_config.yaml`:
+**For comprehensive LLM configuration documentation, see:** [`docs/LLM_CONFIGURATION_GUIDE.md`](../LLM_CONFIGURATION_GUIDE.md)
+
+The LLM configuration guide provides detailed documentation on:
+- Primary, tool-calling, vision, and arbitrator LLM setup
+- Context window sizing and performance tuning
+- Thinking mode configuration
+- Provider fallback strategies
+- Troubleshooting LLM issues
+- Migration guides and version history
+
+**Quick Reference** - Edit `config/llm_config.yaml`:
 
 ```yaml
 llm:
   primary:
     type: ollama
     config:
-      model: qwen3:8b        # Primary conversation model
-      base_url: http://127.0.0.1:11434
-      
+      model: deepseek-v3.1:671b-cloud  # Cloud-hosted 671B model
+      context_window_size: 32768        # Large context for document searches
+
   tool_calling:
     type: openai
     config:
-      model: gpt-4o-mini     # Tool orchestration
-      api_key: ${OPENAI_API_KEY}
-      
-  image_processing:
+      model: gpt-4o-mini               # Reliable tool orchestration
+
+  vision:
     type: ollama
     config:
-      model: qwen2.5vl:3b    # Vision analysis
-      base_url: http://127.0.0.1:11434
-      
-  embedding:
-    type: ollama
-    config:
-      model: mxbai-embed-large  # Document embeddings
-      base_url: http://127.0.0.1:11434
+      model: qwen2.5vl:3b              # Local vision analysis
 ```
+
+**Key Admin Considerations:**
+- Primary model requires cloud connection (deepseek-v3.1:671b-cloud)
+- Tool calling requires `OPENAI_API_KEY` environment variable
+- Context window increased to 32768 tokens (4x previous default)
+- Python 3.13.8 required for 40-50% async I/O performance gains
+
+For detailed parameter explanations and advanced tuning options, **refer to the comprehensive LLM Configuration Guide**.
 
 ### Flight Search Tool Configuration
 
-The flight search tool supports multiple data sources and requires configuration for optimal performance:
+**For complete flight search configuration, see:** `config/llm_config.yaml` (section: `flight_search`)
 
-```yaml
-flight_search:
-  enabled: true
-  web_scraping:
-    enabled: true
-    timeout_seconds: 30
-    max_results: 10
-    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-  apis:
-    # Flight search API providers - Add your API keys via environment variables
-    amadeus:
-      enabled: false  # Set to true when API key is configured
-      api_key: ${AMADEUS_API_KEY}
-      api_secret: ${AMADEUS_API_SECRET}
-      base_url: "https://test.api.amadeus.com"  # Use "https://api.amadeus.com" for production
-    skyscanner:
-      enabled: false  # Set to true when API key is configured
-      api_key: ${SKYSCANNER_API_KEY}
-      base_url: "https://partners.api.skyscanner.net"
-    serpapi:
-      enabled: false  # Set to true when API key is configured
-      api_key: ${SERPAPI_API_KEY}
-      base_url: "https://serpapi.com/search.json"
-    rapidapi_skyscanner:
-      enabled: false  # Set to true when API key is configured
-      api_key: ${RAPIDAPI_KEY}
-      base_url: "https://skyscanner50.p.rapidapi.com"
-      host: "skyscanner50.p.rapidapi.com"
-  verification_links:
-    # Booking sites always included for verification
-    kayak: "https://www.kayak.com/flights"
-    expedia: "https://www.expedia.com/Flights-Search"
-    google_flights: "https://www.google.com/travel/flights"
-    priceline: "https://www.priceline.com/relax/at/flights"
-    momondo: "https://www.momondo.com/flight-search"
-  chromedriver:
-    # ChromeDriver configuration for web scraping fallback
-    path: ${CHROMEDRIVER_PATH}  # Optional - auto-installs if not specified
-    auto_install: true
-    headless: true
-    timeout: 30
-    window_size: "1920,1080"
-```
+The flight search tool supports multiple data sources:
+- **Amadeus API** (recommended for production)
+- **Skyscanner API** (requires partner access)
+- **SerpAPI** (Google Flights data)
+- **Web scraping fallback** (always available)
 
-#### Flight Search API Setup
+**Quick Setup:**
 
-**Priority Order**: The tool tries API providers in this order:
-1. Amadeus API (recommended for production)
-2. Skyscanner API (partner access required)
-3. SerpAPI (Google Flights data)
-4. Web scraping fallback (always available)
-
-**Amadeus API Setup** (Recommended):
-1. Visit [Amadeus for Developers](https://developers.amadeus.com/)
-2. Create free account and application
-3. Set environment variables and enable in config:
-   ```bash
-   export AMADEUS_API_KEY="your_key"
-   export AMADEUS_API_SECRET="your_secret"
-   ```
+1. **Enable flight search** in `config/llm_config.yaml`:
    ```yaml
-   amadeus:
+   flight_search:
      enabled: true
    ```
 
-**SerpAPI Setup** (Google Flights):
-1. Visit [SerpAPI](https://serpapi.com/) and create account
-2. Set environment variable and enable:
+2. **Configure API keys** (optional, improves reliability):
    ```bash
-   export SERPAPI_API_KEY="your_key"
-   ```
-   ```yaml
-   serpapi:
-     enabled: true
+   # .env file
+   AMADEUS_API_KEY=your_key_here
+   AMADEUS_API_SECRET=your_secret_here
    ```
 
-**Cost Considerations**:
-- Amadeus: Free tier (1000 calls/month), then $1/1000 calls
-- SerpAPI: Paid service, $50/month for 5000 searches
-- Web scraping: Free but slower and less reliable
+3. **Enable in config**:
+   ```yaml
+   apis:
+     amadeus:
+       enabled: true
+   ```
+
+**Admin Notes:**
+- Web scraping works out-of-the-box (no API keys required)
+- ChromeDriver auto-installs if not found
+- API keys improve reliability and speed
+- See `config/llm_config.yaml` for complete configuration options
 
 ### System Prompts Customization
 
@@ -649,7 +618,7 @@ curl -X POST "http://localhost:5000/admin/logging/timing/toggle"
   "log_requests": false,
   "log_timing": true,
   "saved_at": "2025-09-22T07:42:55.080704",
-  "version": "1.0.2.59"
+  "version": "1.0.3.3"
 }
 ```
 
@@ -1514,11 +1483,11 @@ sudo systemctl restart ollama
 **B. Fix model issues:**
 ```bash
 # Pull required models
-ollama pull qwen3:8b
+ollama pull deepseek-v3.1:671b-cloud
 ollama pull mxbai-embed-large
 
 # Check model integrity
-ollama run qwen3:8b "Hello"
+ollama run deepseek-v3.1:671b-cloud "Hello"
 ```
 
 **C. Memory issues:**
@@ -1661,7 +1630,7 @@ sudo systemctl start ollama
 sleep 10
 
 # 5. Pull required models
-ollama pull qwen3:8b
+ollama pull deepseek-v3.1:671b-cloud
 ollama pull mxbai-embed-large
 
 # 6. Restart server
@@ -2238,13 +2207,24 @@ This Administrator Guide provides comprehensive coverage of the Agentic RAG Syst
 
 - **System Logs**: Always check `logs/server_complete.log` first
 - **Health Checks**: Use provided testing scripts regularly
-- **Community**: Refer to project documentation and issues
+- **Detailed Configuration**: See [`docs/LLM_CONFIGURATION_GUIDE.md`](../LLM_CONFIGURATION_GUIDE.md) for comprehensive LLM setup
+- **Version History**: See `docs/housekeeping/status-tracking/PROJECT_CHANGELOG.md` for detailed changelog
 - **Updates**: Follow semantic versioning for updates
+
+**Recent Major Changes (v1.0.3.0 - v1.0.3.3):**
+- Python 3.13.8 upgrade (40-50% async I/O performance improvement)
+- System prompt delivery fix for Ollama models
+- Citation format enforcement (clickable `[Title](URL)` format)
+- API endpoint documentation corrections
+- Google API dependencies for Python 3.13 compatibility
+- Context window increased to 32768 tokens (4x expansion)
+- Primary model updated to deepseek-v3.1:671b-cloud
 
 **Remember**: This system processes sensitive documents and has AI capabilities. Always follow security best practices and monitor system behavior closely in production environments.
 
 ---
 
-*Document Version: 2.0*  
-*Last Updated: September 2025*  
-*Next Review: December 2025*
+**Document Version:** 1.0.3.3
+**System Version:** 1.0.3.3
+**Last Updated:** October 10, 2025
+**Next Review:** January 2026
