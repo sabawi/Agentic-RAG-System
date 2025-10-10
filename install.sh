@@ -20,7 +20,7 @@ set -e  # Exit on any error
 # Script configuration
 SCRIPT_VERSION="1.1.0"
 REPO_URL="https://github.com/sabawi/Agentic-RAG-System.git"
-REQUIRED_PYTHON_VERSION="3.8"
+REQUIRED_PYTHON_VERSION="3.13"
 DRY_RUN=false
 UPGRADE_MODE=false
 VERIFY_MODE=false
