@@ -32,10 +32,10 @@ ENV_VARS="$ENV_VARS BUFFER_SIZE_LOGGING=true"             # Log data sizes inste
 
 # 🔧 API-CONTROLLABLE FEATURES (Configure via HTTP calls after startup)
 # Examples:
-#   curl -X POST http://localhost:5000/api/logging/verbose/enable     # Enable detailed logs
-#   curl -X POST http://localhost:5000/api/logging/verbose/disable    # Disable detailed logs
-#   curl -X POST http://localhost:5000/api/testing/arbitrator/enable  # Enable Arbitrator testing
-#   curl -X GET  http://localhost:5000/api/status                     # View current settings
+#   curl -X POST http://localhost:5000/admin/logging/enable           # Enable logging
+#   curl -X POST http://localhost:5000/admin/logging/disable          # Disable logging
+#   curl -X POST http://localhost:5000/optimization/enable            # Enable optimizations
+#   curl -X GET  http://localhost:5000/admin/logging/status           # View logging status
 
 # Pass through any manual environment overrides
 if [ ! -z "$LOG_REQUESTS" ]; then
@@ -75,25 +75,25 @@ if ps -p $SERVER_PID > /dev/null; then
     fi
     echo ""
     
-    # 🧪 TESTING FEATURES: Available via API (examples below)
-    echo "🧪 TESTING FEATURES: Control via API calls"
+    # 🎛️ ADMIN API: Control server behavior
+    echo "🎛️ ADMIN API CONTROLS:"
     echo ""
-    echo "   📋 Check current status:"
-    echo "      curl -X GET http://localhost:5000/api/status"
+    echo "   📋 Check status:"
+    echo "      curl -X GET http://localhost:5000/admin/logging/status           # Logging status"
+    echo "      curl -X GET http://localhost:5000/optimization/status            # Optimization status"
     echo ""
     echo "   🔧 Logging controls:"
-    echo "      curl -X POST http://localhost:5000/api/logging/verbose/enable     # Detailed logs"
-    echo "      curl -X POST http://localhost:5000/api/logging/verbose/disable    # Concise logs" 
-    echo "      curl -X POST http://localhost:5000/api/logging/buffer-dump/enable # Full buffer dumps"
-    echo "      curl -X POST http://localhost:5000/api/logging/buffer-dump/disable# Summary only"
+    echo "      curl -X POST http://localhost:5000/admin/logging/enable          # Enable logging"
+    echo "      curl -X POST http://localhost:5000/admin/logging/disable         # Disable logging"
+    echo "      curl -X POST http://localhost:5000/admin/logging/level/INFO      # Set log level (DEBUG/INFO/WARNING/ERROR)"
+    echo "      curl -X POST http://localhost:5000/admin/logging/requests/toggle # Toggle request logging"
+    echo "      curl -X POST http://localhost:5000/admin/logging/timing/toggle   # Toggle timing logs"
     echo ""
-    echo "   🧪 Testing controls:"
-    echo "      curl -X POST http://localhost:5000/api/testing/arbitrator/enable  # Enable Arbitrator tests"
-    echo "      curl -X POST http://localhost:5000/api/testing/arbitrator/disable # Disable Arbitrator tests"
-    echo ""
-    echo "   ⚡ Performance controls:" 
-    echo "      curl -X POST http://localhost:5000/api/performance/parallel/enable  # Enable parallel tools"
-    echo "      curl -X POST http://localhost:5000/api/performance/parallel/disable # Sequential tools"
+    echo "   ⚡ Optimization controls:"
+    echo "      curl -X POST http://localhost:5000/optimization/enable           # Enable optimizations"
+    echo "      curl -X POST http://localhost:5000/optimization/disable          # Disable optimizations"
+    echo "      curl -X POST -H 'Content-Type: application/json' -d '{\"percentage\":50}' http://localhost:5000/optimization/rollout  # Set rollout %"
+    echo "      curl -X POST http://localhost:5000/optimization/emergency-rollback  # Emergency rollback"
     echo ""
     
     echo "📊 Monitor logs in real-time:"

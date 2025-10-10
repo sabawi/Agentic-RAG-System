@@ -803,10 +803,10 @@ grep "_html_to_clean_text" logs/server_complete.log
 
 **Problem: Email Content Missing**
 ```bash
-# Check provider configuration
-curl -X GET http://localhost:5000/api/tools/email_retriever/status
+# Check server status
+curl -X GET http://localhost:5000/admin/logging/status
 
-# Verify credentials
+# Verify email credentials
 python -c "
 from utils.email_library_adapter import EmailLibraryAdapter
 adapter = EmailLibraryAdapter('config/llm_config.yaml')

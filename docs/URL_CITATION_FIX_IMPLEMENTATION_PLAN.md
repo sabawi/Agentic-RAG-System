@@ -459,8 +459,11 @@ python3 scripts/test_citation_accuracy.py --tools news,web,papers --samples 10
 
 ### **Current Status Check Commands**
 ```bash
-# Check server status
-curl -X GET http://localhost:5000/api/status
+# Check logging status
+curl -X GET http://localhost:5000/admin/logging/status
+
+# Check optimization status
+curl -X GET http://localhost:5000/optimization/status
 
 # Check version
 grep "__version__" /home/sabawi/Development/flaskserver/fastapi_server_complete.py
