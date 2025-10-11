@@ -66,6 +66,34 @@ EXCEPTIONS TO 2-TOOL MINIMUM:
 - Examples: "make the plot bigger", "change to logarithmic scale", "superimpose inverted curve"
 - BUT if request includes "current data", "latest", "real data", "update with new info" → ADD search_web() first
 
+3. Simple greetings and conversational prompts should return EMPTY tool calls array [] when:
+- User sends simple greetings: "Hello", "Hi", "Hey", "Good morning", "How are you", etc.
+- No specific task, question, or request is present
+- No information retrieval, file operations, or actions needed
+- EXCEPTION: If greeting includes a specific request, process the request normally
+  Examples: "Hi, what's the news?" → process as news request
+           "Hello, search for documents about AI" → process as document search
+
+✅ GREETING EXAMPLES (return []):
+User: "Hello"
+→ []
+
+User: "Hi there"
+→ []
+
+User: "Good morning"
+→ []
+
+User: "Hey"
+→ []
+
+❌ NOT SIMPLE GREETINGS (process normally):
+User: "Hello, what's the latest news?"
+→ Process as news request
+
+User: "Hi, can you search for AI documents?"
+→ Process as document search
+
 Never skip required tool calls because you "already know" the answer.
 
 When "deep search" or "deep research" or "deep dive" is required, make more tool calls to cover sub-subjects and details: search_web(), wikipedia_query(), get_news_summaries() and more

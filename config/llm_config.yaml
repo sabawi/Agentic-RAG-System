@@ -33,21 +33,23 @@ llm:
     order:
     - ollama
     - openai
+    - openrouter
     - qwen
     - gemini
   primary:
-    type: ollama
+    type: openrouter
     config:
-      model: deepseek-v3.1:671b-cloud 
-      timeout: 3600  # 60 minutes for local models with large contexts
-      context_window_size: 32768  # Increased from 8192 to support comprehensive document searches
+      model: deepseek/deepseek-r1  # OpenRouter DeepSeek R1 reasoning model
+      timeout: 3600  # 60 minutes for reasoning tasks
+      context_window_size: 32768  # Large context for comprehensive searches
       temperature: 0.7
-      num_predict: 16384
-      max_tokens: 32768  # Increased to match context_window_size
-      base_url: http://127.0.0.1:11434
-      api_key: null
+      max_tokens: 16384  # Used for OpenRouter (not num_predict)
+      base_url: https://openrouter.ai/api/v1
+      api_key: ${OPENROUTER_API_KEY}
       stream: true
-      think: false  # Configurable think parameter for reasoning
+      headers:
+        HTTP-Referer: ${OPENROUTER_SITE_URL}
+        X-Title: ${OPENROUTER_SITE_NAME}
   tool_calling:
     type: openai
     config:
@@ -71,6 +73,20 @@ llm:
       models:
         primary: gpt-4o
         tool_calling: gpt-4o
+    openrouter:
+      api_key: ${OPENROUTER_API_KEY}
+      base_url: https://openrouter.ai/api/v1
+      retry_attempts: 3
+      retry_delay: 1
+      headers:
+        HTTP-Referer: ${OPENROUTER_SITE_URL}  # Optional: Site URL for rankings
+        X-Title: ${OPENROUTER_SITE_NAME}      # Optional: Site title for rankings
+      models:
+        # OpenRouter supports many models - configure your preferred ones here
+        primary: deepseek/deepseek-r1:free
+        tool_calling: openai/gpt-4o-mini
+        reasoning: deepseek/deepseek-r1
+        free: deepseek/deepseek-r1:free
 performance:
   connection_pool_size: 10
   max_concurrent_requests: 5

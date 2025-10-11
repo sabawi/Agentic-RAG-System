@@ -40,7 +40,17 @@ class OpenAIProvider(LLMProvider):
             }
             if self.organization:
                 headers["OpenAI-Organization"] = self.organization
-                
+
+            # Support custom headers from config (e.g., for OpenRouter)
+            # Filter out None values to prevent serialization errors
+            custom_headers = self.config.get('headers', {})
+            if custom_headers:
+                # Only add headers with non-None values
+                filtered_headers = {k: v for k, v in custom_headers.items() if v is not None}
+                if filtered_headers:
+                    headers.update(filtered_headers)
+                    logger.info(f"🔧 Added custom headers: {list(filtered_headers.keys())}")
+
             timeout = aiohttp.ClientTimeout(total=self.get_timeout())
             self.session = aiohttp.ClientSession(
                 headers=headers,

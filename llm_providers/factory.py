@@ -58,7 +58,7 @@ class LLMProviderFactory:
     @classmethod
     def _import_provider(cls, provider_type: str):
         """Dynamically import a provider module
-        
+
         Args:
             provider_type: Provider type to import
         """
@@ -69,6 +69,10 @@ class LLMProviderFactory:
             elif provider_type == 'openai':
                 from .openai import OpenAIProvider
                 cls.register_provider('openai', OpenAIProvider)
+            elif provider_type == 'openrouter':
+                # OpenRouter uses OpenAI-compatible API
+                from .openai import OpenAIProvider
+                cls.register_provider('openrouter', OpenAIProvider)
             elif provider_type == 'qwen':
                 from .qwen import QwenProvider
                 cls.register_provider('qwen', QwenProvider)
@@ -85,10 +89,10 @@ class LLMProviderFactory:
             List of available provider type strings
         """
         # Try to import all known providers
-        for provider_type in ['ollama', 'openai', 'qwen']:
+        for provider_type in ['ollama', 'openai', 'openrouter', 'qwen']:
             if provider_type not in cls._providers:
                 cls._import_provider(provider_type)
-        
+
         return list(cls._providers.keys())
     
     @classmethod
@@ -111,7 +115,7 @@ def _auto_register_providers():
     factory = LLMProviderFactory()
     
     # Register providers that are available
-    for provider_type in ['ollama', 'openai', 'qwen']:
+    for provider_type in ['ollama', 'openai', 'openrouter', 'qwen']:
         try:
             factory._import_provider(provider_type)
         except Exception as e:

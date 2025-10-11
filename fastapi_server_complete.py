@@ -5473,7 +5473,8 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
         },
         "news_report_and_email": {
             "triggers": ["news report and email", "create news file", "email news report", "save and send news", "email me the news",
-                        "save and send the files", "pdf attachment", "send the files as pdf", "stock market news", "save and send"],
+                        "save and send the files", "pdf attachment", "send the files as pdf", "stock market news", "save and send",
+                        "generate and save the analysis", "save the analysis into"],
             "required_tools": ["get_news_summaries", "sandboxed_executor", "secure_email_sender"],
             "required_sequence": True,
             "description": "Generate news analysis report, save as PDF file, email with attachment"
@@ -7073,8 +7074,8 @@ async def llama_stream(request: Request):
         from PIL import Image
         
         if not images_raw or images_raw == ['noimage']:
-            return ['noimage'], False
-            
+            return ['noimage'], False, []
+
         processed_images = []
         image_exists = False
         user_errors = []  # Collect errors for user feedback
@@ -7471,6 +7472,36 @@ The above image analysis was automatically performed on newly uploaded images. T
                                     Smart file decision logic: Use actual found files instead of placeholder files
                                     """
                                     try:
+                                        # 🎨 PRIORITY CHECK: Handle analytical_visualizer results FIRST
+                                        # When analytical_visualizer creates a file, always use that file for email
+                                        for result_tuple in phase1_results:
+                                            if isinstance(result_tuple, tuple) and len(result_tuple) >= 2:
+                                                function_name, result = result_tuple[0], result_tuple[1]
+                                                if function_name == "analytical_visualizer" and isinstance(result, str):
+                                                    # Look for the created file in the output
+                                                    import re
+                                                    # Match patterns like: "visualization_output.png" or "Full Path: /path/to/file.png"
+                                                    filename_match = re.search(r'(?:Figure Created|filename):\s*([^\n]+\.(?:png|jpg|jpeg|svg|pdf))', result, re.IGNORECASE)
+                                                    fullpath_match = re.search(r'Full Path:\s*([^\n]+)', result)
+
+                                                    if filename_match or fullpath_match:
+                                                        # Prefer full path if available, otherwise use filename
+                                                        if fullpath_match:
+                                                            visual_file_path = fullpath_match.group(1).strip()
+                                                        else:
+                                                            visual_file_name = filename_match.group(1).strip()
+                                                            # Construct full path
+                                                            visual_file_path = f"sandbox_workspace/{visual_file_name}"
+
+                                                        logger.info(f"🎨 SMART DECISION: analytical_visualizer created {visual_file_path}")
+                                                        logger.info(f"🎨 SMART DECISION: Updating email attachment to use visualization file")
+
+                                                        # Update email args to use the actual visualization file
+                                                        email_args['attachments'] = visual_file_path
+                                                        email_args['wait_for_attachments'] = False  # File already exists
+
+                                                        return email_args
+
                                         # Find document_search results from phase 1
                                         document_search_result_str = None
                                         for result_tuple in phase1_results:
@@ -9896,6 +9927,8 @@ async def openai_direct_stream(native_request_data: dict, model: str):
                             }
                             yield f"data: {json.dumps(final_chunk)}\n\n"
                             yield "data: [DONE]\n\n"
+
+                            # POST-LLM auto-execution is handled by llama_stream internally
                             return
                         
                         # Extract and send content
