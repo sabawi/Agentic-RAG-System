@@ -1,0 +1,47 @@
+=====================================================
+  AGENT MODEL CLI - QUICK REFERENCE CARD
+=====================================================
+
+📋 LIST & STATUS
+  ./agent_model.py ls                 # List all aliases
+  ./agent_model.py status             # Show active models
+  ./agent_model.py show --alias NAME  # Show alias details
+
+➕ ADD MODEL ALIAS
+  ./agent_model.py add --alias NAME --provider TYPE --model MODEL [OPTIONS]
+
+  Providers: ollama, openai, openrouter, qwen
+
+  Examples:
+    ./agent_model.py add --alias qwen_local --provider ollama --model qwen3:8b
+    ./agent_model.py add --alias gpt4_cloud --provider openai --model gpt-4o
+    ./agent_model.py add --alias deepseek_or --provider openrouter --model deepseek/deepseek-r1
+
+🔄 SET ACTIVE MODEL
+  ./agent_model.py set --alias NAME --as ROLE
+
+  Roles: primary, tool_calling, arbitrator
+
+  Examples:
+    ./agent_model.py set --alias qwen_local --as primary
+    ./agent_model.py set --alias gpt4_cloud --as tool_calling
+    ./agent_model.py set --alias gpt4_cloud --as arbitrator
+
+✏️ UPDATE ALIAS
+  ./agent_model.py update --alias NAME [OPTIONS]
+
+  Examples:
+    ./agent_model.py update --alias qwen_local --model qwen3:7b
+    ./agent_model.py update --alias gpt4_cloud --timeout 300 --temperature 0.5
+
+🗑️ DELETE ALIAS
+  ./agent_model.py delete --alias NAME [--force]
+
+  Examples:
+    ./agent_model.py delete --alias old_model
+    ./agent_model.py delete --alias old_model --force  # Force if active
+
+📚 FULL DOCUMENTATION
+  See: docs/CLI_MODEL_MANAGEMENT.md
+
+=====================================================

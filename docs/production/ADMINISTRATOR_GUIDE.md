@@ -1,15 +1,15 @@
 # Agentic RAG System - Administrator Guide
 
-**Version:** 1.0.3.3
-**Last Updated:** October 10, 2025
+**Version:** 1.0.3.6
+**Last Updated:** October 12, 2025
 **Target Audience:** System Administrators, DevOps Engineers, Production Support
 
 **Latest Updates:**
-- Python 3.13.8 upgrade (40-50% async I/O performance improvement)
-- System prompt delivery fix for Ollama models
-- Citation format enforcement with clickable URLs
-- API endpoint documentation corrections
-- Google API dependencies for Python 3.13
+- CLI Model Management Tool (`agent_model.py`) for easy model switching
+- OpenRouter API integration support
+- Model alias database system for simplified configuration
+- Think mode parameter support for reasoning models
+- Greeting exception handling to prevent inappropriate tool calls
 
 ---
 
@@ -288,6 +288,177 @@ llm:
 - Python 3.13.8 required for 40-50% async I/O performance gains
 
 For detailed parameter explanations and advanced tuning options, **refer to the comprehensive LLM Configuration Guide**.
+
+### Model Management CLI Tool
+
+**For comprehensive CLI documentation, see:** [`docs/CLI_MODEL_MANAGEMENT.md`](../CLI_MODEL_MANAGEMENT.md)
+
+The `agent_model.py` CLI tool provides simplified management of LLM model configurations through named aliases. Instead of manually editing YAML files, administrators can quickly switch between different model configurations using simple commands.
+
+#### Key Features
+
+- **Model Aliases**: Create named aliases for full model configurations
+- **Easy Switching**: Switch primary, tool_calling, or arbitrator models in seconds
+- **Multi-Provider Support**: Ollama, OpenAI, OpenRouter, Qwen (Alibaba Cloud)
+- **Configuration Database**: Persistent storage in `config/model_aliases.json`
+- **Safety Checks**: Prevents accidental deletion of active models
+- **Color-Coded Output**: Clear visual feedback for all operations
+
+#### Quick Start Commands
+
+```bash
+# Check current active models
+./agent_model.py status
+
+# List all configured model aliases
+./agent_model.py ls
+
+# Create a new model alias
+./agent_model.py add --alias local_qwen \
+  --provider ollama \
+  --model qwen3:8b \
+  --description "Local Qwen model"
+
+# Switch primary LLM
+./agent_model.py set --alias local_qwen --as primary
+
+# Switch tool calling LLM
+./agent_model.py set --alias gpt4_mini --as tool_calling
+
+# Update an alias
+./agent_model.py update --alias local_qwen --temperature 0.5
+
+# Show detailed alias information
+./agent_model.py show --alias local_qwen
+
+# Delete an alias (with safety checks)
+./agent_model.py delete --alias old_model
+```
+
+#### Integration with Server Operations
+
+**Important**: After changing model configurations, always restart the server:
+
+```bash
+# Stop server
+./stop_complete.sh
+
+# Verify configuration
+./agent_model.py status
+
+# Start server
+./start_complete.sh
+
+# Monitor server logs for proper model loading
+tail -f logs/server_complete.log | grep -i "model\|provider"
+```
+
+#### Supported Providers
+
+| Provider | Description | API Key Required | Base URL |
+|----------|-------------|------------------|----------|
+| **ollama** | Local Ollama models | No | http://127.0.0.1:11434 |
+| **openai** | OpenAI API (GPT models) | Yes | https://api.openai.com/v1 |
+| **openrouter** | OpenRouter API gateway | Yes | https://openrouter.ai/api/v1 |
+| **qwen** | Alibaba Cloud Qwen | Yes | https://dashscope.aliyuncs.com |
+
+#### Common Administrative Tasks
+
+**Daily Model Switching:**
+```bash
+# Switch to high-performance cloud model for peak hours
+./agent_model.py set --alias openrouter_deepseek --as primary
+
+# Switch to local model for off-peak hours (cost savings)
+./agent_model.py set --alias qwen_local --as primary
+```
+
+**Testing New Models:**
+```bash
+# Add test model alias
+./agent_model.py add --alias test_model \
+  --provider openai \
+  --model gpt-4o \
+  --timeout 120 \
+  --temperature 0.3
+
+# Set as primary for testing
+./agent_model.py set --alias test_model --as primary
+
+# Restart server and test
+./stop_complete.sh && ./start_complete.sh
+```
+
+**Reasoning Models Configuration:**
+```bash
+# Enable think mode for reasoning models (shows internal reasoning)
+./agent_model.py add --alias deepseek_reasoning \
+  --provider ollama \
+  --model deepseek-v3.1:671b-cloud \
+  --think \
+  --description "DeepSeek with reasoning display"
+
+# Disable think mode for cleaner output
+./agent_model.py update --alias deepseek_reasoning --no-think
+```
+
+#### Configuration Files
+
+**Model Aliases Database:**
+- **Location**: `config/model_aliases.json`
+- **Format**: JSON with full model configurations
+- **Backup**: Recommended before major changes
+- **Manual Editing**: Possible but not recommended (use CLI instead)
+
+**Active Configuration:**
+- **Location**: `config/llm_config.yaml`
+- **Modified By**: `./agent_model.py set` command
+- **Preserved**: Comments and other configuration sections
+- **Safety**: Automatic backup before changes
+
+#### Troubleshooting
+
+**Problem: "Alias not found"**
+```bash
+# List all available aliases
+./agent_model.py ls
+
+# Check exact alias name (case-sensitive)
+./agent_model.py show --alias <name>
+```
+
+**Problem: Model switch doesn't take effect**
+```bash
+# Verify configuration was updated
+./agent_model.py status
+cat config/llm_config.yaml | grep -A 5 "primary:"
+
+# Restart server (required for changes to take effect)
+./stop_complete.sh && ./start_complete.sh
+```
+
+**Problem: Server fails after model switch**
+```bash
+# Check server logs
+tail -f logs/server_complete.log | grep -i "error\|failed"
+
+# Verify model is available (for Ollama)
+ollama list
+
+# Verify API key is set (for cloud providers)
+echo $OPENAI_API_KEY
+echo $OPENROUTER_API_KEY
+
+# Revert to previous working configuration
+./agent_model.py set --alias <previous_working_alias> --as primary
+./stop_complete.sh && ./start_complete.sh
+```
+
+#### Quick Reference Card
+
+For administrators who need quick command reference, see: `MODEL_CLI_QUICKREF.txt` in the project root directory.
+
+**Comprehensive Documentation:** For detailed examples, workflows, and best practices, refer to [`docs/CLI_MODEL_MANAGEMENT.md`](../CLI_MODEL_MANAGEMENT.md).
 
 ### Flight Search Tool Configuration
 
@@ -2224,7 +2395,7 @@ This Administrator Guide provides comprehensive coverage of the Agentic RAG Syst
 
 ---
 
-**Document Version:** 1.0.3.3
-**System Version:** 1.0.3.3
-**Last Updated:** October 10, 2025
+**Document Version:** 1.0.3.6
+**System Version:** 1.0.3.6
+**Last Updated:** October 12, 2025
 **Next Review:** January 2026

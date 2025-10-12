@@ -30,6 +30,7 @@ An advanced AI-powered server with multi-LLM orchestration, tool calling, docume
 
 ### Quick Reference
 - **[Main Documentation Hub](docs/README.md)** - Central navigation and overview
+- **[CLI Model Management](docs/CLI_MODEL_MANAGEMENT.md)** - 🆕 Easy model switching and configuration
 - **[News Sources Configuration](docs/NEWS_SOURCES_CONFIGURATION.md)** - Customize news sources without code changes
 
 ## 🚀 Quick Start
