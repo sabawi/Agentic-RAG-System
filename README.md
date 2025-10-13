@@ -1,14 +1,15 @@
-# Agentic-RAG Server v1.0.3.0
+# Agentic-RAG Server v1.0.3.7
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, vision capabilities, intelligent email management, and **extensible plugin system**.
 
-[![Version](https://img.shields.io/badge/version-1.0.3.0-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.0)
+[![Version](https://img.shields.io/badge/version-1.0.3.7-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.7)
 [![Python](https://img.shields.io/badge/python-3.13-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
 
 ## 🚀 Features
 
+- **⚙️ NEW: POST-LLM Workflow Engine**: Executes complex, multi-step tasks like file creation and email sending *after* the primary LLM has generated its final, polished response.
 - **🔌 NEW: Plugin System**: Create custom LLM tools in 5 minutes - just 2 files (YAML + Python)
 - **🚀 Intelligent Email Management**: Advanced email retrieval and optimization with 84% context reduction
 - **Multi-LLM Architecture**: Primary, tool-calling, arbitration, and vision models working together
@@ -55,6 +56,14 @@ cd Agentic-RAG-System
 pip install -r requirements.txt
 python fastapi_server_complete.py
 ```
+
+## ⭐ What's New in v1.0.3.7
+
+### ⚙️ Architectural Overhaul & Critical Bug Fixes
+- **POST-LLM Execution Engine**: Implemented a new architecture to handle complex, multi-step workflows. The system now defers file creation and email sending until *after* the primary LLM has generated its final, polished response, ensuring outputs contain the complete and formatted content.
+- **CRITICAL BUG FIX**: Resolved a major issue where the response stream would close prematurely, preventing the entire POST-LLM engine from running. This fix unblocks all deferred file creation and email workflows.
+- **Dynamic Naming**: Files and email subjects are now given descriptive, context-aware names (e.g., `gaza_critical_analysis_2025_10_12.html`) instead of generic ones.
+- **Full documentation** for the new architecture is available here: **[POST-LLM Execution Architecture](docs/POST_LLM_EXECUTION_ARCHITECTURE.md)**.
 
 ## ⭐ What's New in V1.0.2.87
 
@@ -111,7 +120,7 @@ curl -X POST http://localhost:5000/v1/chat/completions \
 ## 🏗️ Architecture
 
 ### LLM Stack
-- **Primary Model**: `qwen3:8b` (Local Ollama - conversation & reasoning)
+- **Primary Model**: `deepseek-v3.1:671b-cloud` (Local Ollama - conversation & reasoning)
 - **Tool Calling**: `gpt-4o-mini` (OpenAI API - tool orchestration)*  
 - **Vision Model**: `qwen2.5vl:3b` (Local Ollama - image analysis)
 - **Arbitrator**: Configurable (Decision making)
