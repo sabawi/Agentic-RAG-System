@@ -112,7 +112,7 @@ class SecureEmailSenderTool(BaseUserTool):
                     "description": "Maximum seconds to wait for attachments (default: 45)"
                 }
             },
-            "required": ["to_email", "subject", "body"]
+            "required": ["to_email", "subject"]
         }
     
     def _load_email_config(self):
@@ -307,8 +307,9 @@ class SecureEmailSenderTool(BaseUserTool):
                         candidates.append((file_path, 70))
             
             # Return best match
+            # Sort by priority first (descending), then by modification time (newest first)
             if candidates:
-                candidates.sort(key=lambda x: x[1], reverse=True)
+                candidates.sort(key=lambda x: (x[1], x[0].stat().st_mtime), reverse=True)
                 return candidates[0][0]
                 
         except Exception as e:
@@ -643,10 +644,15 @@ class SecureEmailSenderTool(BaseUserTool):
                 pass
             
             # Send via sendmail/sSMTP  
-            with os.popen(f"{sendmail_path} -t -oi", "w") as p:
-                email_content = msg.as_string()
-                p.write(email_content)
-                print(f"📧 Sent {len(email_content)} bytes to {sendmail_path}")
+            p = os.popen(f"{sendmail_path} -t -oi", "w")
+            email_content = msg.as_string()
+            p.write(email_content)
+            print(f"📧 Sent {len(email_content)} bytes to {sendmail_path}")
+            
+            # Check the return code
+            if p.close() is not None:
+                logger.error(f"sendmail command failed with return code {p.close()}")
+                return False
             
             # 🧹 AUTO-CLEANUP: Remove successfully emailed generated files  
             # Extract attachment paths from the message
@@ -993,7 +999,7 @@ class SecureEmailSenderTool(BaseUserTool):
                     if full_path.startswith(sandbox_base) and os.path.exists(full_path):
                         # Additional safety: Only remove common generated file types
                         if any(full_path.lower().endswith(ext) for ext in [
-                            '.html', '.txt', '.md', '.csv', '.json', '.xml', '.log', '.pdf'
+                            '.html', '.txt', '.md', '.csv', '.json', '.xml', '.log', '.pdf', '.png'
                         ]):
                             os.remove(full_path)
                             files_cleaned.append(os.path.basename(full_path))
@@ -1020,6 +1026,7 @@ class SecureEmailSenderTool(BaseUserTool):
 
     async def execute(self, **kwargs) -> Dict[str, Any]:
         """Execute the email sending tool"""
+        logger.info(f"Executing secure_email_sender with args: {kwargs}")
         try:
             # Use kwargs directly as parameters
             parsed_args = kwargs
@@ -1035,9 +1042,19 @@ class SecureEmailSenderTool(BaseUserTool):
             to_email = parsed_args.get("to_email", "").strip()
             subject = parsed_args.get("subject", "").strip()
             body = parsed_args.get("body", "").strip()
-            
-            if not all([to_email, subject, body]):
-                return {"success": False, "error": "Missing required fields: to_email, subject, body", "result": None}
+
+            # 🔧 FIX: Make body optional - auto-generate if not provided but attachments exist
+            if not body:
+                # Check if attachments are being sent
+                if parsed_args.get("attachments") or parsed_args.get("attachment_path"):
+                    body = "Please find the attached file(s)."
+                    logger.info(f"🔧 AUTO-GENERATED EMAIL BODY: '{body}'")
+                else:
+                    # No body and no attachments - this is an error
+                    return {"success": False, "error": "Missing required fields: body (or provide attachments for auto-generated message)", "result": None}
+
+            if not all([to_email, subject]):
+                return {"success": False, "error": "Missing required fields: to_email, subject", "result": None}
             
             if not self._validate_email(to_email):
                 return {"success": False, "error": f"Invalid recipient email address: {to_email}", "result": None}
@@ -1233,7 +1250,9 @@ class SecureEmailSenderTool(BaseUserTool):
                         return {"success": False, "error": f"Failed to send email via {provider} SMTP and sendmail fallback also failed", "result": None}
             
         except Exception as e:
+            logger.error(f"Email sending failed with exception: {e}")
             return {"success": False, "error": f"Email sending failed: {str(e)}", "result": None}
+        logger.info(f"Finished executing secure_email_sender with args: {kwargs}")
     
     def _send_with_zip_fallback(self, msg: EmailMessage) -> bool:
         """🚀 ULTIMATE FALLBACK: Create ZIP file with all attachments and send single ZIP"""

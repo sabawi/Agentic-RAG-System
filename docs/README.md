@@ -72,6 +72,9 @@ Internal project management documentation organized by purpose:
 - [`./docs/setup/INSTALLATION.md`](./setup/INSTALLATION.md) - Detailed installation procedures
 - [`./docs/LLM_CONFIGURATION_GUIDE.md`](./LLM_CONFIGURATION_GUIDE.md) - **NEW**: Hybrid LLM Architecture configuration
 
+#### **🏗️ System Architecture**
+- [`./docs/POST_LLM_EXECUTION_ARCHITECTURE.md`](./POST_LLM_EXECUTION_ARCHITECTURE.md) - **CRITICAL**: POST-LLM execution system for multi-step workflows (v1.0.3.7)
+
 #### **📊 Project Tracking**
 - [`./docs/PROJECT_CHANGELOG.md`](./PROJECT_CHANGELOG.md) - Current project history and features
 

@@ -36,7 +36,7 @@ class AnalyticalVisualizerTool(BaseUserTool):
     def __init__(self):
         super().__init__()
         self._name = "analytical_visualizer"
-        self._description = "Generate analytical visualizations (plots, charts, tables) based on user prompts using LLM-driven code generation"
+        self._description = "Generate and automatically save analytical visualizations (plots, charts, tables) as PNG files. Creates publication-quality charts using LLM-driven code generation and saves them to sandbox_workspace. DO NOT use sandboxed_executor to save - files are saved automatically."
         self.working_dir = "/home/sabawi/Development/flaskserver/sandbox_workspace"
         self.visualization_llm_config = self._load_visualization_llm_config()
 
@@ -58,8 +58,12 @@ class AnalyticalVisualizerTool(BaseUserTool):
                     "description": "Description of the visualization to create (e.g., 'Create a bar chart of sales by quarter', 'Plot temperature trends over time')"
                 },
                 "data": {
-                    "type": "string", 
+                    "type": "string",
                     "description": "Optional data to visualize in JSON, CSV, or plain text format"
+                },
+                "filename": {
+                    "type": "string",
+                    "description": "Output filename for the visualization (e.g., 'chart.png', 'distribution_plot.png'). Must end with .png. Default: 'visualization_output.png'. IMPORTANT: Use the SAME filename when attaching to email."
                 }
             },
             "required": ["prompt"]
@@ -70,15 +74,21 @@ class AnalyticalVisualizerTool(BaseUserTool):
         try:
             prompt = kwargs.get('prompt', '')
             data = kwargs.get('data', '')
-            
+            filename = kwargs.get('filename', 'visualization_output.png')
+
+            # Validate filename
+            if not filename.endswith('.png'):
+                filename += '.png'
+
             if not prompt:
                 return "❌ **Visualization Generation Failed**: No visualization prompt provided"
-            
+
             logger.info(f"🎨 Starting analytical visualization: {prompt[:100]}...")
+            logger.info(f"📁 Output filename: {filename}")
             logger.info(f"🔧 DEBUG: execute() method called - this should be the one in use")
-            
+
             # Generate visualization code using LLM
-            result = await self._generate_and_execute_visualization(prompt, data)
+            result = await self._generate_and_execute_visualization(prompt, data, filename)
             
             logger.info(f"🔧 DEBUG: execute() method - result keys: {list(result.keys()) if isinstance(result, dict) else 'not dict'}")
             logger.info(f"🔧 DEBUG: execute() method - success: {result.get('success') if isinstance(result, dict) else 'N/A'}")
@@ -153,17 +163,17 @@ class AnalyticalVisualizerTool(BaseUserTool):
                 "response": f"❌ **Visualization Generation Failed**: {str(e)}"
             }
     
-    async def _generate_and_execute_visualization(self, prompt: str, data: str = '') -> Dict[str, Any]:
+    async def _generate_and_execute_visualization(self, prompt: str, data: str = '', filename: str = 'visualization_output.png') -> Dict[str, Any]:
         """Generate and execute visualization based on prompt and optional data."""
         try:
             # Use the existing generate_visualization method
             full_prompt = prompt
             if data:
                 full_prompt = f"{prompt}\n\nData to visualize:\n{data}"
-            
-            result = await self.generate_visualization(full_prompt)
+
+            result = await self.generate_visualization(full_prompt, filename)
             return result
-            
+
         except Exception as e:
             logger.error(f"🎨 Visualization generation failed: {e}")
             return {
@@ -236,99 +246,45 @@ class AnalyticalVisualizerTool(BaseUserTool):
                 }
             }
 
-    async def _generate_visualization_code_with_llm(self, prompt: str) -> Dict[str, Any]:
+    async def _generate_visualization_code_with_llm(self, prompt: str, filename: str = 'visualization_output.png') -> Dict[str, Any]:
         """
         Use LLM to generate complete Python matplotlib code for any visualization request
         """
-        system_prompt = """You are an expert Python data visualization specialist with deep knowledge of matplotlib, scientific computing, and domain expertise across physics, chemistry, biology, economics, mathematics, and engineering.
+        # Construct the full output path
+        full_output_path = f"/home/sabawi/Development/flaskserver/sandbox_workspace/{filename}"
 
-Your task: Generate complete, executable Python code using matplotlib to create the most appropriate visualization for the user's request.
+        system_prompt = f"""You are an expert Python data visualization specialist using matplotlib.
 
-🚨 CRITICAL STOCK CHART FIX:
-For stock charts, NEVER use fill_between() - it causes matplotlib errors with pandas data. Use this bulletproof pattern:
-```python
-import yfinance as yf
-import matplotlib.pyplot as plt
-import numpy as np
-
-ticker = "AMZN"  # Use the actual requested ticker
-data = yf.download(ticker, period='1y', auto_adjust=True)
-
-# BULLETPROOF: Flatten all data to pure numpy arrays
-prices = np.array(data['Close'].values).flatten()
-dates = np.array(data.index.values)
-
-# Calculate percentage change if requested
-start_price = prices[0]
-pct_change = ((prices - start_price) / start_price) * 100
-
-# Create simple, reliable stock chart
-plt.figure(figsize=(12, 8))
-plt.plot(dates, prices, linewidth=3, color='#2E86C1', label=f'{ticker} Stock Price')
-
-# Professional styling
-plt.title(f'{ticker} Stock Price - Last Year Performance', fontsize=16, fontweight='bold')
-plt.xlabel('Date', fontsize=12)
-plt.ylabel('Price ($)', fontsize=12)
-plt.legend(fontsize=10)
-plt.grid(True, alpha=0.3)
-
-# Add percentage change annotation if requested
-plt.figtext(0.02, 0.02, f'Total Change: {pct_change[-1]:.1f}%', fontsize=10)
-
-# DO NOT USE fill_between() - it fails with pandas data structures
-```
-
-🚨 ABSOLUTE RULE: NEVER use fill_between() with stock data - only use plt.plot() for stock charts!
+Your task is to generate complete, executable Python code to create the visualization for the user's request.
 
 IMPORTANT REQUIREMENTS:
-1. Generate complete, runnable Python code - no placeholders, no "..." shortcuts
-2. Use realistic data that demonstrates the concept effectively
-3. Include proper scientific/mathematical relationships when relevant
-4. Create professional-looking plots with proper labels, titles, legends, and formatting
-5. For scientific topics, use correct equations and realistic parameters
-6. CRITICAL: You must save the plot to the full working directory path and output success markers
-7. **MODIFICATION REQUESTS**: If the request mentions modifying existing plots (e.g., "make it go up to 6%", "superimpose", "add"), interpret the full intent and create a comprehensive new plot
-
-SCIENTIFIC EXPERTISE:
-- Physics: Use correct equations for radioactive decay, wave functions, thermodynamics, etc.
-- Chemistry: Show molecular structures, reaction kinetics, phase diagrams appropriately  
-- Biology: Display growth curves, population dynamics, genetic data correctly
-- Economics: Model supply/demand, market equilibrium, economic indicators accurately (YIELD CURVES: use realistic maturity periods 3M, 6M, 1Y, 2Y, 5Y, 10Y, 30Y)
-- Mathematics: Plot functions, derivatives, statistical distributions properly
-
-YIELD CURVE SPECIFICATIONS:
-- Normal curve: Short rates < Long rates (e.g., 3M: 2.5%, 30Y: 4.5%)
-- Inverted curve: Short rates > Long rates (e.g., 3M: 5.5%, 30Y: 3.0%)
-- Use realistic maturity labels: 3M, 6M, 1Y, 2Y, 5Y, 10Y, 30Y
-- Professional formatting with grid, legends, and economic context
+1. Generate complete, runnable Python code.
+2. Use realistic data.
+3. Create professional-looking plots with labels, titles, and legends.
+4. Save the plot to the full working directory path and output success markers.
 
 REQUIRED CODE STRUCTURE:
 ```python
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-# Add other imports as needed
 
-# Set figure size for consistent, manageable image sizes
 plt.figure(figsize=(12, 8))
 
-# [Generate appropriate data based on the scientific/mathematical concept]
-# [Create the visualization with proper scientific accuracy]
-# [Format professionally with labels, titles, etc.]
+# [Generate appropriate data and create the visualization]
 
 # CRITICAL: Use full path and output success markers
-output_path = "/home/sabawi/Development/flaskserver/sandbox_workspace/visualization_output.png"
+output_path = "{full_output_path}"
 plt.savefig(output_path, dpi=100, bbox_inches='tight', facecolor='white', edgecolor='none')
 plt.close()
 
 # REQUIRED: Output success markers for system integration
 print("VISUALIZATION_SUCCESS")
-print(f"OUTPUT_PATH: {output_path}")
-print("SUMMARY_DATA: {'chart_type': 'scientific_visualization', 'method': 'llm_generated'}")
+print(f"OUTPUT_PATH: {{output_path}}")
+print("SUMMARY_DATA: {{'chart_type': 'scientific_visualization', 'method': 'llm_generated'}}")
 ```
 
-Respond with ONLY the Python code following this exact format - no explanations or markdown formatting."""
+Respond with ONLY the Python code following this exact format."""
 
         user_message = f"Generate Python matplotlib code for: {prompt}"
         
@@ -363,6 +319,10 @@ Respond with ONLY the Python code following this exact format - no explanations 
                         if not api_key:
                             logger.error(f"❌ Environment variable {env_var} not set")
                             return {"success": False, "error": f"Environment variable {env_var} not set"}
+                        if api_key == 'ollama':
+                            logger.error(f"❌ Incorrect API key. The OPENAI_API_KEY environment variable is set to 'ollama'. Please check your environment configuration.")
+                            return {"success": False, "error": "Incorrect OPENAI_API_KEY. Please check your environment."}
+                        llm_config['config']['api_key'] = api_key
                     
                     headers = {
                         'Authorization': f'Bearer {api_key}',
@@ -586,14 +546,15 @@ Respond with ONLY the Python code following this exact format - no explanations 
                 "error": f"Execution error: {str(e)}"
             }
     
-    async def generate_visualization(self, prompt: str) -> Dict[str, Any]:
+    async def generate_visualization(self, prompt: str, filename: str = 'visualization_output.png') -> Dict[str, Any]:
         """
         Main method: Generate visualization based on user prompt using LLM-driven approach
         """
         logger.info(f"🎨 Generating LLM-driven visualization for prompt: {prompt}")
-        
+        logger.info(f"📁 Output filename: {filename}")
+
         # Step 1: Use LLM to generate complete Python code for the visualization
-        code_result = await self._generate_visualization_code_with_llm(prompt)
+        code_result = await self._generate_visualization_code_with_llm(prompt, filename)
         
         if not code_result["success"]:
             logger.error(f"❌ LLM code generation failed: {code_result.get('error', 'Unknown error')}")

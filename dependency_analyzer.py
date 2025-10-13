@@ -195,6 +195,8 @@ SYMBOL_TO_TOOL = {
     'WIKI_DATA': 'wikipedia_query',
     'FORTUNE_MESSAGE': 'fortune_message',
     'LLM_GENERATED_CONTENT': 'llm_content_generator',  # Special: LLM creative content generation
+    'VISUALIZATION_OUTPUT': 'analytical_visualizer',  # Visualization PNG files
+    'CHART_IMAGE': 'analytical_visualizer',  # Alternative reference for charts
 }
 
 
@@ -262,8 +264,19 @@ def detect_semantic_dependencies(tool_calls: List[dict]) -> Dict[str, List[str]]
         # Rule 1: Email with attachments depends on file creation
         if tool_name == 'secure_email_sender':
             if 'attachments' in params and params['attachments']:
-                # If sandboxed_executor is in the tool list, email depends on it
-                if 'sandboxed_executor' in tool_names:
+                attachment_file = params['attachments']
+
+                # PRIORITY 1: PNG/image attachments - prefer analytical_visualizer
+                if isinstance(attachment_file, str) and attachment_file.endswith(('.png', '.jpg', '.jpeg', '.svg')):
+                    if 'analytical_visualizer' in tool_names:
+                        dependencies[tool_name] = ['analytical_visualizer']
+                        logger.debug(f"📧 Semantic: email with image attachment depends on analytical_visualizer")
+                    elif 'sandboxed_executor' in tool_names:
+                        dependencies[tool_name] = ['sandboxed_executor']
+                        logger.debug(f"📧 Semantic: email with image attachment depends on sandboxed_executor (fallback)")
+
+                # PRIORITY 2: Other attachments - use sandboxed_executor
+                elif 'sandboxed_executor' in tool_names:
                     dependencies[tool_name] = ['sandboxed_executor']
                     logger.debug(f"📧 Semantic: email depends on file creation")
 

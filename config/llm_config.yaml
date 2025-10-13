@@ -1,27 +1,3 @@
-# =============================================================================
-# LLM Configuration File
-# =============================================================================
-#
-# CRITICAL: Token Parameter Usage by Provider Type
-# ------------------------------------------------
-# 
-# For OLLAMA providers (type: ollama):
-#   • context_window_size → Maps to Ollama 'num_ctx' parameter (input context limit)
-#   • num_predict         → Maps to Ollama 'num_predict' parameter (output tokens limit)
-#   • max_tokens          → IGNORED (kept for backward compatibility only)
-#
-# For NON-OLLAMA providers (type: openai, qwen, gemini, etc.):
-#   • context_window_size → Used for input context size management
-#   • max_tokens          → Used for output tokens limit (native API parameter)
-#   • num_predict         → Available but typically unused by these providers
-#
-# Parameter Priority (all providers):
-#   1. Request-level parameters (highest priority)
-#   2. Configuration file parameters  
-#   3. Provider-specific defaults (lowest priority)
-#
-# =============================================================================
-
 debug:
   log_requests: false
   log_timing: true
@@ -37,26 +13,22 @@ llm:
     - qwen
     - gemini
   primary:
-    type: openrouter
+    type: ollama
     config:
-      model: deepseek/deepseek-r1  # OpenRouter DeepSeek R1 reasoning model
-      timeout: 3600  # 60 minutes for reasoning tasks
-      context_window_size: 32768  # Large context for comprehensive searches
+      model: deepseek-v3.1:671b-cloud
+      timeout: 600
       temperature: 0.7
-      max_tokens: 16384  # Used for OpenRouter (not num_predict)
-      base_url: https://openrouter.ai/api/v1
-      api_key: ${OPENROUTER_API_KEY}
+      max_tokens: 16384
       stream: true
-      headers:
-        HTTP-Referer: ${OPENROUTER_SITE_URL}
-        X-Title: ${OPENROUTER_SITE_NAME}
+      context_window_size: 16384
+      think: false
   tool_calling:
     type: openai
     config:
       model: gpt-4o-mini
       timeout: 120
       context_window_size: 4096
-      temperature: 0.1  # Lower for tool calling
+      temperature: 0.1
       max_tokens: 1024
       stream: false
   providers:
@@ -79,10 +51,9 @@ llm:
       retry_attempts: 3
       retry_delay: 1
       headers:
-        HTTP-Referer: ${OPENROUTER_SITE_URL}  # Optional: Site URL for rankings
-        X-Title: ${OPENROUTER_SITE_NAME}      # Optional: Site title for rankings
+        HTTP-Referer: ${OPENROUTER_SITE_URL}
+        X-Title: ${OPENROUTER_SITE_NAME}
       models:
-        # OpenRouter supports many models - configure your preferred ones here
         primary: deepseek/deepseek-r1:free
         tool_calling: openai/gpt-4o-mini
         reasoning: deepseek/deepseek-r1
@@ -132,205 +103,194 @@ vision:
   type: ollama
   config:
     model: qwen2.5vl:3b
-    timeout: 3600  # 60 minutes for vision processing with large images
+    timeout: 3600
     base_url: http://127.0.0.1:11434
     fallback_model: bakllava:latest
-    think: false  # Configurable think parameter for vision tasks
+    think: false
 flight_search:
   enabled: true
   web_scraping:
     enabled: true
     timeout_seconds: 30
     max_results: 10
-    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
+      like Gecko) Chrome/91.0.4472.124 Safari/537.36
   apis:
-    # Flight search API providers - Add your API keys here
     amadeus:
       enabled: false
       api_key: ${AMADEUS_API_KEY}
       api_secret: ${AMADEUS_API_SECRET}
-      base_url: "https://test.api.amadeus.com"
-      # Change to "https://api.amadeus.com" for production
+      base_url: https://test.api.amadeus.com
     skyscanner:
       enabled: false
       api_key: ${SKYSCANNER_API_KEY}
-      base_url: "https://partners.api.skyscanner.net"
+      base_url: https://partners.api.skyscanner.net
     serpapi:
       enabled: false
       api_key: ${SERPAPI_API_KEY}
-      base_url: "https://serpapi.com/search.json"
-      # SerpAPI for Google Flights scraping
+      base_url: https://serpapi.com/search.json
     rapidapi_skyscanner:
       enabled: false
       api_key: ${RAPIDAPI_KEY}
-      base_url: "https://skyscanner50.p.rapidapi.com"
-      host: "skyscanner50.p.rapidapi.com"
+      base_url: https://skyscanner50.p.rapidapi.com
+      host: skyscanner50.p.rapidapi.com
   verification_links:
-    # These booking sites are always included for verification
-    kayak: "https://www.kayak.com/flights"
-    expedia: "https://www.expedia.com/Flights-Search"
-    google_flights: "https://www.google.com/travel/flights"
-    priceline: "https://www.priceline.com/relax/at/flights"
-    momondo: "https://www.momondo.com/flight-search"
+    kayak: https://www.kayak.com/flights
+    expedia: https://www.expedia.com/Flights-Search
+    google_flights: https://www.google.com/travel/flights
+    priceline: https://www.priceline.com/relax/at/flights
+    momondo: https://www.momondo.com/flight-search
   chromedriver:
-    # ChromeDriver configuration for web scraping
-    path: ${CHROMEDRIVER_PATH}  # Optional: specify custom path
+    path: ${CHROMEDRIVER_PATH}
     auto_install: true
     headless: true
     timeout: 30
-    window_size: "1920,1080"
+    window_size: 1920,1080
 email:
-  # =============================================================================
-  # Email Management Configuration
-  # =============================================================================
-  # Universal email library integration for retrieval, search, and management
-  # Enables natural language queries like:
-  # - "List my unread emails from gmail"
-  # - "Show emails from Reema about university in last 7 days"
-  # - "Find Apple billing notifications"
-
-  # Enable the unified email management system
   enabled: true
-
-  # Default provider for operations (when not specified)
-  default_provider: "gmail_primary"
-
-  # Email retrieval settings
+  default_provider: gmail_primary
   retrieval:
     default_timeout: 30
     max_emails_per_request: 50
     auto_mark_read: false
-    default_retrieval_type: "headers"  # "headers" (fast) or "full" (complete)
-    cache_duration: 300  # Cache results for 5 minutes
-
-  # Email sending settings (integrates with existing secure_email_sender)
+    default_retrieval_type: headers
+    cache_duration: 300
   sending:
     auto_cleanup_attachments: true
     max_attachment_size_mb: 25
     wait_for_attachments: true
     attachment_timeout: 45
-    preserve_existing_functionality: true  # Ensures backward compatibility
-
-  # Security settings
+    preserve_existing_functionality: true
   security:
-    allowed_attachment_types: [".pdf", ".html", ".txt", ".md", ".csv", ".json", ".xml", ".log", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip"]
-    forbidden_attachment_types: [".exe", ".bat", ".cmd", ".com", ".scr", ".pif", ".msi", ".dll"]
+    allowed_attachment_types:
+    - .pdf
+    - .html
+    - .txt
+    - .md
+    - .csv
+    - .json
+    - .xml
+    - .log
+    - .doc
+    - .docx
+    - .xls
+    - .xlsx
+    - .ppt
+    - .pptx
+    - .zip
+    forbidden_attachment_types:
+    - .exe
+    - .bat
+    - .cmd
+    - .com
+    - .scr
+    - .pif
+    - .msi
+    - .dll
     max_recipients: 50
     require_auth: true
     enable_app_passwords: true
-
-  # Email providers configuration
   providers:
     gmail_primary:
-      email: "${GMAIL_PRIMARY_EMAIL}"
-      password: "${GMAIL_PRIMARY_APP_PASSWORD}"
+      email: ${GMAIL_PRIMARY_EMAIL}
+      password: ${GMAIL_PRIMARY_APP_PASSWORD}
       imap:
-        server: "imap.gmail.com"
+        server: imap.gmail.com
         port: 993
         use_ssl: true
       smtp:
-        server: "smtp.gmail.com"
+        server: smtp.gmail.com
         port: 587
         use_tls: true
       pop3:
-        server: "pop.gmail.com"
+        server: pop.gmail.com
         port: 995
         use_ssl: true
-      description: "Primary Gmail account for personal/main email"
-
+      description: Primary Gmail account for personal/main email
     gmail_work:
-      email: "${GMAIL_WORK_EMAIL}"
-      password: "${GMAIL_WORK_APP_PASSWORD}"
+      email: ${GMAIL_WORK_EMAIL}
+      password: ${GMAIL_WORK_APP_PASSWORD}
       imap:
-        server: "imap.gmail.com"
+        server: imap.gmail.com
         port: 993
         use_ssl: true
       smtp:
-        server: "smtp.gmail.com"
+        server: smtp.gmail.com
         port: 587
         use_tls: true
-      description: "Work Gmail account"
-
+      description: Work Gmail account
     outlook_personal:
-      email: "${OUTLOOK_PERSONAL_EMAIL}"
-      password: "${OUTLOOK_PERSONAL_PASSWORD}"
+      email: ${OUTLOOK_PERSONAL_EMAIL}
+      password: ${OUTLOOK_PERSONAL_PASSWORD}
       imap:
-        server: "outlook.office365.com"
+        server: outlook.office365.com
         port: 993
         use_ssl: true
       smtp:
-        server: "smtp.office365.com"
+        server: smtp.office365.com
         port: 587
         use_tls: true
-      description: "Personal Outlook/Hotmail account"
-
+      description: Personal Outlook/Hotmail account
     outlook_work:
-      email: "${OUTLOOK_WORK_EMAIL}"
-      password: "${OUTLOOK_WORK_PASSWORD}"
+      email: ${OUTLOOK_WORK_EMAIL}
+      password: ${OUTLOOK_WORK_PASSWORD}
       imap:
-        server: "outlook.office365.com"
+        server: outlook.office365.com
         port: 993
         use_ssl: true
       smtp:
-        server: "smtp.office365.com"
+        server: smtp.office365.com
         port: 587
         use_tls: true
-      description: "Work Outlook/Office 365 account"
-
+      description: Work Outlook/Office 365 account
     yahoo_personal:
-      email: "${YAHOO_PERSONAL_EMAIL}"
-      password: "${YAHOO_PERSONAL_APP_PASSWORD}"
+      email: ${YAHOO_PERSONAL_EMAIL}
+      password: ${YAHOO_PERSONAL_APP_PASSWORD}
       imap:
-        server: "imap.mail.yahoo.com"
+        server: imap.mail.yahoo.com
         port: 993
         use_ssl: true
       smtp:
-        server: "smtp.mail.yahoo.com"
+        server: smtp.mail.yahoo.com
         port: 587
         use_tls: true
       pop3:
-        server: "pop.mail.yahoo.com"
+        server: pop.mail.yahoo.com
         port: 995
         use_ssl: true
-      description: "Personal Yahoo Mail account"
-
+      description: Personal Yahoo Mail account
     icloud_personal:
-      email: "${ICLOUD_PERSONAL_EMAIL}"
-      password: "${ICLOUD_PERSONAL_APP_PASSWORD}"
+      email: ${ICLOUD_PERSONAL_EMAIL}
+      password: ${ICLOUD_PERSONAL_APP_PASSWORD}
       imap:
-        server: "imap.mail.me.com"
+        server: imap.mail.me.com
         port: 993
         use_ssl: true
       smtp:
-        server: "smtp.mail.me.com"
+        server: smtp.mail.me.com
         port: 587
         use_tls: true
-      description: "Personal iCloud Mail account"
-
+      description: Personal iCloud Mail account
     custom_server:
-      email: "${CUSTOM_EMAIL}"
-      password: "${CUSTOM_PASSWORD}"
+      email: ${CUSTOM_EMAIL}
+      password: ${CUSTOM_PASSWORD}
       imap:
-        server: "${CUSTOM_IMAP_SERVER}"
-        port: "${CUSTOM_IMAP_PORT:993}"
+        server: ${CUSTOM_IMAP_SERVER}
+        port: ${CUSTOM_IMAP_PORT:993}
         use_ssl: true
       smtp:
-        server: "${CUSTOM_SMTP_SERVER}"
-        port: "${CUSTOM_SMTP_PORT:587}"
+        server: ${CUSTOM_SMTP_SERVER}
+        port: ${CUSTOM_SMTP_PORT:587}
         use_tls: true
-      description: "Custom IMAP/SMTP server"
-
-  # Global email settings
+      description: Custom IMAP/SMTP server
   settings:
     default_timeout: 30
     max_attachment_size_mb: 25
-    date_format: "%Y-%m-%d %H:%M:%S"
-    encoding: "utf-8"
+    date_format: '%Y-%m-%d %H:%M:%S'
+    encoding: utf-8
     max_search_results: 100
     connection_retry_attempts: 3
     connection_retry_delay: 2
-
-  # Natural language processing settings
   nlp:
     enable_smart_parsing: true
     enable_sender_detection: true

@@ -18,14 +18,10 @@ def test_gaza_email():
     print("=" * 70)
     print()
 
-    url = "http://localhost:5000/llama3_1b/stream"
+    url = "http://localhost:5000/v1/chat/completions"
     payload = {
-        "prompt": prompt,
-        "model": "deepseek-v3.1:671b-cloud",
-        "toolsInUse": True,
-        "searchWebInUse": False,
-        "images": ["noimage"],
-        "tools_calling_model": "gpt-4o-mini"
+        "model": "Agentic-RAG-Model1",
+        "messages": [{"role": "user", "content": prompt}]
     }
 
     print("📤 Sending request...")

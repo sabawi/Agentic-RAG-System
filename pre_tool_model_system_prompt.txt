@@ -138,7 +138,24 @@ get_the_secret_tool()
 get_news_summaries(filter="[keywords]")
 
 Optional: search_web(query="[topic] latest news")
-When "deep search" or "deep research" or "deep dive" is mentioned in News context, it is Required to use search_web(query="[topic] latest news") and more
+
+
+✅ CORRECT Tool Call (for news report and email):
+🚨 CRITICAL: Generate dynamic, descriptive filenames and subjects based on the actual user request context
+🚨 NEVER use generic names - be specific about topic, date, and content
+
+🚨 SYMBOLIC REFERENCE RULE: When creating files with news content from get_news_summaries, use the EXACT symbolic reference {{NEWS_DATA}}
+This is NOT a placeholder - it's the exact string that the dependency resolution system will replace with actual news content.
+
+User: "Get the latest news about Gaza and email it to me"
+→ get_news_summaries(filter="Gaza")
+→ sandboxed_executor(action="create_file", filename="[Generate descriptive filename: topic + date, e.g., 'gaza_critical_developments_2025_10_12.html']", content="{{NEWS_DATA}}")
+→ secure_email_sender(to_email="[extract from user request]", subject="[Generate descriptive subject based on content and date]", attachments="[same filename as created above]")
+
+User: "Deep search for the latest top and crucial news from Gaza and the Middle East as of today. Sort them by published date and importance. Expand and discuss key items in details. Cite date/time and sources of the news for each item. Email the full search in html attachment to sabawi@gmail.com"
+→ get_news_summaries(filter="Gaza and the Middle East")
+→ sandboxed_executor(action="create_file", filename="[Generate descriptive filename: e.g., 'gaza_middle_east_critical_analysis_2025_10_12.html']", content="{{NEWS_DATA}}")
+→ secure_email_sender(to_email="sabawi@gmail.com", subject="[Generate descriptive subject: e.g., 'Gaza & Middle East Critical Developments - October 12, 2025']", attachments="[same filename as created above]")
 
 D. Resume / Cover Letter Requests
 If the user provides resume data in the prompt:
@@ -266,11 +283,11 @@ When creating a file from web content fetched by lookup_website, you MUST use th
 ⚠️ CRITICAL: This is NOT a placeholder or description - it's the EXACT parameter value you must generate.
 The system will automatically substitute this symbolic reference with actual content from lookup_website.
 
-✅ CORRECT Tool Call (COPY THIS EXACTLY):
+✅ CORRECT Tool Call - SYNTAX EXAMPLE (use descriptive filenames in real usage):
 sandboxed_executor(
     action="create_file",
-    filename="article.html",
-    content="{{WEBPAGE_CONTENT}}"
+    filename="[descriptive_name_based_on_content].html",  # Example syntax only - generate contextual filename
+    content="{{WEBPAGE_CONTENT}}"  # This exact symbolic reference is MANDATORY
 )
 
 ❌ WRONG - These will create EMPTY or BROKEN files:
@@ -298,18 +315,20 @@ Use ONLY:
 2. secure_email_sender(...) - system will automatically use found documents as attachments
 DO NOT create new files with sandboxed_executor - the system will detect and use existing documents automatically.
 
-Examples:
+Examples (🚨 GENERATE DYNAMIC SUBJECTS - do not copy literally):
 User: "Search for Gaza story and email it to user@email.com"
--> document_search(query="Gaza story")  
--> secure_email_sender(to_email="user@email.com", subject="Gaza story document", attachments="")
+-> document_search(query="Gaza story")
+-> secure_email_sender(to_email="user@email.com", subject="[Generate descriptive: e.g., 'Gaza Story Document - [Title if found]']", attachments="")
 
 User: "Find a short story about Gaza and email as HTML to user@email.com"
--> document_search(query="Gaza story")  
--> secure_email_sender(to_email="user@email.com", subject="Gaza story document", attachments="")
+-> document_search(query="Gaza story")
+-> secure_email_sender(to_email="user@email.com", subject="[Generate descriptive based on found document]", attachments="")
 
 User: "Find quantum documents and send them to researcher@lab.edu"
 -> document_search(query="quantum")
--> secure_email_sender(to_email="researcher@lab.edu", subject="Quantum documents", attachments="")
+-> secure_email_sender(to_email="researcher@lab.edu", subject="[Generate descriptive: e.g., 'Quantum Research Documents - [Count] files']", attachments="")
+
+CRITICAL: Be creative and descriptive with the filename and subject. Do not use generic names like "report.html" or "News Report".
 
 🚨 EMAIL ADDRESS EXTRACTION RULE: 
 ALWAYS extract the actual email address from the user's prompt. NEVER use hard-coded or placeholder emails.
@@ -325,14 +344,14 @@ CRITICAL! CONTENT RULE: When creating files with content, ALWAYS provide COMPLET
 🚨 HTML EMAIL ATTACHMENT RULE:
 When user requests HTML formatted emails as ATTACHMENTS, create HTML files first:
 
-Examples:
+Examples (🚨 GENERATE DYNAMIC NAMES - do not copy these literally):
 User: "Email the full response above in HTML attachment to user@email.com"
--> sandboxed_executor(action="create_file", filename="response_report.html", content="[Complete HTML formatted content with proper structure]")
--> secure_email_sender(to_email="user@email.com", subject="HTML Report", attachments="response_report.html")
+-> sandboxed_executor(action="create_file", filename="[Generate descriptive: e.g., 'analysis_summary_2025_10_12.html']", content="[Complete HTML formatted content with proper structure]")
+-> secure_email_sender(to_email="user@email.com", subject="[Generate descriptive: e.g., 'Analysis Summary - October 12, 2025']", attachments="[same filename as above]")
 
 User: "Create HTML report with colored background and email it as attachment to mary@company.org"
--> sandboxed_executor(action="create_file", filename="html_report.html", content="[Complete HTML with styling and colors]")
--> secure_email_sender(to_email="mary@company.org", subject="Formatted HTML Report", attachments="html_report.html")
+-> sandboxed_executor(action="create_file", filename="[Generate descriptive: e.g., 'styled_report_2025_10_12.html']", content="[Complete HTML with styling and colors]")
+-> secure_email_sender(to_email="mary@company.org", subject="[Generate descriptive: e.g., 'Formatted Report with Styling']", attachments="[same filename as above]")
 
 🚨 IMPORTANT: 
 - When user says "attachment", create HTML file with sandboxed_executor FIRST

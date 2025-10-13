@@ -139,6 +139,7 @@ llm:
     order:
       - ollama                            # Try local first (privacy + speed)
       - openai                            # Then cloud (reliability)
+      - openrouter                        # Alternative cloud (many models)
       - qwen                              # Alternative cloud
       - gemini                            # Final fallback
 
@@ -159,6 +160,19 @@ llm:
       models:
         primary: gpt-4o                   # Available as fallback
         tool_calling: gpt-4o              # Alternative tool calling model
+    openrouter:
+      api_key: ${OPENROUTER_API_KEY}      # Must be set in .env file
+      base_url: https://openrouter.ai/api/v1
+      retry_attempts: 3
+      retry_delay: 1
+      headers:                            # Optional headers for rankings
+        HTTP-Referer: ${OPENROUTER_SITE_URL}
+        X-Title: ${OPENROUTER_SITE_NAME}
+      models:
+        primary: deepseek/deepseek-r1:free      # Free reasoning model
+        tool_calling: openai/gpt-4o-mini        # Tool calling via OpenRouter
+        reasoning: deepseek/deepseek-r1         # Full reasoning model
+        free: deepseek/deepseek-r1:free         # Free tier option
 
 # =============================================================================
 # OPTIMIZATION SYSTEM - Runtime performance controls
@@ -413,6 +427,11 @@ OPENAI_API_KEY=your_openai_api_key_here
 GOOGLE_API_KEY=your_google_api_key
 GEMINI_API_KEY=your_gemini_api_key
 QWEN_API_KEY=your_qwen_api_key
+
+# OpenRouter (access to many models through one API)
+OPENROUTER_API_KEY=your_openrouter_api_key
+OPENROUTER_SITE_URL=""                  # Optional: Your site URL for rankings
+OPENROUTER_SITE_NAME=""                 # Optional: Your site name for rankings
 
 # =============================================================================
 # OPTIONAL: Email Integration (Multi-Account Support)

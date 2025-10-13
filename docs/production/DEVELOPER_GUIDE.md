@@ -32,6 +32,7 @@ The Agentic RAG System is a sophisticated 2-stage LLM processing architecture th
 ### Key Features
 
 - **2-Stage LLM Architecture**: Tool calling model → Primary LLM → Post-processing
+- **POST-LLM Execution System**: 🆕 [Deferred tool execution for multi-step workflows](../POST_LLM_EXECUTION_ARCHITECTURE.md) - Critical for file creation and email workflows
 - **20-Tool Agentic System**: Web search, stock analysis, email retrieval/sending, file creation, calendar integration, flight search, document processing, image analysis, PDF generation, and more
 - **OpenAI API Compatibility**: Full `/v1/chat/completions` and `/v1/models` support
 - **Document Processing**: FAISS-based RAG with embedding search and interrogation

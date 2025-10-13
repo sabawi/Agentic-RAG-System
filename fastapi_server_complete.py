@@ -43,6 +43,7 @@ import requests
 # HTTP Connection Pooling
 from http_pool_manager import http_pool, init_http_pool, cleanup_http_pool
 from http_helpers import pooled_get, pooled_post, requests_compatible_get, requests_compatible_post
+from dependency_analyzer import resolve_dependencies
 
 # Configuration Management
 from utils.config_loader import config_loader
@@ -5437,6 +5438,7 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
     if any(meta_indicator in user_prompt_lower for meta_indicator in meta_task_indicators):
         return {"complete": True, "pattern": "meta_task"}
     
+    
     # 🚨 BULLETPROOF EMAIL DETECTION
     # Any mention of email/send requires secure_email_sender tool
     email_keywords = [
@@ -5539,7 +5541,21 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
             for required_tool in pattern["required_tools"]:
                 if required_tool not in tools_called:
                     missing_tools.append(required_tool)
-            
+                # 🔧 CRITICAL: Check if THIS SPECIFIC tool was deferred
+                elif f"Tool: {required_tool}" in tools_results:
+                    # Extract this tool's result section
+                    tool_section_start = tools_results.find(f"Tool: {required_tool}")
+                    next_tool_start = tools_results.find("Tool: ", tool_section_start + 1)
+                    if next_tool_start == -1:
+                        tool_result = tools_results[tool_section_start:]
+                    else:
+                        tool_result = tools_results[tool_section_start:next_tool_start]
+
+                    # Check if THIS tool's result contains "deferred"
+                    if "deferred" in tool_result.lower():
+                        logger.info(f"🔧 VERIFIER: {required_tool} was deferred - adding to missing_tools")
+                        missing_tools.append(required_tool)
+
             if missing_tools:
                 return {
                     "complete": False,
@@ -6405,9 +6421,15 @@ async def _detect_html_email_request(tools_results: str, user_prompt: str) -> di
                     to_email = user_email_match.group(1)
                     break
         
+        # 🔧 DYNAMIC SUBJECT: Generate meaningful subject from user prompt and tools results
+        default_subject = 'HTML Report'
+        if not subject_match:
+            # Try to generate dynamic subject from user prompt
+            default_subject = _generate_dynamic_title(user_prompt, tools_results)
+
         return {
             'to_email': to_email,
-            'subject': subject_match.group(1) if subject_match else 'HTML Report',
+            'subject': subject_match.group(1) if subject_match else default_subject,
             'style': style_match.group(1) if style_match else None,
             'source': source_match.group(1) if source_match else 'current_response',
             'detected': True
@@ -6415,7 +6437,7 @@ async def _detect_html_email_request(tools_results: str, user_prompt: str) -> di
     
     return {}
 
-async def _generate_complete_html_email(complete_llm_response: str, html_email_request: dict, user_prompt: str) -> str:
+async def _generate_complete_html_email(complete_llm_response: str, html_email_request: dict, user_prompt: str, subject: str) -> str:
     """
     🎯 Generate complete HTML file using HTMLReportGenerator
     Uses the complete LLM response to avoid any truncation
@@ -6482,7 +6504,10 @@ async def _generate_complete_html_email(complete_llm_response: str, html_email_r
         
         # Save HTML file to sandbox workspace
         timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
-        html_filename = f"html_email_report_{timestamp}.html"
+        # Generate filename from subject
+        import re
+        safe_subject = re.sub(r'[^a-zA-Z0-9_]', '_', subject).lower()
+        html_filename = f"{safe_subject}_{timestamp}.html"
         base_dir = os.path.join(os.getcwd(), "sandbox_workspace")
         full_path = os.path.join(base_dir, html_filename)
         
@@ -6499,15 +6524,20 @@ async def _generate_complete_html_email(complete_llm_response: str, html_email_r
         return None
 
 async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager, tools_results: str, complete_llm_response: str, user_prompt: str) -> str:
+    logger.info("--- ENTERING _execute_missing_tools_post_llm ---")
     """
     🎯 POST-LLM AUTO-EXECUTOR for missing tools
     Executes file creation and email sending AFTER Primary LLM generates complete content
-    
+
     This ensures that:
     1. Files contain the complete, refined LLM-generated content
     2. Emails are sent with properly formatted attachments
     3. No race conditions between content generation and file operations
     """
+    # Import required modules for this function
+    from datetime import datetime
+    import traceback
+
     additional_results = ""
     created_filename = None
     
@@ -6538,33 +6568,16 @@ async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager
                 created_filename = _generate_dynamic_filename(user_prompt, tools_results, timestamp, file_extension)
                 logger.info(f"🎯 POST-LLM: Creating DYNAMIC REPORT -> {created_filename}")
                 
-                # 🚨 CRITICAL: Check if file already exists with good content
+                # 🔧 POST-LLM: Always overwrite file with fresh primary LLM response
+                # The primary LLM just generated new, formatted content - we should use it!
                 import os
                 base_dir = os.path.join(os.getcwd(), "sandbox_workspace")
                 full_file_path = os.path.join(base_dir, created_filename)
-                
+
                 if os.path.exists(full_file_path):
-                    # Check if existing file has good content (not placeholders)
-                    try:
-                        with open(full_file_path, 'r') as existing_file:
-                            existing_content = existing_file.read()
-                            
-                        # If file has placeholder content, overwrite it
-                        if any(placeholder in existing_content for placeholder in [
-                            '[Generated cover letter content here]',
-                            '[generated cover letter]', 
-                            '[Generated cover letter]',
-                            '[generated cover letter content]'
-                        ]):
-                            logger.info(f"🔧 POST-LLM: File {created_filename} has placeholder content - will overwrite")
-                        else:
-                            # File has good content - don't overwrite it!
-                            logger.info(f"✅ POST-LLM: File {created_filename} already exists with good content - skipping creation")
-                            additional_results += f"Tool: sandboxed_executor\nResult: File {created_filename} already exists with proper content - preserved existing file\n\n"
-                            created_filename = created_filename  # Keep filename for email attachment
-                            continue  # Skip to next tool (email sending)
-                    except Exception as e:
-                        logger.warning(f"⚠️ POST-LLM: Error checking existing file {created_filename}: {e}")
+                    logger.info(f"🔄 POST-LLM: File {created_filename} exists - will overwrite with fresh primary LLM response")
+                else:
+                    logger.info(f"📝 POST-LLM: Creating new file {created_filename} with primary LLM response")
                 
                 # Use complete LLM response as content (this is the key fix!)
                 raw_content = complete_llm_response.strip()
@@ -6649,7 +6662,8 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     html_filename = await _generate_complete_html_email(
                         complete_llm_response, 
                         html_email_request,
-                        user_prompt
+                        user_prompt,
+                        html_email_request.get('subject', 'HTML_Report')
                     )
                     
                     # Execute secure_email_sender with generated HTML file
@@ -7217,6 +7231,7 @@ async def llama_stream(request: Request):
         image_errors = [f"Critical image processing error: {str(e)}"]
     
     async def generate_stream():
+        logger.info("--- ENTERING GENERATE_STREAM ---")
         import time  # Import time at function start for timing measurements
         logger.info("🔧 DEBUG: generate_stream() function called")
         try:
@@ -7424,6 +7439,7 @@ The above image analysis was automatically performed on newly uploaded images. T
                         user_message = messages[-1]['content'] if messages else data.get('prompt', '')
                         system_prompt = load_tool_model_system_prompt()
                         
+                        logger.info("--- CALLING TOOL-CALLING MODEL ---")
                         response_data = await llm_manager.generate_tools(
                             prompt=user_message,
                             tools=tools_array,
@@ -7432,6 +7448,7 @@ The above image analysis was automatically performed on newly uploaded images. T
                             temperature=0,
                             max_tokens=4096
                         )
+                        logger.info("--- TOOL-CALLING MODEL FINISHED ---")
                         logger.info("🔧 DEBUG: LLM Manager tool calling response received")
                         
                         # LLM Manager returns direct dictionary - no HTTP response wrapping needed
@@ -7633,6 +7650,102 @@ The above image analysis was automatically performed on newly uploaded images. T
                                         logger.error(f"❌ Error in smart file decisions: {e}")
                                         return email_args
 
+
+                                def _apply_smart_file_decisions_for_sandboxed_executor(email_args, phase1_results, logger):
+                                    """
+                                    Smart file decision logic for sandboxed_executor: Use actual created files instead of placeholder files
+                                    """
+                                    try:
+                                        # Find sandboxed_executor results from phase 1
+                                        sandboxed_executor_result_str = None
+                                        for result_tuple in phase1_results:
+                                            if isinstance(result_tuple, tuple) and len(result_tuple) >= 2:
+                                                function_name, result = result_tuple[0], result_tuple[1]
+                                                if function_name == "sandboxed_executor" and isinstance(result, str):
+                                                    sandboxed_executor_result_str = result
+                                                    logger.info(f"📧 SMART DECISION: Found sandboxed_executor result string")
+                                                    break
+                                        
+                                        if not sandboxed_executor_result_str:
+                                            logger.info("📧 No sandboxed_executor results found - using original email args")
+                                            return email_args
+                                        
+                                        # Parse the sandboxed_executor result string to extract filename
+                                        import re
+                                        
+                                        # Pattern to match filename from sandboxed_executor output
+                                        filename_match = re.search(r'Successfully created file: ([^\n]+)', sandboxed_executor_result_str, re.IGNORECASE)
+                                        
+                                        if filename_match:
+                                            created_filename = filename_match.group(1).strip()
+                                            logger.info(f"📧 SMART DECISION: Parsed filename from sandboxed_executor result: {created_filename}")
+                                            
+                                            # Update email args to use the actual created file
+                                            email_args['attachments'] = created_filename
+                                            email_args['wait_for_attachments'] = False  # File already exists
+                                            
+                                            # Update subject and body to reflect actual content
+                                            email_args['subject'] = f"File Created: {created_filename}"
+                                            email_args['body'] = f"Please find attached the requested file: {created_filename}"
+                                            
+                                            return email_args
+                                        
+                                        return email_args
+                                        
+                                    except Exception as e:
+                                        logger.error(f"❌ Error in smart file decisions for sandboxed_executor: {e}")
+                                        return email_args
+
+
+
+
+                                def _apply_smart_file_decisions_for_sandboxed_executor(email_args, phase1_results, logger):
+                                    """
+                                    Smart file decision logic for sandboxed_executor: Use actual created files instead of placeholder files
+                                    """
+                                    try:
+                                        # Find sandboxed_executor results from phase 1
+                                        sandboxed_executor_result_str = None
+                                        for result_tuple in phase1_results:
+                                            if isinstance(result_tuple, tuple) and len(result_tuple) >= 2:
+                                                function_name, result = result_tuple[0], result_tuple[1]
+                                                if function_name == "sandboxed_executor" and isinstance(result, str):
+                                                    sandboxed_executor_result_str = result
+                                                    logger.info(f"📧 SMART DECISION: Found sandboxed_executor result string")
+                                                    break
+                                        
+                                        if not sandboxed_executor_result_str:
+                                            logger.info("📧 No sandboxed_executor results found - using original email args")
+                                            return email_args
+                                        
+                                        # Parse the sandboxed_executor result string to extract filename
+                                        import re
+                                        
+                                        # Pattern to match filename from sandboxed_executor output
+                                        filename_match = re.search(r'Successfully created file: ([^\n]+)', sandboxed_executor_result_str, re.IGNORECASE)
+                                        
+                                        if filename_match:
+                                            created_filename = filename_match.group(1).strip()
+                                            logger.info(f"📧 SMART DECISION: Parsed filename from sandboxed_executor result: {created_filename}")
+                                            
+                                            # Update email args to use the actual created file
+                                            email_args['attachments'] = created_filename
+                                            email_args['wait_for_attachments'] = False  # File already exists
+                                            
+                                            # Update subject and body to reflect actual content
+                                            email_args['subject'] = f"File Created: {created_filename}"
+                                            email_args['body'] = f"Please find attached the requested file: {created_filename}"
+                                            
+                                            return email_args
+                                        
+                                        return email_args
+                                        
+                                    except Exception as e:
+                                        logger.error(f"❌ Error in smart file decisions for sandboxed_executor: {e}")
+                                        return email_args
+
+
+
                                 def should_run_sequentially(tool_calls):
                                     """
                                     Dependency rule: email and file creation tools run after search tools
@@ -7719,6 +7832,21 @@ The above image analysis was automatically performed on newly uploaded images. T
                                                         logger.info(f"🖼️ REPLACED image placeholder with {len(processed_images)} actual image(s)")
                                             
                                             start_time = time.time()
+
+                                            # 🎯 INTERCEPT EMAIL AND FILE CREATION - Defer until after primary LLM generates content
+                                            if function_name == "secure_email_sender":
+                                                logger.info(f"📧 TOOL DEFERRED: {function_name} - Email intercepted for post-processing")
+                                                result = "Email scheduled for sending after content generation"
+                                                return (function_name, result, start_time, True, function_args.copy())
+                                            elif function_name == "sandboxed_executor":
+                                                # Parse args to check action
+                                                parsed_args = function_args if isinstance(function_args, dict) else json.loads(function_args)
+                                                if parsed_args.get('action') == 'create_file':
+                                                    logger.info(f"📄 TOOL DEFERRED: {function_name} create_file - Will use primary LLM response as content")
+                                                    result = "File creation scheduled for post-LLM processing with formatted content"
+                                                    return (function_name, result, start_time, False, None)
+
+                                            # Execute non-deferred tools normally
                                             result = await tool_manager.safe_function_call(function_name, function_args)
                                             return (function_name, result, start_time, False, None)
                                         
@@ -7731,7 +7859,15 @@ The above image analysis was automatically performed on newly uploaded images. T
                                     # Phase 2: Execute file creation and email tools (sequential, with smart decisions)
                                     if phase2_tools:
                                         logger.info(f"📧 PHASE 2 SMART: {len(phase2_tools)} tools - {[t['function']['name'] for t in phase2_tools]}")
-                                        
+
+                                        # 🔧 BUILD STAGE_OUTPUTS for dependency resolution
+                                        stage_outputs = {}
+                                        for result_tuple in phase1_results:
+                                            if isinstance(result_tuple, tuple) and len(result_tuple) >= 2:
+                                                tool_name, result = result_tuple[0], result_tuple[1]
+                                                stage_outputs[tool_name] = result
+                                                logger.debug(f"🔧 STAGE_OUTPUT: {tool_name} → {len(str(result))} chars")
+
                                         for phase2_tool in phase2_tools:
                                             function_name = phase2_tool['function']['name']
                                             function_args = phase2_tool['function']['arguments']
@@ -7749,7 +7885,18 @@ The above image analysis was automatically performed on newly uploaded images. T
                                                     function_args_dict = {}
                                             else:
                                                 function_args_dict = function_args
-                                            
+
+                                            # 🔧 RESOLVE DEPENDENCIES: Replace symbolic references like {{NEWS_DATA}}
+                                            resolved_args_dict = resolve_dependencies(function_args_dict, stage_outputs)
+                                            if resolved_args_dict != function_args_dict:
+                                                logger.info(f"🔧 DEPENDENCY RESOLUTION: Applied for {function_name}")
+                                                function_args_dict = resolved_args_dict
+                                                # 🔧 CRITICAL: Update function_args to use resolved values
+                                                if isinstance(function_args, str):
+                                                    function_args = json.dumps(function_args_dict)
+                                                else:
+                                                    function_args = function_args_dict
+
                                             # Apply smart decisions based on tool type
                                             if function_name == 'sandboxed_executor':
                                                 # Check if this is trying to create a file when we have real files
@@ -7789,6 +7936,10 @@ The above image analysis was automatically performed on newly uploaded images. T
                                             elif function_name == 'secure_email_sender':
                                                 # Apply smart file decisions to email attachments
                                                 modified_args_dict = _apply_smart_file_decisions(function_args_dict, phase1_results, logger)
+                                                modified_args_dict = _apply_smart_file_decisions_for_sandboxed_executor(modified_args_dict, phase1_results, logger)
+
+                                                modified_args_dict = _apply_smart_file_decisions_for_sandboxed_executor(modified_args_dict, phase1_results, logger)
+
                                                 
                                                 # Convert back to the format expected by tool_manager
                                                 if isinstance(function_args, str):
@@ -7798,10 +7949,19 @@ The above image analysis was automatically performed on newly uploaded images. T
                                             
                                             if should_execute:
                                                 logger.info(f"📧 PHASE 2 TOOL: {function_name} starting (with smart file decisions)")
-                                                
-                                                
-                                                result = await tool_manager.safe_function_call(function_name, function_args)
-                                                all_results.append((function_name, result, start_time, False, None))
+
+                                                # 🎯 DEFER sandboxed_executor create_file AND secure_email_sender until POST-LLM
+                                                if function_name == 'sandboxed_executor' and function_args_dict.get('action') == 'create_file':
+                                                    logger.info(f"📄 TOOL DEFERRED: {function_name} create_file - Will use primary LLM response")
+                                                    result = "File creation deferred until after primary LLM generates formatted content"
+                                                    all_results.append((function_name, result, start_time, False, None))
+                                                elif function_name == 'secure_email_sender':
+                                                    logger.info(f"📧 TOOL DEFERRED: {function_name} - Will send after file creation in POST-LLM")
+                                                    result = "Email sending deferred until after file creation with primary LLM content"
+                                                    all_results.append((function_name, result, start_time, True, function_args_dict.copy()))
+                                                else:
+                                                    result = await tool_manager.safe_function_call(function_name, function_args)
+                                                    all_results.append((function_name, result, start_time, False, None))
                                                 logger.info(f"✅ PHASE 2 COMPLETE: {function_name}")
                                     
                                     return all_results
@@ -7894,71 +8054,30 @@ The above image analysis was automatically performed on newly uploaded images. T
                                     logger.info(f"📊 TOOL EXECUTION SUMMARY:")
                                 
                                 # Process results and handle any email interceptions
+                                # 🔧 FIX: Create formatted results list for arbitrator
+                                formatted_tools_results_list = []
+
                                 for i, result_data in enumerate(tool_results_list):
                                     if isinstance(result_data, Exception):
                                         logger.error(f"❌ TOOL {i+1} ERROR: {str(result_data)}")
                                         continue
-                                    
+
                                     function_name, result, start_time, is_email, email_params = result_data
                                     end_time = time.time()
                                     execution_time = end_time - start_time
-                                    
+
                                     # Handle email interception flag setting
                                     if is_email and email_params:
                                         email_intercepted = True
                                         intercepted_email_params = email_params
-                                    
-                                    # Determine status and format output
-                                    if result and len(str(result)) > 0:
-                                        if "error" in str(result).lower() or "failed" in str(result).lower():
-                                            logger.info(f"⚠️ TOOL {i+1} OUTPUT: PARTIAL SUCCESS - {function_name} | {execution_time:.2f}s | {len(str(result))} chars")
-                                        else:
-                                            logger.info(f"✅ TOOL {i+1} OUTPUT: SUCCESS!! - {function_name} | {execution_time:.2f}s | {len(str(result))} chars")
-                                            
-                                            # Content quality check for file creation tools
-                                            if function_name == "sandboxed_executor" and isinstance(result, dict):
-                                                if result.get("success") and "filename" in result.get("result", {}):
-                                                    result_str = str(result)
-                                                    if any(indicator in result_str.lower() for indicator in ["details...", "content...", "more info...", "placeholder"]):
-                                                        logger.warning(f"🔍 CONTENT QUALITY WARNING: {function_name} - Possible truncated content detected in file creation")
-                                    else:
-                                        logger.info(f"❌ TOOL {i+1} OUTPUT: ERROR - {function_name} | {execution_time:.2f}s | No output received")
-                                    
-                                    # 🧹 STREAMLINED LOGGING: Show concise tool summaries instead of full dumps
-                                    result_str = str(result)
-                                    result_size = len(result_str)
-                                    if concise_logging:
-                                        # Extract function arguments for display
-                                        tool_call = tool_calls[i] if i < len(tool_calls) else {}
-                                        function_args = tool_call.get('function', {}).get('arguments', {})
-                                        if isinstance(function_args, str):
-                                            try:
-                                                function_args = json.loads(function_args)
-                                            except:
-                                                pass
-                                        
-                                        # Create concise argument summary
-                                        args_summary = ""
-                                        if isinstance(function_args, dict) and function_args:
-                                            key_args = []
-                                            for key, value in list(function_args.items())[:3]:  # Show first 3 args
-                                                if isinstance(value, str) and len(value) > 30:
-                                                    key_args.append(f'{key}="{value[:30]}..."')
-                                                else:
-                                                    key_args.append(f'{key}="{value}"')
-                                            if len(function_args) > 3:
-                                                key_args.append("...")
-                                            args_summary = f"({', '.join(key_args)})"
-                                        
-                                        logger.info(f"   TOOL {i+1}: {function_name}{args_summary}: {result_size} chars")
-                                    
-                                    # Store FULL result for tools_results_list (needed for image extraction)
-                                    full_result = str(result)
-                                    tools_results_list.append(f"Tool: {function_name}\nResult: {full_result}\n\n")
-                                    
-                                    # Only truncate for logging display
-                                    truncated_result = truncate_base64_for_logging(full_result)
-                            
+
+                                    # 🔧 FIX: Format result for arbitrator (was missing!)
+                                    formatted_result = f"Tool: {function_name}\nResult: {result}\n\n"
+                                    formatted_tools_results_list.append(formatted_result)
+
+                                # 🔧 FIX: Replace tuple list with formatted string list for arbitrator
+                                tools_results_list = formatted_tools_results_list
+
                             else:
                                 # No tool calls generated - check if we should force data gathering
                                 logger.info("❌ No tool calls generated by the tool calling model")
@@ -8128,9 +8247,9 @@ Generate the corrected tool calls:"""
                             # Call tool calling LLM for regeneration
                             try:
                                 logger.info(f"🧠 CALLING TOOL CALLING LLM FOR REGENERATION")
-                                regeneration_response = await llm_manager.call_tool_calling_llm(
+                                regeneration_response = await llm_manager.generate_tools(
                                     prompt=regeneration_prompt,
-                                    tools=tool_manager.get_tools_for_llm(),
+                                    tools=await tool_manager.get_tools_definitions(),
                                     system_prompt="You are a tool calling specialist. Generate corrected tool calls that will execute successfully."
                                 )
                                 
@@ -8827,9 +8946,11 @@ END OF CONTEXT
                     logger.info(f"🔍🔍🔍 CRITICAL: Reached post-processing section!")
                     logger.info(f"🔍 PRE-POST-PROCESSING: email_intercepted={email_intercepted}")
                     logger.info(f"🔍 PRE-POST-PROCESSING: intercepted_email_params={intercepted_email_params}")
-                        
+
                     # 🎯 NEW POST-PROCESSING: Handle intercepted email calls first
-                    if email_intercepted:
+                    # 🔧 CRITICAL FIX: Skip email interceptor if legacy POST-LLM auto-execution will run
+                    # The legacy path has better dynamic naming (gaza_middle_east_analysis vs html_report)
+                    if email_intercepted and not pending_auto_execution:
                         # 🚨 CRITICAL FIX: Block email execution for programming tasks and fabricated emails
                         should_block = False
                             
@@ -9059,14 +9180,11 @@ END OF CONTEXT
                         except Exception as e:
                             logger.error(f"❌ POST-LLM AUTO-EXECUTION FAILED: {e}")
                             error_msg = json.dumps({
-                                "post_processing": "failed", 
+                                "post_processing": "failed",
                                 "error": str(e)
                             })
                             yield (error_msg + '\n').encode()
-                    else:
-                        error_msg = f"Ollama error: {response.status}"
-                        yield json.dumps({"error": error_msg}).encode() + b'\n'
-                            
+
                 except asyncio.TimeoutError:
                     logger.error("🕒 PRIMARY LLM: Request timed out after 10 minutes")
                     error_msg = json.dumps({"error": "Primary LLM request timed out"})
@@ -9080,7 +9198,9 @@ END OF CONTEXT
             logger.error(f"Stream generation failed: {e}")
             error_msg = json.dumps({"error": f"Stream failed: {str(e)}"})
             yield error_msg.encode() + b'\n'
+        logger.info("--- EXITING GENERATE_STREAM ---")
     
+    logger.info("--- EXITING OLLAMA_STREAM ---")
     return StreamingResponse(
         generate_stream(),
         media_type="application/x-ndjson"
@@ -9656,6 +9776,7 @@ async def openai_models():
 
 @app.post("/v1/chat/completions")
 async def openai_chat_completions(request: OpenAIChatRequest):
+    logger.info("--- ENTERING OLLAMA_STREAM ---")
     """
     OpenAI API Compatible Chat Completions Endpoint
     
@@ -9928,8 +10049,11 @@ async def openai_direct_stream(native_request_data: dict, model: str):
                             yield f"data: {json.dumps(final_chunk)}\n\n"
                             yield "data: [DONE]\n\n"
 
+                            # 🔧 CRITICAL FIX: Don't return here! Continue consuming stream for POST-LLM execution
                             # POST-LLM auto-execution is handled by llama_stream internally
-                            return
+                            # The stream will continue with POST-LLM results (file creation, email sending, etc.)
+                            logger.info("🔄 PRIMARY LLM done, continuing stream for POST-LLM execution...")
+                            continue
                         
                         # Extract and send content
                         if isinstance(native_json, dict) and "response" in native_json and native_json["response"]:

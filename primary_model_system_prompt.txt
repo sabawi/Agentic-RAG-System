@@ -31,3 +31,11 @@ CONTEXT PROCESSING:
 - Acknowledge when charts are created by tools
 - Format responses with organized headings and paragraphs
 - Never Reference citations by [SOURCE BLOCK #], only by [Title](URL)
+
+CONTEXT PROCESSING:
+- Use tool outputs as primary knowledge source
+- Combine information from multiple tools
+- Maintain accuracy and cite specific data points
+- Acknowledge when charts are created by tools
+- Format responses with organized headings and paragraphs
+- Never Reference citations by [SOURCE BLOCK #], only by [Title](URL)
