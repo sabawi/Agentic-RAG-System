@@ -3,6 +3,11 @@
 # Import centralized version information
 from version import __version__, __release__, get_release_string
 
+# Set PYTHONTZPATH to use the venv's tzdata
+from utils.platform import EnvironmentManager
+EnvironmentManager.setup_tzdata_path()
+
+
 # Generate dynamic docstring with current version
 __doc__ = f"""
 {get_release_string()} - Complete FastAPI Server with Hybrid LLM Architecture
@@ -6554,9 +6559,8 @@ async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager
     else:
         file_extension = "html"  # Default to HTML for reports (changed from PDF)
     
-    logger.info(f"🎯 POST-LLM: Detected file format: {file_extension}")
-    
     for tool_name in missing_tools:
+        function_args_dict = {} # Initialize function_args_dict for each tool
         try:
             logger.info(f"🔄 POST-LLM Auto-executing: {tool_name}")
             
@@ -7791,45 +7795,66 @@ The above image analysis was automatically performed on newly uploaded images. T
                                                     function_args = {}
                                             
                                             # 🖼️ INTERCEPT IMAGE_TO_TEXT CALLS - Replace placeholder with actual image data
-                                            if function_name == "image_to_text" and data.get("images") and data.get("images")[0] != "noimage":
-                                                # Handle both "image" (singular) and "images" (plural) parameters
-                                                if "image" in function_args and function_args["image"] in ["user_provided_image_data", "<user_provided_image_data>", "<actual_base64_image_data>", "<base64_image_data>"]:
-                                                    # Replace placeholder with actual base64 image data for singular parameter
-                                                    actual_images = data.get("images", [])
-                                                    if actual_images and actual_images[0] != "noimage":
-                                                        function_args["image"] = actual_images[0]  # Use first image for singular parameter
-                                                        logger.info(f"🖼️ REPLACED singular image placeholder with actual base64 data ({len(actual_images[0])} chars)")
-                                                    else:
-                                                        logger.warning(f"🖼️ No image data available for singular image parameter")
-                                                elif "images" in function_args:
-                                                    # Parse images if it's a string
-                                                    images_arg = function_args["images"]
-                                                    if isinstance(images_arg, str):
-                                                        try:
-                                                            images_arg = json.loads(images_arg)
-                                                        except json.JSONDecodeError:
-                                                            logger.warning(f"🖼️ Failed to parse images argument: {images_arg}")
-                                                            images_arg = []
-                                                    
-                                                    # Replace placeholder with actual image data
-                                                    if isinstance(images_arg, list):
-                                                        processed_images = []
-                                                        for i, img_item in enumerate(images_arg):
-                                                            if isinstance(img_item, dict) and img_item.get("path") == "user_provided_image_data":
-                                                                # Replace with actual base64 image data
-                                                                actual_images = data.get("images", [])
-                                                                if i < len(actual_images) and actual_images[i] != "noimage":
-                                                                    processed_images.append({
-                                                                        "type": "base64",
-                                                                        "data": f"data:image/jpeg;base64,{actual_images[i]}",
-                                                                        "filename": f"user_image_{i+1}"
-                                                                    })
-                                                                else:
-                                                                    logger.warning(f"🖼️ No image data available for index {i}")
+                                            if function_name == "image_to_text":
+                                                logger.info(f"🖼️ INTERCEPT: Detected image_to_text tool call")
+                                                logger.info(f"🖼️ INTERCEPT: data.get('images') = {data.get('images', 'NOT_FOUND')}")
+                                                logger.info(f"🖼️ INTERCEPT: function_args = {function_args}")
+
+                                                if data.get("images") and data.get("images")[0] != "noimage":
+                                                    logger.info(f"🖼️ INTERCEPT: Images available, checking for placeholder...")
+                                                    # Handle both "image" (singular) and "images" (plural) parameters
+                                                    if "image" in function_args:
+                                                        logger.info(f"🖼️ INTERCEPT: function_args['image'] = {function_args['image'][:50] if isinstance(function_args['image'], str) else function_args['image']}")
+                                                        if function_args["image"] in [
+                                                            "user_provided_image_data",
+                                                            "<user_provided_image_data>",
+                                                            "<actual_base64_image_data>",
+                                                            "<base64_image_data>",
+                                                            "<base64_encoded_image_data>",
+                                                            "[BASE64_ENCODED_IMAGE_DATA]",
+                                                            "[base64_encoded_image_data]"
+                                                        ]:
+                                                            # Replace placeholder with actual base64 image data for singular parameter
+                                                            actual_images = data.get("images", [])
+                                                            if actual_images and actual_images[0] != "noimage":
+                                                                function_args["image"] = actual_images[0]  # Use first image for singular parameter
+                                                                logger.info(f"🖼️ REPLACED singular image placeholder with actual base64 data ({len(actual_images[0])} chars)")
                                                             else:
-                                                                processed_images.append(img_item)
-                                                        function_args["images"] = processed_images
-                                                        logger.info(f"🖼️ REPLACED image placeholder with {len(processed_images)} actual image(s)")
+                                                                logger.warning(f"🖼️ No image data available for singular image parameter")
+                                                        else:
+                                                            logger.warning(f"🖼️ image parameter is not a recognized placeholder: {function_args['image'][:100]}")
+
+                                                    if "images" in function_args:
+                                                        # Parse images if it's a string
+                                                        images_arg = function_args["images"]
+                                                        if isinstance(images_arg, str):
+                                                            try:
+                                                                images_arg = json.loads(images_arg)
+                                                            except json.JSONDecodeError:
+                                                                logger.warning(f"🖼️ Failed to parse images argument: {images_arg}")
+                                                                images_arg = []
+
+                                                        # Replace placeholder with actual image data
+                                                        if isinstance(images_arg, list):
+                                                            processed_images = []
+                                                            for i, img_item in enumerate(images_arg):
+                                                                if isinstance(img_item, dict) and img_item.get("path") == "user_provided_image_data":
+                                                                    # Replace with actual base64 image data
+                                                                    actual_images = data.get("images", [])
+                                                                    if i < len(actual_images) and actual_images[i] != "noimage":
+                                                                        processed_images.append({
+                                                                            "type": "base64",
+                                                                            "data": f"data:image/jpeg;base64,{actual_images[i]}",
+                                                                            "filename": f"user_image_{i+1}"
+                                                                        })
+                                                                    else:
+                                                                        logger.warning(f"🖼️ No image data available for index {i}")
+                                                                else:
+                                                                    processed_images.append(img_item)
+                                                            function_args["images"] = processed_images
+                                                            logger.info(f"🖼️ REPLACED image placeholder with {len(processed_images)} actual image(s)")
+                                                else:
+                                                    logger.warning(f"🖼️ INTERCEPT: No images in data or image is 'noimage'")
                                             
                                             start_time = time.time()
 

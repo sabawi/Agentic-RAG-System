@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.3.7
+# Agentic-RAG Server v1.0.3.8
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, vision capabilities, intelligent email management, and **extensible plugin system**.
 
-[![Version](https://img.shields.io/badge/version-1.0.3.7-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.7)
+[![Version](https://img.shields.io/badge/version-1.0.3.8-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.8)
 [![Python](https://img.shields.io/badge/python-3.13-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -56,6 +56,34 @@ cd Agentic-RAG-System
 pip install -r requirements.txt
 python fastapi_server_complete.py
 ```
+
+## ⭐ What's New in v1.0.3.8
+
+### 🎯 CRITICAL: Vision Model Integration Fix
+- **Vision Model Base64 Processing**: Fixed critical issue preventing vision models from processing base64 images in multi-tool workflows
+- **Open-WebUI Integration**: Resolved placeholder recognition bug that broke image analysis with tool calling
+- **Cloud Vision Model Support**: Verified working with qwen3-vl:235b-cloud (3.9MB images processed in 23 seconds)
+- **API Method Fix**: Corrected Ollama vision API from `generate()` to `chat()` for proper multimodal support
+
+### 📰 Citation Format Standardization
+- **News Citation Consistency**: Standardized citation format across `comprehensive_stock_analyzer` and `get_news_summaries`
+- **URL Citations**: All news items now include `🔗 CITATION URL:` field for proper attribution
+- **LLM Citation Support**: Primary LLM can now generate accurate citations for all news sources
+
+### 🔧 Code Quality Improvements
+- **SQL Data Integrity**: Fixed FAISS metadata staleness when re-indexing documents (added `total_chunks` to UPDATE)
+- **Code Consolidation**: Removed duplicate timezone setup code (created shared `EnvironmentManager.setup_tzdata_path()`)
+- **Logger Scope Fix**: Changed to module-specific loggers for better debugging
+- **Dynamic Python Version**: Start script now detects Python version automatically (portable across Python 3.x)
+
+### 📊 Testing & Documentation
+- **Vision Test Suite**: Added comprehensive base64 image testing (`tests/test_vision_base64.py`)
+- **Lessons Learned**: Documented debugging insights and best practices for multimodal integration
+- **Changelog**: Detailed changelog in `docs/housekeeping/status-tracking/CHANGELOG_v1.0.3.8.md`
+
+**Impact**: Vision model integration fully functional for Open-WebUI, improved code quality, enhanced documentation
+
+---
 
 ## ⭐ What's New in v1.0.3.7
 

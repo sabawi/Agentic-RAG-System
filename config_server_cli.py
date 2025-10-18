@@ -1,41 +1,44 @@
 #!/usr/bin/env python3
 """
-Agent Model Configuration CLI Tool
-===================================
+Server Configuration CLI Tool
+==============================
 
 Easy-to-use CLI for managing LLM model aliases and configurations.
 
 Usage:
-    ./agent_model.py ls                                    # List all model aliases
-    ./agent_model.py add --alias NAME --provider TYPE --model MODEL [options]
-    ./agent_model.py update --alias NAME [options]
-    ./agent_model.py delete --alias NAME
-    ./agent_model.py set --alias NAME --as primary|tool_calling|arbitrator
-    ./agent_model.py show --alias NAME                     # Show alias details
-    ./agent_model.py status                                # Show current active models
+    ./config_server_cli.py ls                                    # List all model aliases
+    ./config_server_cli.py add --alias NAME --provider TYPE --model MODEL [options]
+    ./config_server_cli.py update --alias NAME [options]
+    ./config_server_cli.py delete --alias NAME
+    ./config_server_cli.py set --alias NAME --as primary|tool_calling|arbitrator
+    ./config_server_cli.py show --alias NAME                     # Show alias details
+    ./config_server_cli.py status                                # Show current active models
 
 Examples:
     # Add a new model alias
-    ./agent_model.py add --alias qwen_local --provider ollama --model qwen3:8b
+    ./config_server_cli.py add --alias qwen_local --provider ollama --model qwen3:8b
+
+    # Add Gemini model
+    ./config_server_cli.py add --alias gemini_flash --provider gemini --model gemini-flash-latest
 
     # Add OpenRouter model with custom settings
-    ./agent_model.py add --alias openrouter_deepseek --provider openrouter \\
+    ./config_server_cli.py add --alias openrouter_deepseek --provider openrouter \\
         --model deepseek/deepseek-r1 --timeout 600 --temperature 0.7
 
     # Set an alias as primary LLM
-    ./agent_model.py set --alias qwen_local --as primary
+    ./config_server_cli.py set --alias gemini_flash --as primary
 
     # List all aliases
-    ./agent_model.py ls
+    ./config_server_cli.py ls
 
     # Show details of an alias
-    ./agent_model.py show --alias qwen_local
+    ./config_server_cli.py show --alias gemini_flash
 
     # Delete an alias
-    ./agent_model.py delete --alias openrouter_deepseek
+    ./config_server_cli.py delete --alias openrouter_deepseek
 
 Author: Agentic-RAG Development Team
-Version: 1.0.0
+Version: 1.0.1
 """
 
 import argparse
@@ -85,6 +88,12 @@ PROVIDER_DEFAULTS = {
         "temperature": 0.7,
         "max_tokens": 4096,
         "stream": True
+    },
+    "gemini": {
+        "timeout": 120,
+        "temperature": 0.7,
+        "max_tokens": 8192,
+        "stream": True
     }
 }
 
@@ -93,7 +102,8 @@ API_KEY_ENV_VARS = {
     "ollama": None,  # Ollama doesn't need API key
     "openai": "OPENAI_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
-    "qwen": "DASHSCOPE_API_KEY"
+    "qwen": "DASHSCOPE_API_KEY",
+    "gemini": "GEMINI_API_KEY"
 }
 
 
@@ -156,7 +166,7 @@ class ModelAliasManager:
         """List all model aliases"""
         if not self.aliases:
             print(f"{Colors.WARNING}No model aliases configured.{Colors.ENDC}")
-            print(f"Use '{Colors.BOLD}./agent_model.py add{Colors.ENDC}' to create your first alias.")
+            print(f"Use '{Colors.BOLD}./config_server_cli.py add{Colors.ENDC}' to create your first alias.")
             return
 
         # Load current config to show active models
@@ -164,6 +174,7 @@ class ModelAliasManager:
         active_primary = llm_config.get('llm', {}).get('primary', {})
         active_tool = llm_config.get('llm', {}).get('tool_calling', {})
         active_arb = llm_config.get('arbitrator', {})
+        active_vision = llm_config.get('vision', {})
 
         print(f"\n{Colors.HEADER}{Colors.BOLD}Model Aliases{Colors.ENDC}")
         print("=" * 80)
@@ -183,6 +194,10 @@ class ModelAliasManager:
                 active_arb.get('config', {}).get('model') == config.get('model')):
                 active_roles.append(f"{Colors.OKBLUE}ARBITRATOR{Colors.ENDC}")
 
+            if (active_vision.get('type') == config.get('provider') and
+                active_vision.get('config', {}).get('model') == config.get('model')):
+                active_roles.append(f"{Colors.WARNING}VISION{Colors.ENDC}")
+
             status = f" [{', '.join(active_roles)}]" if active_roles else ""
 
             print(f"\n{Colors.BOLD}{alias}{Colors.ENDC}{status}")
@@ -191,10 +206,26 @@ class ModelAliasManager:
             print(f"  Timeout:     {config.get('timeout')}s")
             print(f"  Temperature: {config.get('temperature')}")
             print(f"  Max Tokens:  {config.get('max_tokens')}")
+            if config.get('context_window_size'):
+                print(f"  Context:     {config.get('context_window_size')}")
+            if config.get('fallback_model'):
+                print(f"  Fallback:    {config.get('fallback_model')}")
+            if config.get('think') is not None:
+                print(f"  Think:       {config.get('think')}")
+            if config.get('stream') is not None:
+                print(f"  Stream:      {config.get('stream')}")
+            if config.get('base_url'):
+                print(f"  Base URL:    {config.get('base_url')}")
+            if config.get('api_key'):
+                print(f"  API Key:     {config.get('api_key')}")
+            if config.get('headers'):
+                print(f"  Headers:     {config.get('headers')}")
             if config.get('description'):
                 print(f"  Description: {config.get('description')}")
             if config.get('created_at'):
                 print(f"  Created:     {config.get('created_at')}")
+            if config.get('updated_at'):
+                print(f"  Updated:     {config.get('updated_at')}")
 
         print()
 
@@ -205,7 +236,8 @@ class ModelAliasManager:
                   context_window: Optional[int] = None,
                   think: Optional[bool] = None,
                   no_think: Optional[bool] = None,
-                  description: Optional[str] = None):
+                  description: Optional[str] = None,
+                  fallback_model: Optional[str] = None):
         """Add a new model alias"""
 
         # Validate provider
@@ -218,7 +250,7 @@ class ModelAliasManager:
         # Check if alias already exists
         if alias in self.aliases:
             print(f"{Colors.FAIL}Error: Alias '{alias}' already exists.{Colors.ENDC}")
-            print(f"Use '{Colors.BOLD}./agent_model.py update --alias {alias}{Colors.ENDC}' to modify it.")
+            print(f"Use '{Colors.BOLD}./config_server_cli.py update --alias {alias}{Colors.ENDC}' to modify it.")
             sys.exit(1)
 
         # Get defaults for provider
@@ -249,6 +281,9 @@ class ModelAliasManager:
         if description:
             config["description"] = description
 
+        if fallback_model:
+            config["fallback_model"] = fallback_model
+
         # Add API key reference if needed
         api_key_var = API_KEY_ENV_VARS.get(provider)
         if api_key_var:
@@ -264,13 +299,13 @@ class ModelAliasManager:
 
         print(f"\n{Colors.OKGREEN}✓ Created model alias '{alias}'{Colors.ENDC}")
         print(f"\nTo use this alias:")
-        print(f"  {Colors.BOLD}./agent_model.py set --alias {alias} --as primary{Colors.ENDC}")
+        print(f"  {Colors.BOLD}./config_server_cli.py set --alias {alias} --as primary{Colors.ENDC}")
 
     def update_alias(self, alias: str, **kwargs):
         """Update an existing model alias"""
         if alias not in self.aliases:
             print(f"{Colors.FAIL}Error: Alias '{alias}' not found.{Colors.ENDC}")
-            print(f"Use '{Colors.BOLD}./agent_model.py ls{Colors.ENDC}' to see available aliases.")
+            print(f"Use '{Colors.BOLD}./config_server_cli.py ls{Colors.ENDC}' to see available aliases.")
             sys.exit(1)
 
         # Update fields
@@ -279,7 +314,7 @@ class ModelAliasManager:
 
         for key, value in kwargs.items():
             if value is not None and key in ['model', 'timeout', 'temperature', 'max_tokens',
-                                              'context_window', 'description']:
+                                              'context_window', 'description', 'fallback_model']:
                 if key == 'context_window':
                     config['context_window_size'] = value
                 else:
@@ -325,6 +360,10 @@ class ModelAliasManager:
             llm_config.get('arbitrator', {}).get('config', {}).get('model') == config.get('model')):
             in_use.append('arbitrator')
 
+        if (llm_config.get('vision', {}).get('type') == config.get('provider') and
+            llm_config.get('vision', {}).get('config', {}).get('model') == config.get('model')):
+            in_use.append('vision')
+
         if in_use and not force:
             print(f"{Colors.WARNING}Warning: Alias '{alias}' is currently active for: {', '.join(in_use)}{Colors.ENDC}")
             print(f"Use --force to delete anyway.")
@@ -357,9 +396,9 @@ class ModelAliasManager:
             sys.exit(1)
 
         role = role.lower()
-        if role not in ['primary', 'tool_calling', 'arbitrator']:
+        if role not in ['primary', 'tool_calling', 'arbitrator', 'vision']:
             print(f"{Colors.FAIL}Error: Invalid role '{role}'{Colors.ENDC}")
-            print("Valid roles: primary, tool_calling, arbitrator")
+            print("Valid roles: primary, tool_calling, arbitrator, vision")
             sys.exit(1)
 
         # Load current config
@@ -388,6 +427,10 @@ class ModelAliasManager:
             if "api_key" in alias_config:
                 new_config["config"]["api_key"] = alias_config["api_key"]
 
+        if alias_config["provider"] == "gemini":
+            if "api_key" in alias_config:
+                new_config["config"]["api_key"] = alias_config["api_key"]
+
         if alias_config["provider"] == "openrouter" and "headers" in alias_config:
             new_config["config"]["headers"] = alias_config["headers"]
 
@@ -398,6 +441,8 @@ class ModelAliasManager:
         # Update appropriate section
         if role == "arbitrator":
             llm_config["arbitrator"] = new_config
+        elif role == "vision":
+            llm_config["vision"] = new_config
         else:
             if "llm" not in llm_config:
                 llm_config["llm"] = {}
@@ -436,19 +481,26 @@ class ModelAliasManager:
         print(f"  Provider: {arb.get('type', 'Not set')}")
         print(f"  Model:    {arb.get('config', {}).get('model', 'Not set')}")
 
+        # Vision
+        vision = llm_config.get('vision', {})
+        print(f"\n{Colors.WARNING}VISION:{Colors.ENDC}")
+        print(f"  Provider: {vision.get('type', 'Not set')}")
+        print(f"  Model:    {vision.get('config', {}).get('model', 'Not set')}")
+
         print()
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Agent Model Configuration CLI Tool",
+        description="Server Configuration CLI Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   %(prog)s ls
   %(prog)s add --alias qwen_local --provider ollama --model qwen3:8b
-  %(prog)s set --alias qwen_local --as primary
-  %(prog)s show --alias qwen_local
+  %(prog)s add --alias gemini_flash --provider gemini --model gemini-flash-latest
+  %(prog)s set --alias gemini_flash --as primary
+  %(prog)s show --alias gemini_flash
   %(prog)s delete --alias qwen_local
         """
     )
@@ -462,7 +514,7 @@ Examples:
     add_parser = subparsers.add_parser('add', help='Add a new model alias')
     add_parser.add_argument('--alias', required=True, help='Alias name')
     add_parser.add_argument('--provider', required=True,
-                           choices=['ollama', 'openai', 'openrouter', 'qwen'],
+                           choices=['ollama', 'openai', 'openrouter', 'qwen', 'gemini'],
                            help='LLM provider')
     add_parser.add_argument('--model', required=True, help='Model name')
     add_parser.add_argument('--timeout', type=int, help='Timeout in seconds')
@@ -472,6 +524,7 @@ Examples:
     add_parser.add_argument('--think', action='store_true', help='Enable think mode (Ollama reasoning models)')
     add_parser.add_argument('--no-think', action='store_true', help='Disable think mode (Ollama reasoning models)')
     add_parser.add_argument('--description', help='Description of this alias')
+    add_parser.add_argument('--fallback-model', help='Fallback model to use')
 
     # Update command
     update_parser = subparsers.add_parser('update', help='Update an existing alias')
@@ -484,6 +537,7 @@ Examples:
     update_parser.add_argument('--think', action='store_true', help='Enable think mode')
     update_parser.add_argument('--no-think', action='store_true', help='Disable think mode')
     update_parser.add_argument('--description', help='New description')
+    update_parser.add_argument('--fallback-model', help='New fallback model')
 
     # Delete command
     delete_parser = subparsers.add_parser('delete', help='Delete a model alias')
@@ -499,7 +553,7 @@ Examples:
     set_parser = subparsers.add_parser('set', help='Set an alias as primary/tool_calling/arbitrator')
     set_parser.add_argument('--alias', required=True, help='Alias name')
     set_parser.add_argument('--as', dest='role', required=True,
-                           choices=['primary', 'tool_calling', 'arbitrator'],
+                           choices=['primary', 'tool_calling', 'arbitrator', 'vision'],
                            help='Role to assign')
 
     # Status command
@@ -530,7 +584,8 @@ Examples:
                 context_window=args.context_window,
                 think=args.think,
                 no_think=args.no_think,
-                description=args.description
+                description=args.description,
+                fallback_model=args.fallback_model
             )
 
         elif args.command == 'update':
@@ -543,7 +598,8 @@ Examples:
                 context_window=args.context_window,
                 think=args.think,
                 no_think=args.no_think,
-                description=args.description
+                description=args.description,
+                fallback_model=args.fallback_model
             )
 
         elif args.command == 'delete':

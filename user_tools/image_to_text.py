@@ -107,23 +107,39 @@ class ImageToTextTool(BaseUserTool):
         image_processing_model = self.vision_config.get('model', 'qwen2.5vl:3b')
         # image_processing_model = "bakllava:latest"
         imgPrompt = ''
-        img = None
         
         imgPrompt = str(objs.get('prompt', ''))
-        img = objs.get('image', None)
-        
-        if img == None or img == "None":
+        img_input = objs.get('image') or objs.get('images')
+
+        # Debug logging for Open-WebUI integration
+        logger.info(f"🖼️ img_input type: {type(img_input)}")
+        if isinstance(img_input, str):
+            logger.info(f"🖼️ img_input length: {len(img_input)} chars")
+            logger.info(f"🖼️ img_input preview: {img_input[:100]}...")
+        elif isinstance(img_input, list):
+            logger.info(f"🖼️ img_input is list with {len(img_input)} items")
+            if img_input and len(img_input) > 0:
+                logger.info(f"🖼️ First item type: {type(img_input[0])}")
+                if isinstance(img_input[0], str):
+                    logger.info(f"🖼️ First item preview: {img_input[0][:100]}...")
+        else:
+            logger.info(f"🖼️ img_input value: {img_input}")
+
+        if not img_input:
             return {
                 "success": False,
                 "error": "No image provided"
             }
-        
-        # Debug: Log image data format (commented out in production)
-        # print(f"🖼️ DEBUG: Original image data type: {type(img)}", flush=True)
-        # print(f"🖼️ DEBUG: Original image data preview: {str(img)[:100]}...", flush=True)
-        
+
         # Handle different image data formats
-        processed_img = self._process_image_data(img)
+        processed_img = self._process_image_data(img_input)
+
+        # Log processed result
+        if isinstance(processed_img, str):
+            logger.info(f"🖼️ processed_img length: {len(processed_img)} chars")
+            logger.info(f"🖼️ processed_img preview: {processed_img[:100]}...")
+        else:
+            logger.info(f"🖼️ processed_img type: {type(processed_img)}, value: {processed_img}")
         
         # Use system prompt from file (fallback to simple if loading fails)
         try:
@@ -155,10 +171,10 @@ class ImageToTextTool(BaseUserTool):
         vision_type = self.vision_config.get('type', 'ollama')
 
         try:
-            if vision_type == 'lm_studio':
-                return self._process_with_lm_studio(image_processing_model, imgPrompt, processed_img, todayStr)
-            else:
+            if vision_type == 'ollama':
                 return self._process_with_ollama(image_processing_model, imgPrompt, processed_img, todayStr)
+            else:
+                return self._process_with_openai_compatible_api(image_processing_model, imgPrompt, processed_img, todayStr)
             
         except TimeoutError as e:
             logger.error(f"🖼️ Vision model timeout: {e}")
@@ -178,53 +194,57 @@ class ImageToTextTool(BaseUserTool):
     def _process_image_data(self, img_data):
         """Process different image data formats for Ollama."""
         try:
+            # Handle list of images - could be from forced processing
+            if isinstance(img_data, list):
+                if not img_data:
+                    return None
+                # It could be a list of dicts or a list of strings
+                first_item = img_data[0]
+                if isinstance(first_item, dict) and 'data' in first_item:
+                    # It's a list of dicts, get data from the first one
+                    return self._process_image_data(first_item['data'])
+                else:
+                    # Assume it's a list of strings (paths, urls, or base64)
+                    return self._process_image_data(first_item)
+
             # Handle string data (could be base64, path, or URL)
             if isinstance(img_data, str):
                 # If it's a file path
                 if os.path.isfile(img_data):
-                    return img_data  # Return single item, not list for Ollama
+                    return img_data
                 
                 # If it's base64 data with data URL prefix, extract base64 string
                 if img_data.startswith('data:image/'):
-                    # Extract base64 data after the comma
                     base64_data = img_data.split(',', 1)[1] if ',' in img_data else img_data
                     try:
-                        # Validate base64 but return the string (ollama needs base64 string, not bytes)
                         base64.b64decode(base64_data, validate=True)
-                        return base64_data  # Return base64 string, not bytes
+                        return base64_data
                     except Exception as e:
                         logger.warning(f"🖼️ Invalid base64 data in data URL: {e}")
                         return None
                 
-                # If it's raw base64 data (check if it looks like base64)
-                if len(img_data) > 50 and not img_data.startswith('http'):  # Assume it's base64 if long enough
-                    # Check if it's valid base64
-                    try:
-                        # Try to decode - if successful, it's valid base64
-                        base64.b64decode(img_data, validate=True)
-                        # Successfully validated base64 - return the string (not bytes)
-                        return img_data  # Return base64 string for ollama
-                    except Exception as e:
-                        logger.warning(f"🖼️ Invalid base64 data: {e}")
-                        return None
-                
                 # If it's a URL
                 if img_data.startswith(('http://', 'https://')):
-                    return img_data  # Return single item, not list
-            
-            # Handle list of images - return first one for now (Ollama chat typically handles single image)
-            elif isinstance(img_data, list):
-                if img_data:
-                    return self._process_image_data(img_data[0])
-                else:
-                    return None
-            
-            # Return as-is if already in expected format
+                    return img_data
+
+                # If it's raw base64 data, try to validate and return
+                try:
+                    base64.b64decode(img_data, validate=True)
+                    return img_data
+                except Exception:
+                    # If it's not valid base64, it might be a file path that doesn't exist yet.
+                    # Let ollama handle it.
+                    return img_data
+
+            # Handle dict from forced processing if passed directly
+            if isinstance(img_data, dict) and 'data' in img_data:
+                return self._process_image_data(img_data['data'])
+
+            # Return as-is and let ollama try to handle it
             return img_data
             
         except Exception as e:
             logger.error(f"🖼️ Error processing image data: {e}")
-            # Return original data and let Ollama handle it
             return img_data
 
     def _load_system_prompt(self) -> str:
@@ -261,6 +281,10 @@ class ImageToTextTool(BaseUserTool):
                 # Add the type to the config
                 vision_config['type'] = vision_type
 
+                # Resolve environment variables in the config
+                if 'api_key' in vision_config:
+                    vision_config['api_key'] = os.path.expandvars(vision_config['api_key'])
+
                 logger.info(f"🖼️ Loaded vision config: type={vision_type}, model={vision_config.get('model', 'qwen2.5vl:3b')}, timeout={vision_config.get('timeout', 1800)}s")
                 return vision_config
         except Exception as e:
@@ -275,7 +299,14 @@ class ImageToTextTool(BaseUserTool):
             }
 
     def _process_with_ollama(self, model: str, prompt: str, image_data: str, timestamp: str) -> Dict[str, Any]:
-        """Process vision request using Ollama."""
+        """Process vision request using Ollama.
+
+        Ollama's vision models use chat() API with images in messages.
+        Images can be:
+        - File paths (string)
+        - URLs (string)
+        - Base64 encoded strings (passed directly without decoding)
+        """
         if not ollama:
             return {
                 "success": False,
@@ -294,21 +325,33 @@ class ImageToTextTool(BaseUserTool):
         signal.alarm(timeout_seconds)
 
         try:
-            logger.info(f"🖼️ Starting generation with {model} (think=False, no streaming)...")
-            response = ollama.generate(
+            logger.info(f"🖼️ Starting vision processing with {model} using chat API...")
+
+            # Determine the image format
+            if os.path.isfile(image_data):
+                logger.info(f"🖼️ Using file path: {image_data}")
+            elif image_data.startswith(('http://', 'https://')):
+                logger.info(f"🖼️ Using URL: {image_data[:50]}...")
+            else:
+                logger.info(f"🖼️ Using base64 data: {len(image_data)} chars")
+
+            # Use chat API for vision models with images in messages
+            response = ollama.chat(
                 model=model,
-                prompt=prompt,
-                images=[image_data],  # Use images parameter in generate
-                stream=False,  # Turn off streaming so results return to primary LLM
-                options={'think': False}  # Disable thinking phase for faster processing
+                messages=[{
+                    'role': 'user',
+                    'content': prompt,
+                    'images': [image_data]  # Pass image data directly in message
+                }],
+                stream=False  # Turn off streaming so results return to primary LLM
             )
         finally:
             # Always clear the alarm
             signal.alarm(0)
 
-        # Get complete response
-        res = response.get('response', '')
-        logger.info(f"🖼️ Generation complete, total response: {len(res)} chars")
+        # Get complete response from chat API
+        res = response['message']['content']
+        logger.info(f"🖼️ Vision processing complete, total response: {len(res)} chars")
 
         res = f"\n\nHere is the image recognition and analysis report you requested as of [Current Date and Time: {timestamp}], use it to compose your response to the user's prompt:  {res}"
 
@@ -319,15 +362,23 @@ class ImageToTextTool(BaseUserTool):
             "timestamp": timestamp
         }
 
-    def _process_with_lm_studio(self, model: str, prompt: str, image_data: str, timestamp: str) -> Dict[str, Any]:
-        """Process vision request using LM Studio."""
+    def _process_with_openai_compatible_api(self, model: str, prompt: str, image_data: str, timestamp: str) -> Dict[str, Any]:
+        """Process vision request using an OpenAI-compatible API."""
         import requests
         import json
 
-        base_url = self.vision_config.get('base_url', 'http://127.0.0.1:1234')
+        base_url = self.vision_config.get('base_url')
+        api_key = self.vision_config.get('api_key')
+        headers = self.vision_config.get('headers', {})
         timeout_seconds = self.vision_config.get('timeout', 1800)
 
-        logger.info(f"🖼️ Starting LM Studio generation with {model}...")
+        if not base_url:
+            return {
+                "success": False,
+                "error": "API base URL not found in configuration."
+            }
+
+        logger.info(f"🖼️ Starting OpenAI-compatible API generation with {model}...")
 
         # Prepare the request payload in OpenAI format
         payload = {
@@ -345,9 +396,19 @@ class ImageToTextTool(BaseUserTool):
             "temperature": 0.1
         }
 
+        # Add authorization header if API key is present
+        request_headers = {
+            "Content-Type": "application/json"
+        }
+        if api_key:
+            request_headers["Authorization"] = f"Bearer {api_key}"
+        
+        request_headers.update(headers)
+
         try:
             response = requests.post(
-                f"{base_url}/v1/chat/completions",
+                f"{base_url}/chat/completions",
+                headers=request_headers,
                 json=payload,
                 timeout=timeout_seconds
             )
@@ -356,7 +417,7 @@ class ImageToTextTool(BaseUserTool):
                 data = response.json()
                 if "choices" in data and len(data["choices"]) > 0:
                     res = data["choices"][0]["message"]["content"]
-                    logger.info(f"🖼️ LM Studio generation complete, total response: {len(res)} chars")
+                    logger.info(f"🖼️ OpenAI-compatible API generation complete, total response: {len(res)} chars")
 
                     res = f"\n\nHere is the image recognition and analysis report you requested as of [Current Date and Time: {timestamp}], use it to compose your response to the user's prompt:  {res}"
 
@@ -369,21 +430,21 @@ class ImageToTextTool(BaseUserTool):
                 else:
                     return {
                         "success": False,
-                        "error": f"No response content from LM Studio: {response.text}"
+                        "error": f"No response content from API: {response.text}"
                     }
             else:
                 return {
                     "success": False,
-                    "error": f"LM Studio API error: {response.status_code} - {response.text}"
+                    "error": f"API error: {response.status_code} - {response.text}"
                 }
 
         except requests.exceptions.Timeout:
             return {
                 "success": False,
-                "error": f"LM Studio request timeout after {timeout_seconds} seconds"
+                "error": f"API request timeout after {timeout_seconds} seconds"
             }
         except Exception as e:
             return {
                 "success": False,
-                "error": f"LM Studio request failed: {str(e)}"
+                "error": f"API request failed: {str(e)}"
             }

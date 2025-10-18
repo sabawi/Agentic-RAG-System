@@ -16,6 +16,10 @@ echo "🚀 Starting FastAPI Complete Server with Optimizations..."
 # Activate virtual environment and start server
 source venv/bin/activate
 
+# Detect Python version dynamically
+PYTHON_VERSION=$(python3 -c 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")')
+echo "🐍 Detected Python version: $PYTHON_VERSION"
+
 # 🎯 DEFAULT OPTIMIZATIONS ENABLED
 # These optimizations are enabled by default for production performance
 ENV_VARS=""
@@ -50,7 +54,7 @@ fi
 
 # Start server with optimized environment variables
 echo "🔧 Starting server with optimizations: Performance ✅ Streamlined Logging ✅ API Control ✅"
-nohup env $ENV_VARS python3 fastapi_server_complete.py > logs/server_complete.log 2>&1 &
+nohup env "PYTHONPATH=$(pwd)/venv/lib/$PYTHON_VERSION/site-packages" $ENV_VARS venv/bin/python3 fastapi_server_complete.py > logs/server_complete.log 2>&1 &
 
 # Get the PID
 SERVER_PID=$!

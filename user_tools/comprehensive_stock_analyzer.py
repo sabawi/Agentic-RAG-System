@@ -181,7 +181,19 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
 
     def _get_real_time_data(self, ticker: str) -> Dict[str, Any]:
         """Get real-time stock data using yfinance"""
+        import zoneinfo
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Import shared timezone setup utility
+        from utils.platform import EnvironmentManager
+
+        original_tzpath = os.environ.get('PYTHONTZPATH')
         try:
+            # Force yfinance to use the tzdata package from the venv
+            EnvironmentManager.setup_tzdata_path()
+            zoneinfo.reset_tzpath()
+            logger.info(f"👀 New zoneinfo.TZPATH: {zoneinfo.TZPATH}")
             stock = yf.Ticker(ticker)
             info = stock.info
             hist = stock.history(period="1d")
@@ -213,6 +225,16 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
             }
         except Exception as e:
             return {"error": f"Failed to fetch data: {str(e)}"}
+        finally:
+            # Restore the original PYTHONTZPATH
+            if original_tzpath is None:
+                if 'PYTHONTZPATH' in os.environ:
+                    del os.environ['PYTHONTZPATH']
+            else:
+                os.environ['PYTHONTZPATH'] = original_tzpath
+            zoneinfo.reset_tzpath()
+            logger.info(f"👀 Restored PYTHONTZPATH to: {os.environ.get('PYTHONTZPATH')}")
+            logger.info(f"👀 Restored zoneinfo.TZPATH: {zoneinfo.TZPATH}")
     
     def _format_dividend_yield(self, dividend_yield) -> str:
         """Format dividend yield safely"""
@@ -484,16 +506,19 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
             else:
                 recommendation = "➡️ HOLD"
         
-        # Format news section
+        # Format news section (matching get_news_summaries citation format)
         news_section = ""
         if news_items:
             news_section = "\n📰 **RECENT FINANCIAL NEWS & ANALYSIS**\n"
             news_section += f"📊 **Market Sentiment**: {news_sentiment.get('sentiment', 'N/A')} ({news_sentiment.get('summary', '')})\n\n"
-            
+
             for i, news in enumerate(news_items[:6], 1):  # Show top 6 news items
-                news_section += f"**{i}. {news['title']}**\n"
-                news_section += f"   📰 *{news['source']}*\n"
-                news_section += f"   📝 {news['snippet'][:150]}{'...' if len(news['snippet']) > 150 else ''}\n\n"
+                news_section += f"───────────────────────────────────────────────────────\n"
+                news_section += f"📄 SOURCE: {news['title']}\n"
+                news_section += f"🔗 CITATION URL: {news.get('url', 'N/A')}\n"
+                news_section += f"📰 Publisher: {news['source']}\n"
+                news_section += f"CONTENT: {news['snippet'][:300]}{'...' if len(news['snippet']) > 300 else ''}\n"
+                news_section += f"───────────────────────────────────────────────────────\n\n"
         else:
             news_section = "\n📰 **RECENT FINANCIAL NEWS & ANALYSIS**\n⚠️ No recent news available for analysis\n"
 

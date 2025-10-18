@@ -193,7 +193,38 @@ class ProcessManager:
 
 class EnvironmentManager:
     """Cross-platform environment variable management"""
-    
+
+    @staticmethod
+    def setup_tzdata_path() -> bool:
+        """
+        Setup PYTHONTZPATH to use venv's tzdata package.
+        Returns True if successful, False otherwise.
+
+        This is necessary for Python applications that need timezone data
+        to work correctly across different environments.
+        """
+        import subprocess
+
+        try:
+            result = subprocess.run(
+                ['pip', 'show', 'tzdata'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            location_line = [line for line in result.stdout.split('\n') if line.startswith('Location:')]
+            if location_line:
+                location = location_line[0].split(':')[1].strip()
+                tzdata_path = os.path.join(location, 'tzdata', 'zoneinfo')
+                os.environ['PYTHONTZPATH'] = tzdata_path
+                logger.info(f"👀 Set PYTHONTZPATH to: {os.environ.get('PYTHONTZPATH')}")
+                return True
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            logger.warning(f"Could not find tzdata package location, using system default timezone data: {e}")
+            return False
+
+        return False
+
     @staticmethod
     def expand_env_vars(text: str) -> str:
         """Expand environment variables in text"""

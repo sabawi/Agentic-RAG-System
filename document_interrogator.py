@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from datetime import datetime
 import time
+from utils.config_loader import config_loader
 
 # Import integrity monitoring
 try:
@@ -100,7 +101,7 @@ DEFAULT_BATCH_SIZE = 25  # Default embedding batch size
 DEFAULT_CHUNK_SIZE = 1000  # Characters per document chunk
 DEFAULT_SEARCH_RESULTS = 5  # Default number of search results
 MAX_FILES_PER_DIRECTORY_SCAN = None  # No limit - process ALL files in directory
-MAX_FILES_PER_TOTAL_SCAN = 100  # Total safety limit for scanning
+
 SCAN_PROGRESS_LOG_INTERVAL = 10  # Log progress every N files
 
 # Configuration Defaults
@@ -535,20 +536,30 @@ class FAISSDocumentStore:
             cursor = self.metadata_db.cursor()
             for i, chunk in enumerate(chunks):
                 faiss_index = faiss_start_index + i
-                cursor.execute('''
-                    INSERT OR REPLACE INTO chunks 
-                    (chunk_id, faiss_index, document_path, chunk_index, total_chunks, content, metadata, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    chunk.chunk_id,
-                    faiss_index,
-                    chunk.document_path,
-                    chunk.chunk_index,
-                    chunk.total_chunks,
-                    chunk.content,
-                    json.dumps(chunk.metadata),
-                    chunk.created_at
-                ))
+                try:
+                    cursor.execute('''
+                        INSERT INTO chunks 
+                        (chunk_id, faiss_index, document_path, chunk_index, total_chunks, content, metadata, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        chunk.chunk_id,
+                        faiss_index,
+                        chunk.document_path,
+                        chunk.chunk_index,
+                        chunk.total_chunks,
+                        chunk.content,
+                        json.dumps(chunk.metadata),
+                        chunk.created_at
+                    ))
+                except sqlite3.IntegrityError:
+                    cursor.execute('''
+                        UPDATE chunks
+                        SET faiss_index = ?,
+                            content = ?,
+                            metadata = ?,
+                            total_chunks = ?
+                        WHERE chunk_id = ?
+                    ''', (faiss_index, chunk.content, json.dumps(chunk.metadata), chunk.total_chunks, chunk.chunk_id))
             
             self.metadata_db.commit()
             self.chunk_counter = self.faiss_index.ntotal
@@ -872,6 +883,7 @@ class DocumentInterrogator:
         self.store = None
         self.observer = None
         self.watched_directories = set()
+        self.max_files_per_scan = config_loader.load_config().get('document_interrogator', {}).get('max_files_per_scan', 100)
         
         # Configuration file path
         self.config_file = Path("watched_directories.json")
@@ -1522,7 +1534,7 @@ class DocumentInterrogator:
             logger.info(f"🔍 Safe scan: Starting scan of {len(enabled_dirs)} configured directories")
             total_files_scanned = 0
             total_files_processed = 0
-            MAX_FILES_PER_SCAN = MAX_FILES_PER_TOTAL_SCAN  # Safety limit
+            MAX_FILES_PER_SCAN = self.max_files_per_scan  # Safety limit
             
             for dir_idx, dir_config in enumerate(enabled_dirs):
                 directory_path = dir_config['path']
