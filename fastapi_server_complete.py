@@ -6803,10 +6803,11 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         else:
                             logger.warning(f"⚠️ POST-LLM EMAIL: File not found: {full_path}")
                 
-                # Step 2A: 🔧 MULTI-DOCUMENT FIX: Extract source files mentioned in user prompt  
+                # Step 2A: 🔧 MULTI-DOCUMENT FIX: Extract source files mentioned in user prompt
                 import re
-                user_prompt = data.get('prompt', '') if 'data' in locals() else ''
-                
+                # 🔧 CRITICAL FIX v1.0.3.9: DON'T reassign user_prompt - it's already a function parameter!
+                # user_prompt = data.get('prompt', '') if 'data' in locals() else ''  # ❌ BUG: Overwrites parameter with ''
+
                 # Look for file paths in user prompt (common patterns)
                 file_path_patterns = [
                     r'/[a-zA-Z0-9_/.-]+\.(?:pdf|doc|docx|txt|md|json|csv|html)',  # Absolute paths
@@ -6890,9 +6891,19 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         
                         # 🔥 ENHANCED: Smart email and CC extraction from user prompt
                         import re
+                        # 🔧 DEBUG v1.0.3.9: Log BOTH user_prompt and actual_user_prompt to debug email extraction
+                        logger.info(f"🔍 POST-LLM EMAIL DEBUG: user_prompt passed to function = {repr(user_prompt[:200])}")
+                        logger.info(f"🔍 POST-LLM EMAIL DEBUG: Checking if actual_user_prompt exists in scope...")
+                        try:
+                            # This should fail if actual_user_prompt isn't in scope
+                            test_prompt = actual_user_prompt
+                            logger.info(f"✅ POST-LLM EMAIL DEBUG: actual_user_prompt exists! Value = {repr(test_prompt[:200])}")
+                        except NameError:
+                            logger.error(f"❌ POST-LLM EMAIL DEBUG: actual_user_prompt NOT in scope!")
+
                         email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
                         email_matches = re.findall(email_pattern, user_prompt)
-                        
+
                         logger.info(f"📧 POST-LLM EMAIL: Found {len(email_matches)} email addresses: {email_matches}")
                         
                         # Determine primary recipient and CC with smart detection
@@ -7056,6 +7067,10 @@ async def llama_stream(request: Request):
     
     # Extract parameters with defaults (exactly like Flask version)
     user_prompt = data['prompt']  # Use direct access like original for required field
+    # 🔧 DEBUG v1.0.3.9: Log what we actually received
+    logger.info(f"🔍 INITIAL REQUEST DEBUG: data['prompt'] = {repr(data['prompt'][:200] if data['prompt'] else 'EMPTY!')}")
+    actual_user_prompt = user_prompt  # 🔧 CRITICAL FIX v1.0.3.9: Preserve original for POST-LLM email extraction
+    logger.info(f"🔍 INITIAL REQUEST DEBUG: actual_user_prompt preserved = {repr(actual_user_prompt[:200] if actual_user_prompt else 'EMPTY!')}")
     model = data.get('model', ServerConfig.DEFAULT_MODEL)  # Get model early for logging
     # Input condition: User request received
     logger.info(f"Request: {len(user_prompt)} chars | Model: {model} | Tools: {'ON' if True else 'OFF'}")
@@ -7405,7 +7420,8 @@ The above image analysis was automatically performed on newly uploaded images. T
                     # 🎯 NEW APPROACH: Let tool calling model orchestrate ALL tools, intercept email calls
                     # 🚫 SMART TOOL FILTERING: Exclude inappropriate tools for meta-tasks
                     # 🔧 FIX: Only check the actual user prompt, NOT conversation context
-                    actual_user_prompt = user_prompt  # Use the original user prompt, not the system message
+                    # 🔧 v1.0.3.9: No longer need to reassign - actual_user_prompt preserved at function level
+                    # actual_user_prompt = user_prompt  # Use the original user prompt, not the system message
                     is_meta_task = any(meta_pattern in actual_user_prompt.lower() for meta_pattern in [
                         'generate a concise', 'title with emoji', 'generate 1-3 broad tags', 
                         'summarizing the chat history', 'categorizing the main themes'
@@ -8622,15 +8638,20 @@ END OF CONTEXT
                 # 🎯 PROMPT TRANSFORMATION: Transform email requests to confirmation requests when tools already executed
                 transformed_prompt = user_prompt
                 if context_block.strip() and ("TOOLS EXECUTED:" in context_block):
-                    # Check if user is asking to email something when tools have already been executed
-                    email_keywords = ["email the above", "email this", "send the above", "send this", "email it"]
-                    if any(keyword.lower() in user_prompt.lower() for keyword in email_keywords):
-                        # Transform the prompt to ask for confirmation instead of redoing work
-                        if "secure_email_sender" in context_block:
-                            transformed_prompt = "Please confirm what work has been completed and provide a summary of what was accomplished for the user."
-                        else:
-                            transformed_prompt = user_prompt  # Keep original if no email was actually sent
-                        logger.info(f"🔄 PROMPT TRANSFORMED: Email request → Confirmation request (tools already executed)")
+                    # 🔧 CRITICAL FIX v1.0.3.9: Only transform if tools actually completed (not deferred)
+                    # If tools are deferred, Primary LLM needs to generate the content!
+                    if "deferred" not in context_block.lower():
+                        # Check if user is asking to email something when tools have already been executed
+                        email_keywords = ["email the above", "email this", "send the above", "send this", "email it"]
+                        if any(keyword.lower() in user_prompt.lower() for keyword in email_keywords):
+                            # Transform the prompt to ask for confirmation instead of redoing work
+                            if "secure_email_sender" in context_block:
+                                transformed_prompt = "Please confirm what work has been completed and provide a summary of what was accomplished for the user."
+                            else:
+                                transformed_prompt = user_prompt  # Keep original if no email was actually sent
+                            logger.info(f"🔄 PROMPT TRANSFORMED: Email request → Confirmation request (tools already executed)")
+                    else:
+                        logger.info(f"🔄 PROMPT NOT TRANSFORMED: Tools were deferred, Primary LLM needs to generate content")
                 
                 # Build new format: --CONTEXT START-- + ORIGINAL CONVERSATION + CONTEXT BLOCK + PROMPT: [TRANSFORMED PROMPT]
                 if context_block.strip():
@@ -9185,13 +9206,17 @@ END OF CONTEXT
                         logger.info(f"🎯 Complete LLM response length: {len(complete_llm_response)} characters")
                             
                         try:
+                            # 🔧 CRITICAL FIX v1.0.3.9: Use actual_user_prompt (original) not user_prompt (may be reassigned/empty)
+                            # 🔧 DEBUG v1.0.3.9: Log what we're passing to POST-LLM
+                            logger.info(f"🔍 BEFORE POST-LLM CALL: actual_user_prompt = {repr(actual_user_prompt[:200] if actual_user_prompt else 'EMPTY!')}")
+                            logger.info(f"🔍 BEFORE POST-LLM CALL: user_prompt = {repr(user_prompt[:200] if user_prompt else 'EMPTY!')}")
                             # Execute missing tools with complete LLM response as content
                             additional_results = await _execute_missing_tools_post_llm(
-                                verification_result['missing_tools'], 
-                                tool_manager, 
+                                verification_result['missing_tools'],
+                                tool_manager,
                                 tools_results,
                                 complete_llm_response,
-                                user_prompt
+                                actual_user_prompt
                             )
                             logger.info(f"✅ POST-LLM AUTO-EXECUTION COMPLETED: {additional_results}")
                                 
