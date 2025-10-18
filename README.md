@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.3.8
+# Agentic-RAG Server v1.0.3.10
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, vision capabilities, intelligent email management, and **extensible plugin system**.
 
-[![Version](https://img.shields.io/badge/version-1.0.3.8-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.8)
+[![Version](https://img.shields.io/badge/version-1.0.3.10-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.10)
 [![Python](https://img.shields.io/badge/python-3.13-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -32,6 +32,7 @@ An advanced AI-powered server with multi-LLM orchestration, tool calling, docume
 ### Quick Reference
 - **[Main Documentation Hub](docs/README.md)** - Central navigation and overview
 - **[POST-LLM Execution Architecture](docs/POST_LLM_EXECUTION_ARCHITECTURE.md)** - 🆕 Critical: Multi-step workflow execution system
+- **[Email Workflow Best Practices](docs/production/EMAIL_WORKFLOW_GUIDE.md)** - 🆕 Smart email routing patterns and limitations
 - **[CLI Model Management](docs/CLI_MODEL_MANAGEMENT.md)** - 🆕 Easy model switching and configuration
 - **[News Sources Configuration](docs/NEWS_SOURCES_CONFIGURATION.md)** - Customize news sources without code changes
 
@@ -56,6 +57,35 @@ cd Agentic-RAG-System
 pip install -r requirements.txt
 python fastapi_server_complete.py
 ```
+
+## ⭐ What's New in v1.0.3.10
+
+### 🎯 CRITICAL: Smart Email Workflow Routing
+- **Intelligent Execution Path Detection**: System now automatically routes email workflows between PRE-LLM and POST-LLM execution based on user intent
+- **PRE-LLM for Existing Content**: "Email the above response" → immediate execution with existing conversation content
+- **POST-LLM for New Content**: "Write story and email it" → Primary LLM generates content first, then files/emails created
+- **Enhanced Primary LLM System Prompts**: Conditional prompts based on tool state (deferred vs completed) eliminate confusion
+
+### 🔧 Email Workflow Improvements
+- **Smart Deferral Detection**: Analyzes user prompts for conversation content indicators ("above", "this", "previous response", "verbatim")
+- **Prompt Transformation Enhancement**: Prevents unwanted transformation when user wants to email conversation content
+- **Deferred Tool Message Clarity**: Changed from third-person ("primary LLM will...") to second-person ("you generate") for better LLM comprehension
+- **Debug Logging**: Added content preview logging for Primary LLM output and file creation
+
+### 📚 User Documentation
+- **Email Workflow Best Practices Guide**: Comprehensive guide with working patterns, limitations, and workarounds
+- **Known Limitations**: Documented implicit email pattern limitations with clear workaround strategies
+- **Pattern Examples**: Provided tested examples for research+email, existing content email, and new content generation workflows
+
+### 📊 Technical Details
+**Files Modified**:
+- `fastapi_server_complete.py`: Smart deferral (lines 8017-8053), enhanced system prompts (lines 3005-3046), prompt transformation (lines 8643-8666)
+- `docs/production/EMAIL_WORKFLOW_GUIDE.md`: Complete user-facing documentation
+- `docs/housekeeping/status-tracking/CHANGELOG_v1.0.3.10.md`: Detailed technical changelog
+
+**Impact**: Dramatically improved email workflow user experience with intelligent routing, clear messaging, and documented limitations
+
+---
 
 ## ⭐ What's New in v1.0.3.8
 

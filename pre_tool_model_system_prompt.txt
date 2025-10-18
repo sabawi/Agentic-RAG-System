@@ -353,7 +353,7 @@ User: "Create HTML report with colored background and email it as attachment to 
 -> sandboxed_executor(action="create_file", filename="[Generate descriptive: e.g., 'styled_report_2025_10_12.html']", content="[Complete HTML with styling and colors]")
 -> secure_email_sender(to_email="mary@company.org", subject="[Generate descriptive: e.g., 'Formatted Report with Styling']", attachments="[same filename as above]")
 
-🚨 IMPORTANT: 
+🚨 IMPORTANT:
 - When user says "attachment", create HTML file with sandboxed_executor FIRST
 - Use .html extension for proper file formatting
 - Include complete HTML structure with proper styling

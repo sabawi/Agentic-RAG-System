@@ -2995,14 +2995,35 @@ def _build_enhanced_primary_system_prompt(original_system, tools_were_executed=F
     """
     # Load base system prompt from external file
     base_system = load_primary_model_system_prompt()
-    
+
     if not tools_were_executed:
         # If no tools were executed, combine base system + user system if provided
         if original_system and original_system.strip():
             return f"{base_system}\n\nADDITIONAL USER INSTRUCTIONS:\n{original_system}"
         return base_system
-    
-    enhanced_instructions = """
+
+    # 🔧 FIX v1.0.3.10: Detect if tools are DEFERRED vs COMPLETED
+    tools_are_deferred = "deferred" in tools_results_summary.lower()
+
+    if tools_are_deferred:
+        # Tools are waiting for Primary LLM to generate content
+        enhanced_instructions = """
+
+CRITICAL WORKFLOW INSTRUCTIONS:
+- Tools are ready to execute but are waiting for YOU to generate the content first
+- You must generate the COMPLETE, FULL content that the user requested
+- DO NOT just acknowledge or confirm - you must ACTUALLY GENERATE the full content now
+- File creation and email sending will happen automatically AFTER you generate the content
+- Your response will be used as the file content and email attachment
+
+TOOLS WAITING FOR YOUR CONTENT:
+""" + tools_results_summary + """
+
+Remember: Generate the FULL, COMPLETE content now. Do not just say "I'll create..." - ACTUALLY CREATE IT in your response.
+"""
+    else:
+        # Tools already completed their work
+        enhanced_instructions = """
 
 CRITICAL WORKFLOW INSTRUCTIONS:
 - Tools have already been executed and their work is complete
@@ -3016,7 +3037,7 @@ TOOLS EXECUTION SUMMARY:
 
 Remember: Use data from search/research tools to create comprehensive responses. Only action tools need simple confirmation.
 """
-    
+
     # Combine base system + user system (if provided) + enhanced instructions
     full_system = base_system
     if original_system and original_system.strip():
@@ -6585,7 +6606,9 @@ async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager
                 
                 # Use complete LLM response as content (this is the key fix!)
                 raw_content = complete_llm_response.strip()
-                
+                # 🔍 DEBUG v1.0.3.10: Check content being used for file creation
+                logger.info(f"🔍 POST-LLM FILE CONTENT preview (first 500 chars): {raw_content[:500]}")
+
                 # 🧹 CLEAN CONTENT: Remove raw LLM tokens and parameters
                 report_content = _clean_llm_response_content(raw_content)
                 
@@ -7991,15 +8014,39 @@ The above image analysis was automatically performed on newly uploaded images. T
                                             if should_execute:
                                                 logger.info(f"📧 PHASE 2 TOOL: {function_name} starting (with smart file decisions)")
 
+                                                # 🎯 SMART DEFERRAL v1.0.3.10: Check if user wants EXISTING content vs NEW content
+                                                user_prompt_lower = data.get('prompt', '').lower()
+                                                conversation_content_indicators = ["email the above", "email this", "send the above", "send this",
+                                                                                   "email it", "send it", "previous response", "verbatim",
+                                                                                   "full and complete response", "the response above"]
+                                                wants_existing_content = any(indicator in user_prompt_lower for indicator in conversation_content_indicators)
+
                                                 # 🎯 DEFER sandboxed_executor create_file AND secure_email_sender until POST-LLM
+                                                # ONLY defer if user wants NEW content generation (not existing content)
                                                 if function_name == 'sandboxed_executor' and function_args_dict.get('action') == 'create_file':
-                                                    logger.info(f"📄 TOOL DEFERRED: {function_name} create_file - Will use primary LLM response")
-                                                    result = "File creation deferred until after primary LLM generates formatted content"
-                                                    all_results.append((function_name, result, start_time, False, None))
+                                                    if wants_existing_content:
+                                                        # User wants existing content - execute PRE-LLM
+                                                        logger.info(f"📄 TOOL EXECUTING PRE-LLM: {function_name} create_file - User wants existing content")
+                                                        result = await tool_manager.safe_function_call(function_name, function_args)
+                                                        all_results.append((function_name, result, start_time, False, None))
+                                                    else:
+                                                        # User wants new content - defer POST-LLM
+                                                        logger.info(f"📄 TOOL DEFERRED: {function_name} create_file - Will use primary LLM response")
+                                                        # 🔧 FIX v1.0.3.10: Don't confuse Primary LLM with meta-instructions
+                                                        result = "File creation deferred - will be created with the formatted content you generate"
+                                                        all_results.append((function_name, result, start_time, False, None))
                                                 elif function_name == 'secure_email_sender':
-                                                    logger.info(f"📧 TOOL DEFERRED: {function_name} - Will send after file creation in POST-LLM")
-                                                    result = "Email sending deferred until after file creation with primary LLM content"
-                                                    all_results.append((function_name, result, start_time, True, function_args_dict.copy()))
+                                                    if wants_existing_content:
+                                                        # User wants existing content - execute PRE-LLM
+                                                        logger.info(f"📧 TOOL EXECUTING PRE-LLM: {function_name} - User wants existing content")
+                                                        result = await tool_manager.safe_function_call(function_name, function_args)
+                                                        all_results.append((function_name, result, start_time, False, None))
+                                                    else:
+                                                        # User wants new content - defer POST-LLM
+                                                        logger.info(f"📧 TOOL DEFERRED: {function_name} - Will send after file creation in POST-LLM")
+                                                        # 🔧 FIX v1.0.3.10: Don't confuse Primary LLM with meta-instructions
+                                                        result = "Email sending deferred - will be sent after file creation completes"
+                                                        all_results.append((function_name, result, start_time, True, function_args_dict.copy()))
                                                 else:
                                                     result = await tool_manager.safe_function_call(function_name, function_args)
                                                     all_results.append((function_name, result, start_time, False, None))
@@ -8641,15 +8688,24 @@ END OF CONTEXT
                     # 🔧 CRITICAL FIX v1.0.3.9: Only transform if tools actually completed (not deferred)
                     # If tools are deferred, Primary LLM needs to generate the content!
                     if "deferred" not in context_block.lower():
-                        # Check if user is asking to email something when tools have already been executed
-                        email_keywords = ["email the above", "email this", "send the above", "send this", "email it"]
-                        if any(keyword.lower() in user_prompt.lower() for keyword in email_keywords):
-                            # Transform the prompt to ask for confirmation instead of redoing work
-                            if "secure_email_sender" in context_block:
-                                transformed_prompt = "Please confirm what work has been completed and provide a summary of what was accomplished for the user."
-                            else:
-                                transformed_prompt = user_prompt  # Keep original if no email was actually sent
-                            logger.info(f"🔄 PROMPT TRANSFORMED: Email request → Confirmation request (tools already executed)")
+                        # 🔧 ENHANCED FIX v1.0.3.9: Distinguish between workflow confirmation vs conversation content
+                        # Check if user wants conversation content (previous response) vs workflow confirmation
+                        conversation_content_indicators = ["response", "verbatim", "full", "complete", "previous", "story", "message"]
+                        wants_conversation_content = any(indicator.lower() in user_prompt.lower() for indicator in conversation_content_indicators)
+
+                        if wants_conversation_content:
+                            # User wants to email previous assistant response, NOT workflow confirmation
+                            logger.info(f"🔄 PROMPT NOT TRANSFORMED: User requesting previous conversation content, not workflow confirmation")
+                        else:
+                            # Check if user is asking to email something when tools have already been executed
+                            email_keywords = ["email the above", "email this", "send the above", "send this", "email it"]
+                            if any(keyword.lower() in user_prompt.lower() for keyword in email_keywords):
+                                # Transform the prompt to ask for confirmation instead of redoing work
+                                if "secure_email_sender" in context_block:
+                                    transformed_prompt = "Please confirm what work has been completed and provide a summary of what was accomplished for the user."
+                                else:
+                                    transformed_prompt = user_prompt  # Keep original if no email was actually sent
+                                logger.info(f"🔄 PROMPT TRANSFORMED: Email request → Confirmation request (tools already executed)")
                     else:
                         logger.info(f"🔄 PROMPT NOT TRANSFORMED: Tools were deferred, Primary LLM needs to generate content")
                 
@@ -9024,7 +9080,9 @@ END OF CONTEXT
                             logger.info(f"📧 POST-LLM EMAIL: Processing deferred email")
                             logger.info(f"📧 POST-LLM: Processing intercepted email call")
                             logger.info(f"🎯 Complete LLM response length: {len(complete_llm_response)} characters")
-                            
+                            # 🔍 DEBUG v1.0.3.10: Check what Primary LLM actually generated
+                            logger.info(f"🔍 COMPLETE_LLM_RESPONSE preview (first 500 chars): {complete_llm_response[:500]}")
+
                             try:
                                 logger.info(f"🔄 STEP 1: Extracting filename from intercepted parameters")
                                 # Extract filename from intercepted parameters - DEFAULT TO HTML
