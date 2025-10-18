@@ -6968,9 +6968,7 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         
                         # Determine email subject based on content
                         subject = "Requested Documents"
-                        if "test" in user_prompt.lower():
-                            subject = "Test Email with Documents"
-                        elif len(files_to_attach) > 1:
+                        if len(files_to_attach) > 1:
                             subject = f"Multiple Documents ({len(files_to_attach)} files)"
                         elif any("pdf" in f.lower() for f in files_to_attach):
                             subject = "PDF Document"
