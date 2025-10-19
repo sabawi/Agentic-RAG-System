@@ -977,7 +977,7 @@ class SecureEmailSenderTool(BaseUserTool):
     def _cleanup_generated_files(self, attachment_paths):
         """
         🧹 AUTO-CLEANUP: Remove successfully emailed generated files from sandbox workspace
-        
+
         Only removes files that were generated in the sandbox workspace, not user source files.
         This prevents file accumulation and ensures clean state for future requests.
         """
@@ -986,7 +986,11 @@ class SecureEmailSenderTool(BaseUserTool):
             sandbox_base = str(Path.cwd() / "sandbox_workspace")
             files_cleaned = []
             files_preserved = []
-            
+
+            # 🔧 DEBUG: Log entry into cleanup function
+            logger.info(f"🧹 AUTO-CLEANUP: Starting cleanup for {len(attachment_paths)} attachment(s): {attachment_paths}")
+            logger.info(f"🧹 AUTO-CLEANUP: Sandbox base: {sandbox_base}")
+
             for file_path in attachment_paths:
                 try:
                     # Resolve the full path
@@ -994,7 +998,11 @@ class SecureEmailSenderTool(BaseUserTool):
                         full_path = file_path
                     else:
                         full_path = os.path.join(sandbox_base, file_path)
-                    
+
+                    logger.info(f"🧹 AUTO-CLEANUP: Processing {file_path} -> {full_path}")
+                    logger.info(f"🧹 AUTO-CLEANUP: File exists? {os.path.exists(full_path)}")
+                    logger.info(f"🧹 AUTO-CLEANUP: In sandbox? {full_path.startswith(sandbox_base)}")
+
                     # Only clean up files in the sandbox workspace (generated files)
                     if full_path.startswith(sandbox_base) and os.path.exists(full_path):
                         # Additional safety: Only remove common generated file types
@@ -1003,24 +1011,35 @@ class SecureEmailSenderTool(BaseUserTool):
                         ]):
                             os.remove(full_path)
                             files_cleaned.append(os.path.basename(full_path))
+                            logger.info(f"🧹 AUTO-CLEANUP: ✅ Removed generated file: {os.path.basename(full_path)}")
                             print(f"🧹 AUTO-CLEANUP: Removed generated file: {os.path.basename(full_path)}")
                         else:
                             files_preserved.append(os.path.basename(full_path))
+                            logger.info(f"🛡️ AUTO-CLEANUP: Preserved file (not a typical generated file): {os.path.basename(full_path)}")
                             print(f"🛡️ AUTO-CLEANUP: Preserved file (not a typical generated file): {os.path.basename(full_path)}")
                     else:
+                        if not os.path.exists(full_path):
+                            logger.info(f"🛡️ AUTO-CLEANUP: File already deleted or never existed: {os.path.basename(file_path)}")
                         files_preserved.append(os.path.basename(file_path))
+                        logger.info(f"🛡️ AUTO-CLEANUP: Preserved source file (outside sandbox or doesn't exist): {os.path.basename(file_path)}")
                         print(f"🛡️ AUTO-CLEANUP: Preserved source file (outside sandbox): {os.path.basename(file_path)}")
-                        
+
                 except Exception as e:
+                    logger.error(f"⚠️ AUTO-CLEANUP: Error processing {file_path}: {e}")
                     print(f"⚠️ AUTO-CLEANUP: Error processing {file_path}: {e}")
                     files_preserved.append(os.path.basename(file_path))
-            
+
             if files_cleaned:
+                logger.info(f"🧹 AUTO-CLEANUP: Successfully removed {len(files_cleaned)} generated files: {', '.join(files_cleaned)}")
                 print(f"🧹 AUTO-CLEANUP: Successfully removed {len(files_cleaned)} generated files: {', '.join(files_cleaned)}")
             if files_preserved:
+                logger.info(f"🛡️ AUTO-CLEANUP: Preserved {len(files_preserved)} files: {', '.join(files_preserved)}")
                 print(f"🛡️ AUTO-CLEANUP: Preserved {len(files_preserved)} files: {', '.join(files_preserved)}")
-                
+
+            logger.info(f"🧹 AUTO-CLEANUP: Cleanup completed - Cleaned: {len(files_cleaned)}, Preserved: {len(files_preserved)}")
+
         except Exception as e:
+            logger.error(f"⚠️ AUTO-CLEANUP: Error during cleanup: {e}")
             print(f"⚠️ AUTO-CLEANUP: Error during cleanup: {e}")
             # Don't fail email sending if cleanup fails
 

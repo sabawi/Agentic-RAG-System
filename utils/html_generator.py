@@ -247,6 +247,17 @@ li { margin-bottom: 6px; }
         try:
             template = self._load_template()
 
+            # 🔧 FIX: Normalize special Unicode characters that cause encoding issues in email clients
+            # Replace en-dash (U+2013) and em-dash (U+2014) with regular hyphen
+            # Replace smart quotes with regular quotes
+            content = content.replace('\u2013', '-')  # en-dash → hyphen
+            content = content.replace('\u2014', '-')  # em-dash → hyphen
+            content = content.replace('\u2018', "'")  # left single quote → apostrophe
+            content = content.replace('\u2019', "'")  # right single quote → apostrophe
+            content = content.replace('\u201c', '"')  # left double quote → quote
+            content = content.replace('\u201d', '"')  # right double quote → quote
+            content = content.replace('\u2026', '...')  # ellipsis → three dots
+
             # 🔧 FIX: Detect and convert markdown to HTML
             # Check if content looks like markdown (has ## headers, [](links), etc.)
             has_markdown_headers = '##' in content or '###' in content

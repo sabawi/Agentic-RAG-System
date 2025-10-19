@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.3.10
+# Agentic-RAG Server v1.0.3.21
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, vision capabilities, intelligent email management, and **extensible plugin system**.
 
-[![Version](https://img.shields.io/badge/version-1.0.3.10-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.10)
+[![Version](https://img.shields.io/badge/version-1.0.3.21-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.21)
 [![Python](https://img.shields.io/badge/python-3.13-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -57,6 +57,59 @@ cd Agentic-RAG-System
 pip install -r requirements.txt
 python fastapi_server_complete.py
 ```
+
+## ⭐ What's New in v1.0.3.21
+
+### 🐛 Critical Bug Fixes: Email Attachment System
+
+**v1.0.3.15-21** - Comprehensive fixes for email workflow issues:
+
+#### 🔧 v1.0.3.21 - Filename Date Hallucination Fix ⭐ CRITICAL
+- **Root Cause**: LLMs hallucinate dates in filenames (creating "2025_10_12" when actual date is "2025_10_19")
+- **Solution**: Server now generates ALL filenames server-side with `datetime.now()` - NEVER trusts LLM output
+- **Topic-Based Naming**: Intelligent filename generation based on content (`gaza_middle_east_analysis`, `financial_analysis`, etc.)
+- **Impact**: Filenames now always have correct timestamps and consistent naming conventions
+
+#### 📧 v1.0.3.20 - Email Result Transparency
+- **Fixed**: "Attachment None" appearing in POST-LLM result messages
+- **Enhancement**: Now shows full email details (recipient, subject, attachment names/sizes)
+- **Benefit**: Users see complete confirmation of what was sent
+
+#### 🌐 v1.0.3.19 - POST-LLM Streaming Format
+- **Fixed**: datetime scope error preventing POST-LLM results from streaming to Discord
+- **Solution**: Changed to `time.strftime()` to avoid async generator import conflicts
+- **Impact**: POST-LLM completion messages now display correctly in all clients
+
+#### 🧹 v1.0.3.18 - File Cleanup Transparency
+- **Enhancement**: Added comprehensive logging to file cleanup mechanism
+- **Visibility**: Now shows which files are deleted, preserved, or missing
+- **Debugging**: Clear audit trail of file lifecycle (create → email → cleanup)
+
+#### ✉️ v1.0.3.17 - Character Encoding Fix
+- **Issue**: Unicode dashes appearing as "â€"" in email clients (especially Outlook)
+- **Root Cause**: Email clients misinterpreting UTF-8 special characters
+- **Solution**: Normalize en-dash (U+2013), em-dash (U+2014), smart quotes to ASCII equivalents
+- **Files**: utils/html_generator.py:250-259
+
+#### 🔄 v1.0.3.16 - Email Result Type Safety
+- **Fixed**: Crash when checking POST-LLM email results
+- **Issue**: `safe_function_call()` returns string on success, dict on error
+- **Solution**: Proper type checking with `isinstance()` before accessing dict methods
+
+### 📊 Impact Summary
+- ✅ **Email workflows 100% functional** - All known issues resolved
+- ✅ **Filename accuracy** - Server-generated timestamps prevent date hallucinations
+- ✅ **Character encoding** - Clean display in all email clients
+- ✅ **File cleanup** - Visible and debuggable with comprehensive logging
+- ✅ **User transparency** - POST-LLM results stream correctly to all clients
+
+**Files Modified**:
+- `version.py`: 1.0.3.11 → 1.0.3.21 (10 incremental fixes)
+- `fastapi_server_complete.py`: POST-LLM streaming, filename generation, email results
+- `utils/html_generator.py`: Character encoding normalization
+- `user_tools/secure_email_sender.py`: Cleanup logging
+
+---
 
 ## ⭐ What's New in v1.0.3.10
 

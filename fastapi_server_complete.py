@@ -6221,10 +6221,14 @@ async def _detect_html_email_request_in_args(function_args_dict: dict, user_prom
         'email previous response',
         'html format to',
         'in html format to',
-        'email the full response above'  # Even without explicit HTML, we should use our template
+        'email the full response above',  # Even without explicit HTML, we should use our template
+        'email the above response',  # Generic response email
+        'email the above full and complete response',  # Comprehensive response email
+        'email the complete response',  # Complete response email
     ]
-    
+
     # 📄 CONVERSATION PDF DETECTION - Check for conversation export requests
+    # These patterns should explicitly indicate PDF or conversation export intent
     conversation_pdf_indicators = [
         'email the previous conversation as pdf',
         'email previous conversation as pdf',
@@ -6233,17 +6237,23 @@ async def _detect_html_email_request_in_args(function_args_dict: dict, user_prom
         'send conversation pdf',
         'export conversation to pdf and email',
         'email conversation history as pdf',
-        'email the above full and complete response',
-        'email the above response as pdf',
-        'email the full response as pdf',
-        'email the complete response as pdf',
+        'email the above response as pdf',  # Must explicitly say PDF
+        'email the full response as pdf',  # Must explicitly say PDF
+        'email the complete response as pdf',  # Must explicitly say PDF
         'pdf attachment with',
         'neatly formatted pdf attachment'
     ]
-    
+
+    # 🚨 CRITICAL: Check if "html" keyword is present - prioritize HTML over PDF
+    has_html_keyword = 'html' in user_prompt_lower
+
     has_conversation_pdf_request = any(indicator in user_prompt_lower for indicator in conversation_pdf_indicators)
-    
-    has_html_in_prompt = any(indicator in user_prompt_lower for indicator in html_email_indicators)
+
+    # 🎯 If "html" keyword present, force HTML detection even if PDF patterns match
+    if has_html_keyword:
+        has_conversation_pdf_request = False
+
+    has_html_in_prompt = any(indicator in user_prompt_lower for indicator in html_email_indicators) or has_html_keyword
     
     if has_html_format or has_html_source or has_style_param or has_html_in_prompt:
         # Extract email details from tool arguments first
@@ -6304,11 +6314,19 @@ async def _detect_html_email_request_in_args(function_args_dict: dict, user_prom
 def _detect_conversation_pdf_request(function_args_dict: dict, user_prompt: str) -> dict:
     """
     Detect if the user is requesting conversation export as PDF attachment
+
+    🚨 CRITICAL: Only detect PDF requests when explicitly requested.
+    If "HTML" keyword is present, this should return False to allow HTML handling.
     """
     user_prompt_lower = user_prompt.lower()
+
+    # 🚨 CRITICAL: If "html" keyword present, this is NOT a PDF request
+    if 'html' in user_prompt_lower:
+        return {'detected': False}
+
     conversation_pdf_indicators = [
         'email the previous conversation as pdf',
-        'email previous conversation as pdf', 
+        'email previous conversation as pdf',
         'email conversation as pdf attachment',
         'email the conversation as pdf',
         'send conversation pdf',
@@ -6316,14 +6334,13 @@ def _detect_conversation_pdf_request(function_args_dict: dict, user_prompt: str)
         'email conversation history as pdf',
         'send the conversation as pdf',
         'email our conversation as pdf',
-        'email the above full and complete response',
-        'email the above response as pdf',
-        'email the full response as pdf',
-        'email the complete response as pdf',
+        'email the above response as pdf',  # Must explicitly say PDF
+        'email the full response as pdf',  # Must explicitly say PDF
+        'email the complete response as pdf',  # Must explicitly say PDF
         'pdf attachment with',
         'neatly formatted pdf attachment'
     ]
-    
+
     has_conversation_pdf_request = any(indicator in user_prompt_lower for indicator in conversation_pdf_indicators)
     
     if has_conversation_pdf_request:
@@ -6508,16 +6525,27 @@ async def _generate_complete_html_email(complete_llm_response: str, html_email_r
                     title = match.group(1).strip().title()
                     break
         
+        # 🔧 FIX: Normalize special Unicode characters that cause encoding issues in email clients
+        # Replace en-dash (U+2013) and em-dash (U+2014) with regular hyphen
+        # Replace smart quotes with regular quotes
+        content = content.replace('\u2013', '-')  # en-dash → hyphen
+        content = content.replace('\u2014', '-')  # em-dash → hyphen
+        content = content.replace('\u2018', "'")  # left single quote → apostrophe
+        content = content.replace('\u2019', "'")  # right single quote → apostrophe
+        content = content.replace('\u201c', '"')  # left double quote → quote
+        content = content.replace('\u201d', '"')  # right double quote → quote
+        content = content.replace('\u2026', '...')  # ellipsis → three dots
+
         # Apply custom styles by injecting CSS
         if custom_styles:
             style_css = "body { "
             for css_key, css_value in custom_styles.items():
                 style_css += f"{css_key}: {css_value}; "
             style_css += "}"
-            
+
             # Inject custom styles into content
             content = f"<style>{style_css}</style>\n{content}"
-        
+
         # Generate HTML using our proven template system
         html_content = html_generator.generate_html_report(
             content=content,
@@ -7015,14 +7043,14 @@ AI Document Generation System"""
                                 "attachments": attachments_str
                             }
                             email_result = await tool_manager.safe_function_call("secure_email_sender", email_params)
-                            
+
                             logger.info(f"✅ POST-LLM EMAIL: Completed successfully")
                             logger.info(f"🎯 POST-LLM: Email RESULT: {email_result}")
-                            
+
                         except asyncio.TimeoutError:
                             logger.error(f"⏰ POST-LLM EMAIL: TIMEOUT after 120 seconds - email execution hung!")
                             email_result = {
-                                'success': False, 
+                                'success': False,
                                 'error': 'Email execution timed out after 120 seconds',
                                 'result': None
                             }
@@ -7035,12 +7063,20 @@ AI Document Generation System"""
                                 'error': f'Email execution failed: {str(email_error)}',
                                 'result': None
                             }
-                        
-                        if email_result.get('success'):
-                            additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: Email sent to {recipient_email} with attachment {created_filename}\n\n"
+
+                        # 🔧 FIX: safe_function_call returns a string on success, dict on error
+                        if isinstance(email_result, str):
+                            # String result means success - extract details from result string
+                            additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: {email_result}\n\n"
+                        elif isinstance(email_result, dict) and email_result.get('success'):
+                            # Dict with success=True - use the detailed result message
+                            result_msg = email_result.get('result', 'Email sent successfully')
+                            additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: {result_msg}\n\n"
                         else:
-                            logger.error(f"❌ POST-LLM email sending failed: {email_result.get('error')}")
-                            additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {email_result.get('error')}\n\n"
+                            # Dict with success=False or error
+                            error_msg = email_result.get('error', 'Unknown error') if isinstance(email_result, dict) else str(email_result)
+                            logger.error(f"❌ POST-LLM email sending failed: {error_msg}")
+                            additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {error_msg}\n\n"
                     else:
                         logger.error(f"❌ POST-LLM: Could not find secure_email_sender tool instance")
                 else:
@@ -7419,6 +7455,16 @@ The above image analysis was automatically performed on newly uploaded images. T
                 user_system_prompt = ""  # Force empty - only use file instructions
                 system_content = load_tool_model_system_prompt(user_system_prompt)
                 
+                # 🖼️ Build user message with image presence indicator
+                user_message_content = f"""Examine the intent of the user's prompt and apply the system directives to make the appropriate calls to the tools' functions."""
+
+                # 🖼️ CRITICAL: Explicitly indicate when images are present
+                if image_exists:
+                    image_count = len([img for img in data.get("images", []) if img != "noimage"])
+                    user_message_content += f"""\n\n🖼️ IMPORTANT: User has provided {image_count} image(s). You MUST call image_to_text() with image="user_provided_image_data" to analyze the image(s)."""
+
+                user_message_content += f"""\n\nUser Prompt: {prompt_context + user_prompt}"""
+
                 messages = [
                     {
                         "role": "system",
@@ -7426,8 +7472,7 @@ The above image analysis was automatically performed on newly uploaded images. T
                     },
                     {
                         "role": "user",
-                        "content": f"""Examine the intent of the user's prompt and apply the system directives to make the appropriate calls to the tools' functions. 
-                                        User Prompt: {prompt_context + user_prompt}""",
+                        "content": user_message_content,
                         "images": data.get("images") if image_exists else None
                     }
                 ]
@@ -7834,8 +7879,24 @@ The above image analysis was automatically performed on newly uploaded images. T
                                             # 🖼️ INTERCEPT IMAGE_TO_TEXT CALLS - Replace placeholder with actual image data
                                             if function_name == "image_to_text":
                                                 logger.info(f"🖼️ INTERCEPT: Detected image_to_text tool call")
-                                                logger.info(f"🖼️ INTERCEPT: data.get('images') = {data.get('images', 'NOT_FOUND')}")
-                                                logger.info(f"🖼️ INTERCEPT: function_args = {function_args}")
+                                                # Log image count instead of full data
+                                                images_data = data.get('images', 'NOT_FOUND')
+                                                if images_data == 'NOT_FOUND':
+                                                    logger.info(f"🖼️ INTERCEPT: data.get('images') = NOT_FOUND")
+                                                elif isinstance(images_data, list):
+                                                    image_count = len([img for img in images_data if img != "noimage"])
+                                                    logger.info(f"🖼️ INTERCEPT: data.get('images') = [{image_count} image(s), first 100 chars: {str(images_data[0])[:100] if images_data and images_data[0] != 'noimage' else 'noimage'}...]")
+                                                else:
+                                                    logger.info(f"🖼️ INTERCEPT: data.get('images') = {type(images_data)}")
+
+                                                # Log function_args with truncation for image data
+                                                safe_args = function_args.copy() if isinstance(function_args, dict) else function_args
+                                                if isinstance(safe_args, dict) and 'image' in safe_args and isinstance(safe_args['image'], str) and len(safe_args['image']) > 100:
+                                                    safe_args_display = safe_args.copy()
+                                                    safe_args_display['image'] = f"{safe_args['image'][:100]}... ({len(safe_args['image'])} chars)"
+                                                    logger.info(f"🖼️ INTERCEPT: function_args = {safe_args_display}")
+                                                else:
+                                                    logger.info(f"🖼️ INTERCEPT: function_args = {function_args}")
 
                                                 if data.get("images") and data.get("images")[0] != "noimage":
                                                     logger.info(f"🖼️ INTERCEPT: Images available, checking for placeholder...")
@@ -9083,24 +9144,33 @@ END OF CONTEXT
 
                             try:
                                 logger.info(f"🔄 STEP 1: Extracting filename from intercepted parameters")
-                                # Extract filename from intercepted parameters - DEFAULT TO HTML
-                                attachments = intercepted_email_params.get('attachments', 'report.html')
-                                logger.info(f"🔄 STEP 1A: Raw attachments = '{attachments}'")
-                                    
-                                # Handle both list and string attachment formats
-                                if isinstance(attachments, list):
-                                    filename = attachments[0] if attachments else 'report.html'
-                                    logger.info(f"🔄 STEP 1B: List format attachments, using first: '{filename}'")
-                                elif isinstance(attachments, str):
-                                    if ',' in attachments:
-                                        filename = attachments.split(',')[0].strip()  # Take first file
-                                        logger.info(f"🔄 STEP 1C: Multiple attachments detected, using first: '{filename}'")
-                                    else:
-                                        filename = attachments.strip()
-                                        logger.info(f"🔄 STEP 1D: Single attachment: '{filename}'")
+                                # 🔧 FIX v1.0.3.21: NEVER trust LLM-generated filenames with dates!
+                                # LLMs hallucinate dates and create files like "report_2025_10_12" when it's actually Oct 19
+                                # Always generate filenames server-side with correct datetime.now()
+
+                                # Generate proper filename with current timestamp from user_prompt content
+                                from datetime import datetime
+                                timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
+
+                                # Determine topic from user_prompt for better naming
+                                user_prompt_lower = user_prompt.lower() if user_prompt else ""
+                                tools_results_lower = tools_results.lower() if tools_results else ""
+
+                                # Check for Gaza/Middle East news
+                                if ("gaza" in user_prompt_lower or "middle east" in user_prompt_lower or
+                                    "gaza" in tools_results_lower or "Tool: get_news_summaries" in tools_results):
+                                    filename = f"gaza_middle_east_analysis_{timestamp}.html"
+                                # Check for stock/financial content
+                                elif "stock" in user_prompt_lower or "financial" in user_prompt_lower:
+                                    filename = f"financial_analysis_{timestamp}.html"
+                                # Generic news
+                                elif "news" in user_prompt_lower or "Tool: get_news_summaries" in tools_results:
+                                    filename = f"news_analysis_{timestamp}.html"
+                                # Generic report
                                 else:
-                                    filename = 'report.html'  # Fallback
-                                    logger.info(f"🔄 STEP 1E: Unknown attachment format, using fallback: '{filename}'")
+                                    filename = f"analysis_report_{timestamp}.html"
+
+                                logger.info(f"🔄 STEP 1-GENERATED: Server-generated filename with CORRECT date: '{filename}'")
                                     
                                 # Determine if PDF conversion is needed based on file extension
                                 convert_to_pdf = filename.lower().endswith('.pdf')
@@ -9275,13 +9345,26 @@ END OF CONTEXT
                                 actual_user_prompt
                             )
                             logger.info(f"✅ POST-LLM AUTO-EXECUTION COMPLETED: {additional_results}")
-                                
-                            # Optionally stream completion notification
-                            completion_msg = json.dumps({
-                                "post_processing": "completed",
-                                "tools_executed": verification_result['missing_tools']
-                            })
-                            yield (completion_msg + '\n').encode()
+
+                            # 🔧 FIX v1.0.3.19: Stream POST-LLM results in Ollama's JSON format
+                            # This ensures Discord client displays the results correctly
+                            if additional_results:
+                                # Format as readable text
+                                result_text = f"\n\n---\n✅ POST-PROCESSING COMPLETED:\n{additional_results}\n---\n"
+
+                                # Stream in Ollama's format so Discord client displays it
+                                import time
+                                post_llm_chunk = json.dumps({
+                                    "model": model,
+                                    "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                    "message": {
+                                        "role": "assistant",
+                                        "content": result_text
+                                    },
+                                    "done": False
+                                })
+                                yield (post_llm_chunk + '\n').encode()
+                                logger.info(f"📤 POST-LLM: Streamed results to user ({len(result_text)} chars)")
                                 
                         except Exception as e:
                             logger.error(f"❌ POST-LLM AUTO-EXECUTION FAILED: {e}")
@@ -10066,19 +10149,36 @@ async def openai_direct_stream(native_request_data: dict, model: str):
     """
     try:
         logger.info(f"🎯 Direct streaming: Calling internal llama_stream function")
-        logger.debug(f"🔧 DIRECT_STREAM DEBUG: Received native_request_data: {native_request_data}")
+
+        # Sanitize request data for logging (truncate image data to prevent log flooding)
+        safe_request_data = native_request_data.copy()
+        if 'images' in safe_request_data and isinstance(safe_request_data['images'], list):
+            safe_images = []
+            for img in safe_request_data['images']:
+                if isinstance(img, str) and len(img) > 100 and img != 'noimage':
+                    safe_images.append(f"{img[:100]}... ({len(img)} chars)")
+                else:
+                    safe_images.append(img)
+            safe_request_data['images'] = safe_images
+
+        logger.debug(f"🔧 DIRECT_STREAM DEBUG: Received native_request_data: {safe_request_data}")
         logger.debug(f"🔧 DIRECT_STREAM DEBUG: model: {model}")
-        
+
         # Create mock request object for llama_stream (following Prime Directive)
         class MockRequest:
             def __init__(self, data):
                 self._data = data
             async def json(self):
-                logger.info(f"🔧 MockRequest.json() called with data: {self._data}")
+                # Sanitize data for logging
+                safe_data = self._data.copy()
+                if 'images' in safe_data and isinstance(safe_data['images'], list):
+                    image_count = len([img for img in safe_data['images'] if img != 'noimage'])
+                    safe_data['images'] = f"[{image_count} image(s) - truncated for logging]"
+                logger.info(f"🔧 MockRequest.json() called with data: {safe_data}")
                 return self._data
-        
+
         mock_request = MockRequest(native_request_data)
-        logger.info(f"🔧 Native request data being passed: {native_request_data}")
+        logger.info(f"🔧 Native request data being passed: {safe_request_data}")
         
         # 🔧 CRITICAL DEBUG: Compare with working native format
         logger.info(f"🔧 COMPARISON - This should match working native requests")
