@@ -76,37 +76,109 @@ except ImportError as e:
     WATCHDOG_ERROR = str(e)
 
 # =============================================================================
-# CONFIGURATION CONSTANTS
+# CONFIGURATION LOADER - Load from config/llm_config.yaml per PROJECT_CONFIGURATION_DIRECTIVE
 # =============================================================================
 
-# Embedding Model Configuration
-EMBEDDING_MODEL_NAME = "mxbai-embed-large"
-EMBEDDING_DIMENSION = 1024  # Vector dimension for mxbai-embed-large
+def _load_embedding_config() -> Dict[str, Any]:
+    """Load embedding configuration from config file with safe fallbacks"""
+    try:
+        config = config_loader.load_config()
+        doc_config = config.get('document_interrogator', {})
+        embedding_config = doc_config.get('embedding', {})
 
-# Service Endpoints and Networking
-OLLAMA_EMBEDDING_HOST = "127.0.0.1"
-OLLAMA_EMBEDDING_PORT = 11434
-OLLAMA_MAIN_PORT = 11434
-EMBEDDING_SERVICE_URL = f"http://{OLLAMA_EMBEDDING_HOST}:{OLLAMA_EMBEDDING_PORT}/api/embeddings"
+        return {
+            # Model configuration
+            'model_name': embedding_config.get('model_name', 'mxbai-embed-large'),
+            'dimension': embedding_config.get('dimension', 1024),
 
-# Timeout and Retry Configuration
-EMBEDDING_TIMEOUT_SECONDS = 120  # Timeout for embedding generation
-HEALTH_CHECK_TIMEOUT_SECONDS = 10  # Timeout for health checks
-SERVICE_RESTART_DELAY_SECONDS = 5  # Wait time after service restart
-RETRY_DELAY_SECONDS = 3  # Delay between retry attempts
-MAX_SERVICE_RESTART_ATTEMPTS = 3  # Maximum service restart attempts
+            # Service configuration
+            'service_host': embedding_config.get('service', {}).get('host', '127.0.0.1'),
+            'service_port': embedding_config.get('service', {}).get('port', 11434),
+            'service_base_url': embedding_config.get('service', {}).get('base_url', 'http://127.0.0.1:11434'),
 
-# Processing Configuration
-DEFAULT_BATCH_SIZE = 25  # Default embedding batch size
-DEFAULT_CHUNK_SIZE = 1000  # Characters per document chunk
-DEFAULT_SEARCH_RESULTS = 5  # Default number of search results
-MAX_FILES_PER_DIRECTORY_SCAN = None  # No limit - process ALL files in directory
+            # Timeout configuration
+            'embedding_timeout': embedding_config.get('timeout', {}).get('embedding_request', 120),
+            'health_check_timeout': embedding_config.get('timeout', {}).get('health_check', 10),
+            'service_restart_delay': embedding_config.get('timeout', {}).get('service_restart', 5),
 
-SCAN_PROGRESS_LOG_INTERVAL = 10  # Log progress every N files
+            # Retry configuration
+            'max_service_restart_attempts': embedding_config.get('retry', {}).get('max_service_restart_attempts', 3),
+            'retry_delay': embedding_config.get('retry', {}).get('retry_delay_seconds', 3),
 
-# Configuration Defaults
-DEFAULT_SCAN_INTERVAL_MINUTES = 60  # Default periodic scan interval
-STARTUP_INITIALIZATION_DELAY = 3  # Seconds to wait during startup
+            # Batch processing configuration (CRITICAL)
+            'batch_size': embedding_config.get('batch_processing', {}).get('batch_size', 10),
+            'batch_delay': embedding_config.get('batch_processing', {}).get('batch_delay_seconds', 5.0),
+            'adaptive_mode_enabled': embedding_config.get('batch_processing', {}).get('adaptive_mode_enabled', True),
+            'min_batch_size': embedding_config.get('batch_processing', {}).get('min_batch_size', 1),
+            'adaptive_reduction_factor': embedding_config.get('batch_processing', {}).get('adaptive_reduction_factor', 0.5),
+
+            # Document processing configuration
+            'chunk_size': doc_config.get('document_processing', {}).get('chunk_size', 1000),
+            'chunk_overlap': doc_config.get('document_processing', {}).get('chunk_overlap', 200),
+            'min_chunk_length': doc_config.get('document_processing', {}).get('min_chunk_length', 10),
+            'max_chunk_length': doc_config.get('document_processing', {}).get('max_chunk_length', 2000),
+
+            # Directory scanning configuration
+            'scan_interval_minutes': doc_config.get('scan_interval_minutes', 60),
+            'max_files_per_scan': doc_config.get('max_files_per_scan', 150),
+            'startup_initialization_delay': doc_config.get('startup_initialization_delay', 3),
+        }
+    except Exception as e:
+        logger.error(f"❌ Failed to load embedding config, using safe fallbacks: {e}")
+        # Return safe fallback configuration
+        return {
+            'model_name': 'mxbai-embed-large',
+            'dimension': 1024,
+            'service_host': '127.0.0.1',
+            'service_port': 11434,
+            'service_base_url': 'http://127.0.0.1:11434',
+            'embedding_timeout': 120,
+            'health_check_timeout': 10,
+            'service_restart_delay': 5,
+            'max_service_restart_attempts': 3,
+            'retry_delay': 3,
+            'batch_size': 10,  # ✅ Safe reduced default
+            'batch_delay': 5.0,  # ✅ Safe increased default
+            'adaptive_mode_enabled': True,
+            'min_batch_size': 1,
+            'adaptive_reduction_factor': 0.5,
+            'chunk_size': 1000,
+            'chunk_overlap': 200,
+            'min_chunk_length': 10,
+            'max_chunk_length': 2000,
+            'scan_interval_minutes': 60,
+            'max_files_per_scan': 150,
+            'startup_initialization_delay': 3,
+        }
+
+# Load configuration on module initialization
+_EMBEDDING_CONFIG = _load_embedding_config()
+
+# ✅ Configuration Constants (loaded from config file, not hardcoded)
+EMBEDDING_MODEL_NAME = _EMBEDDING_CONFIG['model_name']
+EMBEDDING_DIMENSION = _EMBEDDING_CONFIG['dimension']
+OLLAMA_EMBEDDING_HOST = _EMBEDDING_CONFIG['service_host']
+OLLAMA_EMBEDDING_PORT = _EMBEDDING_CONFIG['service_port']
+OLLAMA_MAIN_PORT = _EMBEDDING_CONFIG['service_port']
+EMBEDDING_SERVICE_URL = f"{_EMBEDDING_CONFIG['service_base_url']}/api/embeddings"
+EMBEDDING_TIMEOUT_SECONDS = _EMBEDDING_CONFIG['embedding_timeout']
+HEALTH_CHECK_TIMEOUT_SECONDS = _EMBEDDING_CONFIG['health_check_timeout']
+SERVICE_RESTART_DELAY_SECONDS = _EMBEDDING_CONFIG['service_restart_delay']
+RETRY_DELAY_SECONDS = _EMBEDDING_CONFIG['retry_delay']
+MAX_SERVICE_RESTART_ATTEMPTS = _EMBEDDING_CONFIG['max_service_restart_attempts']
+DEFAULT_BATCH_SIZE = _EMBEDDING_CONFIG['batch_size']
+DEFAULT_CHUNK_SIZE = _EMBEDDING_CONFIG['chunk_size']
+DEFAULT_SEARCH_RESULTS = 5  # Static default for search results
+MAX_FILES_PER_DIRECTORY_SCAN = None
+SCAN_PROGRESS_LOG_INTERVAL = 10
+DEFAULT_SCAN_INTERVAL_MINUTES = _EMBEDDING_CONFIG['scan_interval_minutes']
+STARTUP_INITIALIZATION_DELAY = _EMBEDDING_CONFIG['startup_initialization_delay']
+
+# ✅ Adaptive batch configuration (NEW)
+ADAPTIVE_BATCH_MODE_ENABLED = _EMBEDDING_CONFIG['adaptive_mode_enabled']
+MIN_BATCH_SIZE = _EMBEDDING_CONFIG['min_batch_size']
+ADAPTIVE_BATCH_REDUCTION_FACTOR = _EMBEDDING_CONFIG['adaptive_reduction_factor']
+BATCH_DELAY_SECONDS = _EMBEDDING_CONFIG['batch_delay']
 
 # Existing server integration
 from http_helpers import pooled_post
@@ -280,10 +352,13 @@ class DocumentProcessor:
     }
     
     def __init__(self):
-        self.chunk_size = DEFAULT_CHUNK_SIZE
-        self.chunk_overlap = 200  # Overlap between chunks
+        # ✅ Load chunk configuration from config file (not hardcoded)
+        self.chunk_size = _EMBEDDING_CONFIG.get('chunk_size', DEFAULT_CHUNK_SIZE)
+        self.chunk_overlap = _EMBEDDING_CONFIG.get('chunk_overlap', 200)
+        self.min_chunk_length = _EMBEDDING_CONFIG.get('min_chunk_length', 10)
+        self.max_chunk_length = _EMBEDDING_CONFIG.get('max_chunk_length', 2000)
         self.ocr_manager = OCREngineManager() if DOCUMENT_PROCESSING_AVAILABLE else None
-        
+
         if not DOCUMENT_PROCESSING_AVAILABLE:
             logger.warning(f"⚠️ Document processing libraries not available: {DOCUMENT_PROCESSING_ERROR}")
             logger.info("💡 Install with: pip install PyPDF2 python-docx openpyxl beautifulsoup4 easyocr pillow")
@@ -462,21 +537,55 @@ class FAISSDocumentStore:
         self._initialize_storage()
     
     def _initialize_storage(self):
-        """Initialize FAISS index and SQLite database"""
+        """Initialize FAISS index and SQLite database with dimension validation"""
         try:
-            # Initialize FAISS index
+            # Initialize SQLite database FIRST (needed for metadata tracking)
+            self.metadata_db = sqlite3.connect(str(self.metadata_path), check_same_thread=False)
+            self._create_tables()
+
+            # Initialize FAISS index with dimension validation
             if self.index_path.exists():
+                # ✅ Load existing index
                 self.faiss_index = faiss.read_index(str(self.index_path))
                 self.chunk_counter = self.faiss_index.ntotal
                 logger.info(f"📚 Loaded existing FAISS index with {self.chunk_counter} vectors")
+
+                # 🛡️ CRITICAL: Validate dimension matches configuration
+                if self.faiss_index.d != self.dimension:
+                    logger.error(f"🚨 DIMENSION MISMATCH DETECTED!")
+                    logger.error(f"   Index dimension:  {self.faiss_index.d}")
+                    logger.error(f"   Config dimension: {self.dimension}")
+                    logger.error(f"   Embedding model:  {EMBEDDING_MODEL_NAME}")
+                    logger.error(f"")
+                    logger.error(f"   This indicates the embedding model was changed without reindexing.")
+                    logger.error(f"   This WILL corrupt search results and must be fixed immediately!")
+                    logger.error(f"")
+                    logger.error(f"   TO FIX (see: docs/ADMIN_MODEL_CHANGE_GUIDE.md):")
+                    logger.error(f"   1. Backup your data: cp -r document_store document_store.backup")
+                    logger.error(f"   2. Delete the corrupted index:")
+                    logger.error(f"      rm -rf document_store/faiss.index")
+                    logger.error(f"      rm -rf document_store/metadata.db")
+                    logger.error(f"   3. Verify config matches your embedding model:")
+                    logger.error(f"      - model_name in config/llm_config.yaml")
+                    logger.error(f"      - dimension matches the model (e.g., 768 for nomic, 1024 for mxbai)")
+                    logger.error(f"   4. Restart server: ./stop_complete.sh && ./start_complete.sh")
+                    logger.error(f"   5. Rescan documents to rebuild index with correct dimension")
+                    raise ValueError(
+                        f"DIMENSION MISMATCH: Index has {self.faiss_index.d} dimensions "
+                        f"but config specifies {self.dimension}. This typically means the embedding "
+                        f"model was changed without reindexing. See docs/ADMIN_MODEL_CHANGE_GUIDE.md"
+                    )
+
+                # ✅ Validate model information in metadata
+                self._check_model_change()
             else:
-                self.faiss_index = faiss.IndexFlatIP(self.dimension)  # Inner product similarity
-                logger.info(f"🔧 Created new FAISS index (dimension: {self.dimension})")
-            
-            # Initialize SQLite database
-            self.metadata_db = sqlite3.connect(str(self.metadata_path), check_same_thread=False)
-            self._create_tables()
-            
+                # ✅ Create new index
+                self.faiss_index = faiss.IndexFlatIP(self.dimension)
+                logger.info(f"🔧 Created new FAISS index (dimension: {self.dimension}, model: {EMBEDDING_MODEL_NAME})")
+
+                # Record this as the initial model used
+                self._record_model_metadata()
+
         except Exception as e:
             logger.error(f"❌ Storage initialization failed: {e}")
             raise
@@ -512,9 +621,99 @@ class FAISSDocumentStore:
                 FOREIGN KEY (document_path) REFERENCES documents (file_path)
             )
         ''')
-        
+
+        # ✅ Model Metadata table - Track embedding model and dimension for safety
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS model_metadata (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                model_name TEXT NOT NULL,
+                dimension INTEGER NOT NULL,
+                vector_count INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL,
+                last_updated TEXT NOT NULL,
+                notes TEXT
+            )
+        ''')
+
         self.metadata_db.commit()
-    
+
+    def _record_model_metadata(self):
+        """Record the current embedding model information in metadata table"""
+        try:
+            cursor = self.metadata_db.cursor()
+
+            # Check if metadata already exists
+            cursor.execute('SELECT COUNT(*) FROM model_metadata WHERE id = 1')
+            if cursor.fetchone()[0] == 0:
+                # Insert new record
+                cursor.execute('''
+                    INSERT INTO model_metadata
+                    (id, model_name, dimension, vector_count, created_at, last_updated, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    1,
+                    EMBEDDING_MODEL_NAME,
+                    self.dimension,
+                    self.chunk_counter,
+                    datetime.now().isoformat(),
+                    datetime.now().isoformat(),
+                    f"Initial model setup with {self.chunk_counter} vectors"
+                ))
+                logger.info(f"📝 Recorded model metadata: {EMBEDDING_MODEL_NAME} (dimension: {self.dimension})")
+            else:
+                # Update existing record
+                cursor.execute('''
+                    UPDATE model_metadata
+                    SET model_name = ?, dimension = ?, vector_count = ?, last_updated = ?
+                    WHERE id = 1
+                ''', (
+                    EMBEDDING_MODEL_NAME,
+                    self.dimension,
+                    self.chunk_counter,
+                    datetime.now().isoformat()
+                ))
+                logger.info(f"📝 Updated model metadata: {EMBEDDING_MODEL_NAME} (dimension: {self.dimension})")
+
+            self.metadata_db.commit()
+
+        except Exception as e:
+            logger.error(f"❌ Failed to record model metadata: {e}")
+
+    def _check_model_change(self):
+        """Check if embedding model has changed and warn user"""
+        try:
+            cursor = self.metadata_db.cursor()
+
+            # Get stored model metadata
+            cursor.execute('''
+                SELECT model_name, dimension FROM model_metadata WHERE id = 1
+            ''')
+            result = cursor.fetchone()
+
+            if result:
+                stored_model, stored_dimension = result
+
+                # Check if model changed
+                if stored_model != EMBEDDING_MODEL_NAME:
+                    logger.warning(f"⚠️ EMBEDDING MODEL CHANGED!")
+                    logger.warning(f"   Previous model: {stored_model}")
+                    logger.warning(f"   Current model:  {EMBEDDING_MODEL_NAME}")
+                    logger.warning(f"   Existing index will be used with new model (search results may be less accurate)")
+                    logger.warning(f"   To rebuild with new model: see docs/ADMIN_MODEL_CHANGE_GUIDE.md")
+
+                # Dimension check is already done in _initialize_storage()
+                if stored_dimension != self.dimension:
+                    logger.warning(f"⚠️ DIMENSION CHANGED: {stored_dimension} → {self.dimension}")
+
+                # Update metadata
+                self._record_model_metadata()
+            else:
+                # No metadata found, record it
+                self._record_model_metadata()
+
+        except Exception as e:
+            logger.warning(f"⚠️ Could not check model metadata: {e}")
+
     async def add_chunks(self, chunks: List[DocumentChunk]) -> bool:
         """Add document chunks to FAISS index and SQLite"""
         try:
@@ -782,42 +981,128 @@ class FAISSDocumentStore:
                     logger.error(f"❌ Single embedding error: {e}")
                     return None
             
-            # Process embeddings in batches to avoid overwhelming the service
-            BATCH_SIZE = DEFAULT_BATCH_SIZE  # Efficient batch size for embedding generation
+            # ✅ Process embeddings in batches with adaptive sizing for resilience
+            current_batch_size = DEFAULT_BATCH_SIZE  # Start with configured batch size
             all_embeddings = []
-            total_batches = (len(texts) + BATCH_SIZE - 1) // BATCH_SIZE
-            
-            logger.info(f"🔄 Processing {len(texts)} embeddings in {total_batches} batches of {BATCH_SIZE}")
-            
-            for batch_num in range(total_batches):
-                start_idx = batch_num * BATCH_SIZE
-                end_idx = min(start_idx + BATCH_SIZE, len(texts))
+            processed_count = 0
+
+            logger.info(f"🔄 Processing {len(texts)} embeddings with batch_size={current_batch_size} (adaptive mode: {ADAPTIVE_BATCH_MODE_ENABLED})")
+
+            while processed_count < len(texts):
+                # Calculate batch boundaries
+                start_idx = processed_count
+                end_idx = min(start_idx + current_batch_size, len(texts))
                 batch_texts = texts[start_idx:end_idx]
-                
+                total_processed = len(all_embeddings)
+                total_chunks = len(texts)
+
                 # Process current batch in parallel
+                logger.debug(f"📦 Processing batch: {start_idx}-{end_idx} (batch_size={current_batch_size}, total progress: {total_processed}/{total_chunks})")
                 batch_tasks = [generate_single_embedding(text) for text in batch_texts]
                 batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
-                
-                # Validate batch results
+
+                # Validate batch results with adaptive recovery
                 batch_embeddings = []
+                batch_failed = False
+
                 for i, result in enumerate(batch_results):
                     if isinstance(result, Exception):
-                        logger.error(f"❌ Batch {batch_num + 1}/{total_batches}, task {i} failed with exception: {result}")
-                        return None
+                        logger.error(f"❌ Batch failure at task {i}: {result}")
+                        batch_failed = True
+                        break
                     elif result is not None:
                         batch_embeddings.append(result)
                     else:
-                        logger.error(f"❌ Batch {batch_num + 1}/{total_batches}, task {i} returned None")
+                        logger.error(f"❌ Batch failure: task {i} returned None")
+                        batch_failed = True
+                        break
+
+                # Handle batch failure with adaptive recovery and health checks
+                if batch_failed:
+                    if not ADAPTIVE_BATCH_MODE_ENABLED:
+                        logger.error(f"❌ Batch failed and adaptive mode disabled - aborting")
                         return None
-                
+
+                    # 🛡️ CRITICAL: Check if Ollama service itself is healthy
+                    is_service_healthy = await self._check_embedding_service_health()
+                    logger.warning(f"🔍 Ollama health check: {'✅ HEALTHY' if is_service_healthy else '❌ UNHEALTHY'}")
+
+                    if not is_service_healthy:
+                        logger.error(f"🚨 EMBEDDING SERVICE UNHEALTHY - Attempting restart")
+                        logger.error(f"   Progress: {processed_count}/{total_chunks} embeddings processed")
+                        logger.error(f"   Current batch_size: {current_batch_size}")
+
+                        # Attempt to restart Ollama service
+                        restart_success = False
+                        for restart_attempt in range(2):  # Try 2 restart attempts
+                            logger.info(f"🔄 Ollama restart attempt {restart_attempt + 1}/2...")
+                            if await self._restart_embedding_service():
+                                logger.info(f"✅ Ollama restarted successfully")
+                                restart_success = True
+                                break
+                            else:
+                                logger.error(f"❌ Restart attempt {restart_attempt + 1} failed")
+                                await asyncio.sleep(5)
+
+                        if not restart_success:
+                            logger.error(f"❌ Failed to restart Ollama after 2 attempts")
+                            logger.error(f"🛑 RECOMMENDATION: Manually restart Ollama service")
+                            logger.error(f"   Command: systemctl restart ollama")
+                            logger.error(f"   Or check: ps aux | grep ollama")
+                            return None
+
+                        # After restart, wait longer before retry
+                        logger.info(f"⏳ Waiting 15 seconds for Ollama to stabilize...")
+                        await asyncio.sleep(15)
+
+                        # Reset batch size after service recovery (retry with original batch size)
+                        logger.info(f"📈 Service recovered - resetting batch_size to {DEFAULT_BATCH_SIZE}")
+                        current_batch_size = DEFAULT_BATCH_SIZE
+                        # Retry this batch with fresh service and original batch size
+                        continue
+
+                    # Service is healthy but batch still failed - try reducing batch size
+                    if current_batch_size > MIN_BATCH_SIZE:
+                        new_batch_size = max(MIN_BATCH_SIZE, int(current_batch_size * ADAPTIVE_BATCH_REDUCTION_FACTOR))
+                        logger.warning(f"⚠️ Service healthy but batch failed - reducing batch_size: {current_batch_size} → {new_batch_size}")
+                        current_batch_size = new_batch_size
+
+                        # Retry this batch with smaller size - DON'T increment processed_count
+                        await asyncio.sleep(SERVICE_RESTART_DELAY_SECONDS)  # Brief pause before retry
+                        continue
+                    else:
+                        logger.error(f"❌ Batch failed at minimum batch size ({MIN_BATCH_SIZE}) with healthy service")
+                        logger.error(f"   Progress: {processed_count}/{total_chunks} embeddings")
+                        logger.error(f"   This indicates a fundamental service issue")
+                        logger.error(f"   Recommendation: Check Ollama logs for detailed errors")
+                        return None
+
+                # Batch succeeded - add to results
                 all_embeddings.extend(batch_embeddings)
-                logger.info(f"✅ Completed batch {batch_num + 1}/{total_batches}: {len(batch_embeddings)} embeddings")
-                
-                # Longer delay between batches to prevent service overload
-                if batch_num < total_batches - 1:  # Don't delay after the last batch
-                    await asyncio.sleep(2.0)  # 2 second delay between batches
-            
-            logger.info(f"✅ Generated {len(all_embeddings)} embeddings across {total_batches} batches")
+                processed_count = end_idx
+                batch_num = (processed_count // current_batch_size) + (1 if processed_count % current_batch_size else 0)
+                logger.info(f"✅ Completed batch: {len(batch_embeddings)} embeddings (progress: {processed_count}/{total_chunks})")
+
+                # ✅ Periodic health check between batches (every 10 batches or at critical points)
+                # This detects Ollama degradation BEFORE it fails
+                check_interval = 10  # Check health every 10 successful batches
+                batches_processed = processed_count // current_batch_size if current_batch_size > 0 else 0
+
+                if batches_processed > 0 and batches_processed % check_interval == 0:
+                    logger.debug(f"🏥 Periodic health check at batch {batches_processed}...")
+                    is_healthy = await self._check_embedding_service_health()
+                    if is_healthy:
+                        logger.debug(f"   ✅ Ollama service healthy")
+                    else:
+                        logger.warning(f"⚠️ Ollama service degrading at batch {batches_processed}")
+                        logger.warning(f"   This may indicate upcoming failures - monitoring closely")
+
+                # ✅ Delay between batches to prevent service overload and memory buildup
+                # Configured in config/llm_config.yaml: batch_processing.batch_delay_seconds
+                if processed_count < len(texts):  # Don't delay after the last batch
+                    await asyncio.sleep(BATCH_DELAY_SECONDS)
+
+            logger.info(f"✅ Generated {len(all_embeddings)} embeddings across all batches (final batch_size={current_batch_size})")
             return all_embeddings
             
         except Exception as e:
@@ -832,26 +1117,49 @@ class FAISSDocumentStore:
             logger.error(f"❌ Failed to save FAISS index: {e}")
     
     def get_stats(self) -> Dict[str, Any]:
-        """Get document store statistics"""
+        """Get document store statistics including model information"""
         try:
             cursor = self.metadata_db.cursor()
-            
+
             # Count documents
             cursor.execute("SELECT COUNT(*) FROM documents")
             doc_count = cursor.fetchone()[0]
-            
+
             # Count chunks
             cursor.execute("SELECT COUNT(*) FROM chunks")
             chunk_count = cursor.fetchone()[0]
-            
+
+            # ✅ Get model metadata for diagnostics
+            model_info = {
+                'name': EMBEDDING_MODEL_NAME,
+                'dimension': self.dimension
+            }
+            try:
+                cursor.execute('''
+                    SELECT model_name, dimension, vector_count, created_at, last_updated
+                    FROM model_metadata WHERE id = 1
+                ''')
+                result = cursor.fetchone()
+                if result:
+                    model_info['stored_name'] = result[0]
+                    model_info['stored_dimension'] = result[1]
+                    model_info['vector_count'] = result[2]
+                    model_info['created_at'] = result[3]
+                    model_info['last_updated'] = result[4]
+                    model_info['model_matches'] = (result[0] == EMBEDDING_MODEL_NAME)
+                    model_info['dimension_matches'] = (result[1] == self.dimension)
+            except:
+                pass  # model_metadata table might not exist yet
+
             return {
                 'total_documents': doc_count,
                 'total_chunks': chunk_count,
                 'faiss_vectors': self.faiss_index.ntotal,
                 'storage_directory': str(self.storage_dir),
-                'index_dimension': self.dimension
+                'index_dimension': self.dimension,
+                'embedding_model': model_info
             }
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to get stats: {e}")
             return {}

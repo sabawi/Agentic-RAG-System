@@ -2,6 +2,81 @@ debug:
   log_requests: false
   log_timing: true
   mock_providers: false
+document_interrogator:
+  # Directory watching and scanning configuration
+  max_files_per_scan: 150
+  scan_interval_minutes: 60
+  auto_watch_enabled: false
+  startup_initialization_delay: 3
+
+  # Embedding service configuration
+  embedding:
+    # Model selection
+    model_name: "mxbai-embed-large"        # ✅ Quality-focused model (59.25% retrieval accuracy)
+    dimension: 1024                         # ✅ Full dimension for maximum quality
+
+    # Service configuration
+    service:
+      host: "127.0.0.1"
+      port: 11434
+      base_url: "http://127.0.0.1:11434"
+      health_check_timeout_seconds: 10
+
+    # Timeout configuration
+    timeout:
+      embedding_request: 120                # 120 second timeout per embedding batch
+      service_restart: 5                    # Wait 5 seconds after service restart
+      health_check: 10                      # Health check timeout
+
+    # Retry configuration
+    retry:
+      max_service_restart_attempts: 3
+      retry_delay_seconds: 3
+
+    # Batch processing configuration (CRITICAL for OOM prevention)
+    batch_processing:
+      batch_size: 10                        # ✅ REDUCED from 25 to prevent Ollama OOM
+                                            # 25 × 250-token chunks = 6250 tokens/batch
+                                            # Exceeds Ollama's 2048 context window
+                                            # 10 × 250 tokens = 2500 tokens = sustainable
+      batch_delay_seconds: 5.0              # ✅ INCREASED from 2.0 to allow Ollama cleanup
+                                            # Gives Ollama time to free up memory between batches
+      adaptive_mode_enabled: true           # ✅ NEW: Enable graceful batch size reduction on failure
+      min_batch_size: 1                     # Minimum batch size before giving up
+      adaptive_reduction_factor: 0.5        # Reduce batch size by 50% on failure
+
+  # Document chunking configuration
+  document_processing:
+    chunk_size: 250                         # ✅ REDUCED from 1000 to fit Ollama context window (512 tokens)
+                                            # 250 chars ≈ 60-80 tokens (safe margin within context)
+    chunk_overlap: 50                       # ✅ REDUCED from 200 (proportional: 20% of 250)
+                                            # This ensures context continuity with smaller chunks
+
+    # Chunk validation
+    min_chunk_length: 10                    # Minimum characters per chunk
+    max_chunk_length: 400                   # ✅ REDUCED from 2000 (proportional to chunk_size)
+
+  # Scaling recommendations (commented for future reference)
+  scaling_notes: |
+    SCALING GUIDELINES (based on empirical research):
+
+    Current configuration optimal for: 1K-10K documents (10K-100K chunks)
+
+    Scaling to 100K+ chunks:
+      1. Reduce dimension: 1024 → 768 (switch to nomic-embed-text, 33% storage savings)
+      2. Implement quantization: FP16 (48% memory reduction) or binary (32x reduction)
+      3. Consider separate FAISS instances per document collection
+
+    Model choice at scale:
+      - <10K chunks: mxbai-embed-large (current, optimal quality)
+      - 10K-100K chunks: Keep mxbai OR switch to nomic for speed
+      - 100K-1M chunks: Consider E5-small (384d) or BGE (768d)
+      - 1M+ chunks: Plan for distributed embedding service
+
+    Embedding service bottleneck analysis:
+      - Batch size 25 × 250 tokens/chunk = 6250 tokens/batch → OOM after 1650 vectors
+      - Batch size 10 × 250 tokens/chunk = 2500 tokens/batch → Sustainable at scale
+      - Time: 27-30 min for 1961 chunks with batch_size=10
 llm:
   fallback:
     auto_switch: true
@@ -33,6 +108,7 @@ llm:
       stream: false
   providers:
     ollama:
+      base_url: http://127.0.0.1:11434
       health_check_url: http://127.0.0.1:11434/api/tags
       retry_attempts: 3
       retry_delay: 2
@@ -58,6 +134,20 @@ llm:
         tool_calling: openai/gpt-4o-mini
         reasoning: deepseek/deepseek-r1
         free: deepseek/deepseek-r1:free
+    gemini:
+      api_key: ${GEMINI_API_KEY}
+      model: gemini-flash-latest
+      timeout: 120
+      temperature: 0.7
+      max_tokens: 8192
+      retry_attempts: 3
+      retry_delay: 1
+      models:
+        primary: gemini-flash-latest
+        pro: gemini-pro-latest
+        flash: gemini-flash-latest
+        stable_flash: gemini-2.5-flash
+        stable_pro: gemini-2.5-pro
 performance:
   connection_pool_size: 10
   max_concurrent_requests: 5
@@ -102,11 +192,25 @@ optimization:
 vision:
   type: ollama
   config:
-    model: qwen2.5vl:3b
-    timeout: 3600
+    model: qwen3-vl:235b-cloud
+    timeout: 1800
+    temperature: 0.7
+    max_tokens: 16384
     base_url: http://127.0.0.1:11434
-    fallback_model: bakllava:latest
-    think: false
+    fallback_model: qwen2.5vl:3b
+  image_processing:
+    max_size_mb: 1.0
+    resize_enabled: true
+    resize_quality: 85
+    max_dimension: 2048
+    preserve_aspect_ratio: true
+    allowed_formats:
+    - jpeg
+    - jpg
+    - png
+    - webp
+    - gif
+    output_format: jpeg
 flight_search:
   enabled: true
   web_scraping:

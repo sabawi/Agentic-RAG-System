@@ -1,15 +1,16 @@
 # Agentic RAG System - Administrator Guide
 
-**Version:** 1.0.3.6
-**Last Updated:** October 12, 2025
+**Version:** 1.0.3.23
+**Last Updated:** October 24, 2025
 **Target Audience:** System Administrators, DevOps Engineers, Production Support
 
-**Latest Updates:**
-- CLI Model Management Tool (`agent_model.py`) for easy model switching
-- OpenRouter API integration support
-- Model alias database system for simplified configuration
-- Think mode parameter support for reasoning models
-- Greeting exception handling to prevent inappropriate tool calls
+**Latest Updates (v1.0.3.23):**
+- ✅ Safe Embedding Model Changes with safeguards & validation
+- ✅ Dimension Mismatch Detection & Prevention
+- ✅ Model Metadata Tracking & Verification
+- ✅ Critical Embedding OOM Fix (batch_size 25→10)
+- ✅ Adaptive Batch Sizing for Resilience
+- ✅ Configuration Compliance (all parameters in config file)
 
 ---
 
@@ -23,6 +24,7 @@
    - [Logging Management System](#logging-management-system)
 6. [EMAIL SYSTEM ADMINISTRATION (A-1)](#6-email-system-administration-a-1)
 7. [EMBEDDING SERVICE ADMINISTRATION (A-2)](#7-embedding-service-administration-a-2)
+   - [Changing Embedding Models](#changing-embedding-models)
 8. [DIRECTORY WATCHING SYSTEM (A-3)](#8-directory-watching-system-a-3)
 9. [SECURITY ADMINISTRATION (A-4)](#9-security-administration-a-4)
 10. [TROUBLESHOOTING](#10-troubleshooting)
@@ -1160,6 +1162,157 @@ sqlite3 document_store/metadata.db "PRAGMA integrity_check;"
 
 # View schema
 sqlite3 document_store/metadata.db ".schema"
+```
+
+### Changing Embedding Models
+
+**Version Required**: v1.0.3.23 or later (includes safety safeguards)
+
+Embedding models can be changed in the configuration file and the index can be safely rebuilt. The system includes validation to prevent dimension mismatches that could corrupt your data.
+
+#### Available Embedding Models
+
+| Model | Dimension | Speed | Accuracy | Memory | Best For |
+|-------|-----------|-------|----------|--------|----------|
+| `mxbai-embed-large` (default) | 1024 | Medium | 59.25% | 1.2GB | Highest quality, legal/medical docs |
+| `nomic-embed-text` | 768 | Fast | 57.25% | 0.5GB | Speed priority, good quality |
+| `nomic-bert` | 768 | Fast | ~57% | ~0.5GB | Alternative to nomic |
+
+#### Step-by-Step: Change Embedding Model
+
+**Step 1: Backup Current Index**
+```bash
+# Stop server
+./stop_complete.sh
+
+# Create backup
+cp -r document_store document_store.backup.$(date +%Y%m%d_%H%M%S)
+
+# Verify backup
+ls -la document_store.backup.*/
+```
+
+**Step 2: Update Configuration**
+
+Edit `config/llm_config.yaml`:
+
+```yaml
+document_interrogator:
+  embedding:
+    # For nomic-embed-text (faster, 2% lower accuracy)
+    model_name: "nomic-embed-text"
+    dimension: 768
+
+    # For mxbai-embed-large (slower, best quality)
+    # model_name: "mxbai-embed-large"
+    # dimension: 1024
+```
+
+**Step 3: Ensure Model is Available**
+
+```bash
+# Check if model exists
+ollama list | grep "nomic-embed-text"
+
+# If not found, pull it
+ollama pull nomic-embed-text
+```
+
+**Step 4: Delete Old Index**
+
+⚠️ **CRITICAL**: This prevents dimension mismatch corruption.
+
+```bash
+# Delete FAISS index
+rm -f document_store/faiss.index
+
+# Delete SQLite metadata
+rm -f document_store/metadata.db
+
+# Verify deletion
+ls -la document_store/
+# Should be mostly empty (only backups)
+```
+
+**Step 5: Restart Server**
+
+```bash
+./start_complete.sh
+
+# Wait 15 seconds for initialization
+sleep 15
+
+# Check startup logs for success
+tail -50 logs/server_complete.log | grep -E "Created new FAISS|Model metadata|error|ERROR"
+```
+
+**Expected Log Messages** (success):
+```
+✅ Created new FAISS index (dimension: 768, model: nomic-embed-text)
+📝 Recorded model metadata: nomic-embed-text (dimension: 768)
+```
+
+**Error Messages** (indicates problem):
+```
+🚨 DIMENSION MISMATCH DETECTED!
+❌ Storage initialization failed
+```
+
+**Step 6: Rebuild Index**
+
+The system will automatically rebuild the index on the next scan cycle (default: 60 minutes).
+
+To rebuild immediately:
+```bash
+# Trigger API scan endpoint (if available)
+curl -X POST http://localhost:5000/interrogator/force-scan \
+  -H "Content-Type: application/json"
+
+# Or monitor automatic scan in logs
+tail -f logs/server_complete.log | grep -E "Processing|batch|Completed batch"
+```
+
+**Expected Rebuild Time**:
+- mxbai-embed-large: ~27-30 minutes for 1961 chunks
+- nomic-embed-text: ~15-18 minutes for 1961 chunks
+
+**Verify Completion**:
+```bash
+# Check stats
+curl -s http://localhost:5000/interrogator/stats | jq '.embedding_model'
+
+# Should show:
+# {
+#   "name": "nomic-embed-text",
+#   "dimension": 768,
+#   "model_matches": true,
+#   "dimension_matches": true
+# }
+```
+
+#### Safety Features (v1.0.3.23+)
+
+✅ **Dimension Validation**: System detects mismatches and prevents startup
+✅ **Model Metadata Tracking**: Stores which model created the index
+✅ **Clear Error Messages**: Guides you through the fix if dimension mismatch occurs
+✅ **Search Quality Warnings**: Logs when model is changed but index not rebuilt
+
+#### Rollback Procedure
+
+If the model change causes problems:
+
+```bash
+# 1. Stop server
+./stop_complete.sh
+
+# 2. Restore from backup
+cp -r document_store.backup.20251024_120000/* document_store/
+
+# 3. Revert config to original model
+# Edit config/llm_config.yaml: change model_name and dimension back
+
+# 4. Restart
+./start_complete.sh
 ```
 
 ### Common Issues & Solutions
