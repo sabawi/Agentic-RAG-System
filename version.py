@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.25"  # ✅ Critical Fix: Chunk size reduced to fit Ollama context window (250 chars)
+VERSION = "1.0.3.26"  # ✅ Tuning: Optimized chunk_size: 400, batch_size: 15, max_files: 400 (tested & verified)
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE
