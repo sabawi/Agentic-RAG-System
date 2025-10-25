@@ -1,8 +1,8 @@
-# Agent Model CLI Tool - Quick Reference Guide
+# Server Configuration CLI Tool - Quick Reference Guide
 
 ## Overview
 
-The `agent_model.py` CLI tool provides easy management of LLM model configurations through named aliases. Instead of manually editing YAML files, you can quickly switch between different model configurations using simple commands.
+The `config_server_cli.py` CLI tool provides easy management of LLM model configurations through named aliases. Instead of manually editing YAML files, you can quickly switch between different model configurations using simple commands.
 
 ## Features
 
@@ -17,69 +17,79 @@ The `agent_model.py` CLI tool provides easy management of LLM model configuratio
 
 ### 1. Check Current Active Models
 ```bash
-./agent_model.py status
+./config_server_cli.py status
 ```
 
 ### 2. List All Aliases
 ```bash
-./agent_model.py ls
+./config_server_cli.py ls
 ```
 
 ### 3. Create Your First Alias
 ```bash
 # Local Ollama model
-./agent_model.py add --alias my_local_qwen \
+./config_server_cli.py add --alias my_local_qwen \
   --provider ollama \
   --model qwen3:8b \
   --description "My local Qwen model"
 
 # OpenRouter model
-./agent_model.py add --alias my_deepseek \
+./config_server_cli.py add --alias my_deepseek \
   --provider openrouter \
   --model deepseek/deepseek-r1 \
   --timeout 3600 \
   --temperature 0.7
 
 # OpenAI model
-./agent_model.py add --alias gpt4_mini \
+./config_server_cli.py add --alias gpt4_mini \
   --provider openai \
   --model gpt-4o-mini \
   --timeout 120 \
   --temperature 0.1
+
+# Gemini model
+./config_server_cli.py add --alias gemini_flash \
+  --provider gemini \
+  --model gemini-flash-latest \
+  --timeout 120 \
+  --temperature 0.7
 ```
 
 ### 4. Set an Alias as Active
 ```bash
 # Set as primary LLM
-./agent_model.py set --alias my_local_qwen --as primary
+./config_server_cli.py set --alias my_local_qwen --as primary
 
 # Set as tool calling LLM
-./agent_model.py set --alias gpt4_mini --as tool_calling
+./config_server_cli.py set --alias gpt4_mini --as tool_calling
 
 # Set as arbitrator
-./agent_model.py set --alias gpt4_mini --as arbitrator
+./config_server_cli.py set --alias gpt4_mini --as arbitrator
+
+# Set as vision model
+./config_server_cli.py set --alias gemini_flash --as vision
 ```
 
 ## Command Reference
 
 ### `ls` - List All Aliases
 ```bash
-./agent_model.py ls
+./config_server_cli.py ls
 ```
 Shows all configured model aliases with:
 - Provider and model name
 - Configuration parameters (timeout, temperature, max tokens)
-- Active status (PRIMARY, TOOL_CALLING, ARBITRATOR)
+- Active status (PRIMARY, TOOL_CALLING, ARBITRATOR, VISION)
 - Creation date
 
 ### `add` - Create New Alias
 ```bash
-./agent_model.py add --alias NAME --provider TYPE --model MODEL [OPTIONS]
+./config_server_cli.py add --alias NAME --provider TYPE --model MODEL [OPTIONS]
 ```
 
 **Required Parameters:**
 - `--alias NAME` - Unique name for this alias
-- `--provider TYPE` - Provider type: `ollama`, `openai`, `openrouter`, `qwen`
+- `--provider TYPE` - Provider type: `ollama`, `openai`, `openrouter`, `qwen`, `gemini`
 - `--model MODEL` - Model identifier
 
 **Optional Parameters:**
@@ -94,12 +104,12 @@ Shows all configured model aliases with:
 **Examples:**
 ```bash
 # Minimal Ollama alias
-./agent_model.py add --alias local_llama \
+./config_server_cli.py add --alias local_llama \
   --provider ollama \
   --model llama3.2:3b
 
 # Full OpenRouter configuration
-./agent_model.py add --alias cloud_deepseek \
+./config_server_cli.py add --alias cloud_deepseek \
   --provider openrouter \
   --model deepseek/deepseek-r1 \
   --timeout 3600 \
@@ -109,15 +119,24 @@ Shows all configured model aliases with:
   --description "DeepSeek R1 for reasoning tasks"
 
 # OpenAI with custom settings
-./agent_model.py add --alias gpt4_turbo \
+./config_server_cli.py add --alias gpt4_turbo \
   --provider openai \
   --model gpt-4-turbo-preview \
   --timeout 300 \
   --temperature 0.3 \
   --max-tokens 4096
 
+# Gemini model for vision tasks
+./config_server_cli.py add --alias gemini_vision \
+  --provider gemini \
+  --model gemini-flash-latest \
+  --timeout 120 \
+  --temperature 0.7 \
+  --max-tokens 8192 \
+  --description "Gemini Flash for vision processing"
+
 # DeepSeek reasoning model with think mode disabled
-./agent_model.py add --alias deepseek_cloud \
+./config_server_cli.py add --alias deepseek_cloud \
   --provider ollama \
   --model deepseek-v3.1:671b-cloud \
   --timeout 600 \
@@ -128,27 +147,27 @@ Shows all configured model aliases with:
 
 ### `update` - Update Existing Alias
 ```bash
-./agent_model.py update --alias NAME [OPTIONS]
+./config_server_cli.py update --alias NAME [OPTIONS]
 ```
 
 Update any parameter of an existing alias:
 ```bash
 # Change model version
-./agent_model.py update --alias local_llama --model llama3.2:7b
+./config_server_cli.py update --alias local_llama --model llama3.2:7b
 
 # Adjust timeout and temperature
-./agent_model.py update --alias cloud_deepseek \
+./config_server_cli.py update --alias cloud_deepseek \
   --timeout 1800 \
   --temperature 0.5
 
 # Update description
-./agent_model.py update --alias gpt4_turbo \
+./config_server_cli.py update --alias gpt4_turbo \
   --description "GPT-4 Turbo for complex tasks"
 ```
 
 ### `delete` - Remove Alias
 ```bash
-./agent_model.py delete --alias NAME [--force]
+./config_server_cli.py delete --alias NAME [--force]
 ```
 
 - Prevents deletion if alias is currently active (unless `--force` used)
@@ -157,55 +176,60 @@ Update any parameter of an existing alias:
 **Examples:**
 ```bash
 # Safe delete (fails if in use)
-./agent_model.py delete --alias old_model
+./config_server_cli.py delete --alias old_model
 
 # Force delete (even if active)
-./agent_model.py delete --alias old_model --force
+./config_server_cli.py delete --alias old_model --force
 ```
 
 ### `show` - Show Alias Details
 ```bash
-./agent_model.py show --alias NAME
+./config_server_cli.py show --alias NAME
 ```
 
 Displays complete configuration for an alias:
 ```bash
-./agent_model.py show --alias my_local_qwen
+./config_server_cli.py show --alias my_local_qwen
 ```
 
 Output shows all parameters including timestamps and provider-specific settings.
 
 ### `set` - Set Active Model
 ```bash
-./agent_model.py set --alias NAME --as ROLE
+./config_server_cli.py set --alias NAME --as ROLE
 ```
 
 **Roles:**
 - `primary` - Main LLM for user queries
 - `tool_calling` - LLM that decides which tools to call
 - `arbitrator` - LLM that analyzes tool execution and optimizes
+- `vision` - LLM for image and visual content processing
 
 **Examples:**
 ```bash
 # Switch primary to local model
-./agent_model.py set --alias local_llama --as primary
+./config_server_cli.py set --alias local_llama --as primary
 
 # Use GPT-4 mini for tool calling
-./agent_model.py set --alias gpt4_mini --as tool_calling
+./config_server_cli.py set --alias gpt4_mini --as tool_calling
 
 # Set arbitrator
-./agent_model.py set --alias gpt4_mini --as arbitrator
+./config_server_cli.py set --alias gpt4_mini --as arbitrator
+
+# Set vision model
+./config_server_cli.py set --alias gemini_vision --as vision
 ```
 
 ### `status` - Show Active Models
 ```bash
-./agent_model.py status
+./config_server_cli.py status
 ```
 
 Displays currently active models for each role:
 - PRIMARY - Main LLM
 - TOOL_CALLING - Tool selection LLM
 - ARBITRATOR - Optimization LLM
+- VISION - Visual content processing LLM
 
 ## Provider-Specific Defaults
 
@@ -238,29 +262,36 @@ Displays currently active models for each role:
 - **Max Tokens:** 4096
 - **API Key:** Reads from `$DASHSCOPE_API_KEY`
 
+### Gemini (Google)
+- **Timeout:** 120s
+- **Temperature:** 0.7
+- **Max Tokens:** 8192
+- **API Key:** Reads from `$GEMINI_API_KEY`
+- **Note:** Uses native Gemini API, not OpenAI-compatible endpoint
+
 ## Common Workflows
 
 ### Switching from Cloud to Local
 ```bash
 # Check current setup
-./agent_model.py status
+./config_server_cli.py status
 
 # Create local alias if not exists
-./agent_model.py add --alias qwen_local_fast \
+./config_server_cli.py add --alias qwen_local_fast \
   --provider ollama \
   --model qwen3:8b
 
 # Switch primary to local
-./agent_model.py set --alias qwen_local_fast --as primary
+./config_server_cli.py set --alias qwen_local_fast --as primary
 
 # Verify change
-./agent_model.py status
+./config_server_cli.py status
 ```
 
 ### Creating a New OpenRouter Model
 ```bash
 # Add alias with full configuration
-./agent_model.py add --alias my_claude \
+./config_server_cli.py add --alias my_claude \
   --provider openrouter \
   --model anthropic/claude-3.5-sonnet \
   --timeout 600 \
@@ -269,25 +300,25 @@ Displays currently active models for each role:
   --description "Claude 3.5 Sonnet via OpenRouter"
 
 # Set as primary
-./agent_model.py set --alias my_claude --as primary
+./config_server_cli.py set --alias my_claude --as primary
 ```
 
 ### Testing Different Temperatures
 ```bash
 # Create multiple aliases with same model, different temps
-./agent_model.py add --alias gpt4_creative \
+./config_server_cli.py add --alias gpt4_creative \
   --provider openai \
   --model gpt-4o \
   --temperature 1.2
 
-./agent_model.py add --alias gpt4_precise \
+./config_server_cli.py add --alias gpt4_precise \
   --provider openai \
   --model gpt-4o \
   --temperature 0.1
 
 # Switch between them as needed
-./agent_model.py set --alias gpt4_creative --as primary
-./agent_model.py set --alias gpt4_precise --as primary
+./config_server_cli.py set --alias gpt4_creative --as primary
+./config_server_cli.py set --alias gpt4_precise --as primary
 ```
 
 ## Configuration Files
@@ -309,10 +340,10 @@ Displays currently active models for each role:
 1. **Use Descriptive Alias Names**
    ```bash
    # Good
-   ./agent_model.py add --alias local_qwen_8b_reasoning ...
+   ./config_server_cli.py add --alias local_qwen_8b_reasoning ...
 
    # Less clear
-   ./agent_model.py add --alias model1 ...
+   ./config_server_cli.py add --alias model1 ...
    ```
 
 2. **Add Descriptions**
@@ -324,13 +355,13 @@ Displays currently active models for each role:
 
 3. **Check Status Regularly**
    ```bash
-   ./agent_model.py status
+   ./config_server_cli.py status
    ```
    Know which models are active before testing
 
 4. **List Before Switching**
    ```bash
-   ./agent_model.py ls
+   ./config_server_cli.py ls
    ```
    See what's available and their configurations
 
@@ -351,7 +382,7 @@ Displays currently active models for each role:
 ### Alias Already Exists
 ```bash
 Error: Alias 'my_model' already exists.
-Use './agent_model.py update --alias my_model' to modify it.
+Use './config_server_cli.py update --alias my_model' to modify it.
 ```
 **Solution:** Use `update` instead of `add`, or choose a different name
 
@@ -359,7 +390,7 @@ Use './agent_model.py update --alias my_model' to modify it.
 ```bash
 Error: Alias 'nonexistent' not found.
 ```
-**Solution:** Check spelling, use `./agent_model.py ls` to see available aliases
+**Solution:** Check spelling, use `./config_server_cli.py ls` to see available aliases
 
 ### Cannot Delete Active Alias
 ```bash
@@ -371,7 +402,7 @@ Use --force to delete anyway.
 ### Provider Not Supported
 ```bash
 Error: Unknown provider 'custom'
-Supported providers: ollama, openai, openrouter, qwen
+Supported providers: ollama, openai, openrouter, qwen, gemini
 ```
 **Solution:** Use one of the supported providers
 
@@ -386,7 +417,7 @@ After changing model configurations:
 
 2. **Verify configuration:**
    ```bash
-   ./agent_model.py status
+   ./config_server_cli.py status
    ```
 
 3. **Start the server:**
@@ -403,9 +434,10 @@ After changing model configurations:
 
 ## Version Information
 
-- **Version:** 1.0.0
-- **Last Updated:** 2025-10-12
-- **Compatibility:** Agentic-RAG Server v1.0.3.5+
+- **Tool Name:** config_server_cli.py
+- **Version:** 1.0.1
+- **Last Updated:** 2025-10-25
+- **Compatibility:** Agentic-RAG Server v1.0.3.26+
 - **Python:** 3.8+
 - **Dependencies:** PyYAML
 

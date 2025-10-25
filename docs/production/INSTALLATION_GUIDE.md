@@ -173,6 +173,31 @@ python fastapi_server_complete.py
 - **Environment:** `.env`
 - **Server Logs:** `logs/server_complete.log`
 
+### Model Management CLI Tool
+
+For easier model configuration management, the system includes the `config_server_cli.py` CLI tool:
+
+```bash
+# Check current active models
+./config_server_cli.py status
+
+# List all configured model aliases
+./config_server_cli.py ls
+
+# Add a new model configuration
+./config_server_cli.py add --alias my_model \
+  --provider ollama \
+  --model qwen3:8b \
+  --description "My local model"
+
+# Switch to different model
+./config_server_cli.py set --alias my_model --as primary
+```
+
+**Supported Providers:** ollama, openai, openrouter, qwen, gemini
+
+**For comprehensive CLI documentation, see:** [`docs/CLI_MODEL_MANAGEMENT.md`](../CLI_MODEL_MANAGEMENT.md)
+
 ## Troubleshooting
 
 ### Common Issues

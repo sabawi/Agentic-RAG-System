@@ -295,7 +295,7 @@ For detailed parameter explanations and advanced tuning options, **refer to the 
 
 **For comprehensive CLI documentation, see:** [`docs/CLI_MODEL_MANAGEMENT.md`](../CLI_MODEL_MANAGEMENT.md)
 
-The `agent_model.py` CLI tool provides simplified management of LLM model configurations through named aliases. Instead of manually editing YAML files, administrators can quickly switch between different model configurations using simple commands.
+The `config_server_cli.py` CLI tool provides simplified management of LLM model configurations through named aliases. Instead of manually editing YAML files, administrators can quickly switch between different model configurations using simple commands.
 
 #### Key Features
 
@@ -310,31 +310,40 @@ The `agent_model.py` CLI tool provides simplified management of LLM model config
 
 ```bash
 # Check current active models
-./agent_model.py status
+./config_server_cli.py status
 
 # List all configured model aliases
-./agent_model.py ls
+./config_server_cli.py ls
 
 # Create a new model alias
-./agent_model.py add --alias local_qwen \
+./config_server_cli.py add --alias local_qwen \
   --provider ollama \
   --model qwen3:8b \
   --description "Local Qwen model"
 
+# Add Gemini model
+./config_server_cli.py add --alias gemini_flash \
+  --provider gemini \
+  --model gemini-flash-latest \
+  --description "Gemini Flash for vision"
+
 # Switch primary LLM
-./agent_model.py set --alias local_qwen --as primary
+./config_server_cli.py set --alias local_qwen --as primary
 
 # Switch tool calling LLM
-./agent_model.py set --alias gpt4_mini --as tool_calling
+./config_server_cli.py set --alias gpt4_mini --as tool_calling
+
+# Switch vision LLM
+./config_server_cli.py set --alias gemini_flash --as vision
 
 # Update an alias
-./agent_model.py update --alias local_qwen --temperature 0.5
+./config_server_cli.py update --alias local_qwen --temperature 0.5
 
 # Show detailed alias information
-./agent_model.py show --alias local_qwen
+./config_server_cli.py show --alias local_qwen
 
 # Delete an alias (with safety checks)
-./agent_model.py delete --alias old_model
+./config_server_cli.py delete --alias old_model
 ```
 
 #### Integration with Server Operations
@@ -346,7 +355,7 @@ The `agent_model.py` CLI tool provides simplified management of LLM model config
 ./stop_complete.sh
 
 # Verify configuration
-./agent_model.py status
+./config_server_cli.py status
 
 # Start server
 ./start_complete.sh
@@ -363,29 +372,30 @@ tail -f logs/server_complete.log | grep -i "model\|provider"
 | **openai** | OpenAI API (GPT models) | Yes | https://api.openai.com/v1 |
 | **openrouter** | OpenRouter API gateway | Yes | https://openrouter.ai/api/v1 |
 | **qwen** | Alibaba Cloud Qwen | Yes | https://dashscope.aliyuncs.com |
+| **gemini** | Google Gemini (native API) | Yes | Native Gemini API |
 
 #### Common Administrative Tasks
 
 **Daily Model Switching:**
 ```bash
 # Switch to high-performance cloud model for peak hours
-./agent_model.py set --alias openrouter_deepseek --as primary
+./config_server_cli.py set --alias openrouter_deepseek --as primary
 
 # Switch to local model for off-peak hours (cost savings)
-./agent_model.py set --alias qwen_local --as primary
+./config_server_cli.py set --alias qwen_local --as primary
 ```
 
 **Testing New Models:**
 ```bash
 # Add test model alias
-./agent_model.py add --alias test_model \
+./config_server_cli.py add --alias test_model \
   --provider openai \
   --model gpt-4o \
   --timeout 120 \
   --temperature 0.3
 
 # Set as primary for testing
-./agent_model.py set --alias test_model --as primary
+./config_server_cli.py set --alias test_model --as primary
 
 # Restart server and test
 ./stop_complete.sh && ./start_complete.sh
@@ -394,14 +404,14 @@ tail -f logs/server_complete.log | grep -i "model\|provider"
 **Reasoning Models Configuration:**
 ```bash
 # Enable think mode for reasoning models (shows internal reasoning)
-./agent_model.py add --alias deepseek_reasoning \
+./config_server_cli.py add --alias deepseek_reasoning \
   --provider ollama \
   --model deepseek-v3.1:671b-cloud \
   --think \
   --description "DeepSeek with reasoning display"
 
 # Disable think mode for cleaner output
-./agent_model.py update --alias deepseek_reasoning --no-think
+./config_server_cli.py update --alias deepseek_reasoning --no-think
 ```
 
 #### Configuration Files
@@ -414,7 +424,7 @@ tail -f logs/server_complete.log | grep -i "model\|provider"
 
 **Active Configuration:**
 - **Location**: `config/llm_config.yaml`
-- **Modified By**: `./agent_model.py set` command
+- **Modified By**: `./config_server_cli.py set` command
 - **Preserved**: Comments and other configuration sections
 - **Safety**: Automatic backup before changes
 
@@ -423,16 +433,16 @@ tail -f logs/server_complete.log | grep -i "model\|provider"
 **Problem: "Alias not found"**
 ```bash
 # List all available aliases
-./agent_model.py ls
+./config_server_cli.py ls
 
 # Check exact alias name (case-sensitive)
-./agent_model.py show --alias <name>
+./config_server_cli.py show --alias <name>
 ```
 
 **Problem: Model switch doesn't take effect**
 ```bash
 # Verify configuration was updated
-./agent_model.py status
+./config_server_cli.py status
 cat config/llm_config.yaml | grep -A 5 "primary:"
 
 # Restart server (required for changes to take effect)
@@ -452,7 +462,7 @@ echo $OPENAI_API_KEY
 echo $OPENROUTER_API_KEY
 
 # Revert to previous working configuration
-./agent_model.py set --alias <previous_working_alias> --as primary
+./config_server_cli.py set --alias <previous_working_alias> --as primary
 ./stop_complete.sh && ./start_complete.sh
 ```
 
