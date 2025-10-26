@@ -16,7 +16,7 @@ def test_user_tool_integration():
     # Test calculator tool
     payload = {
         "prompt": "Calculate 15 + 27 using the calculator tool",
-        "model": "llama3.2:3b",
+        "model": "deepseek-v3.1:671b-cloud",
         "toolsInUse": True,
         "system": "You are a helpful assistant with access to tools."
     }

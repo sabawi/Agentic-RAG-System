@@ -131,7 +131,7 @@ class LLMAbstractionTester:
         # Test Ollama Provider (should always be available)
         await self._test_single_provider('ollama', {
             'base_url': 'http://127.0.0.1:11434',
-            'model': 'llama3.2:3b',
+            'model': 'deepseek-v3.1:671b-cloud',
             'timeout': 30
         })
         

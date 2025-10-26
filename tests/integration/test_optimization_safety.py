@@ -7,11 +7,17 @@ Tests all aspects of the optimization safety system
 import asyncio
 import json
 import pytest
+import sys
+from pathlib import Path
 from typing import List, Dict, Any
 
+# Add project root and experimental directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "archive" / "experimental"))
+
 from optimization_safety import (
-    ToolOutputPreserver, 
-    OptimizationValidator, 
+    ToolOutputPreserver,
+    OptimizationValidator,
     ValidationResult,
     safe_optimize_llm_input
 )

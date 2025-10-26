@@ -26,7 +26,7 @@ def test_web_article_save_email():
     prompt = """
     Save this article https://www.anthropic.com/research/measuring-model-persuasiveness
     to sandbox_workspace/mydocuments/persuasion_article.html
-    then email it to sabawi@gmail.com with subject "Anthropic Research Article"
+    then email it to test@example.com with subject "Anthropic Research Article"
     """
 
     print(f"\n📝 PROMPT:\n{prompt.strip()}")

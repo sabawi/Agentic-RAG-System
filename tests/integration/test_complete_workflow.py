@@ -70,7 +70,7 @@ async def test_complete_workflow():
     attachment_path = "NVDA_comprehensive_investment_report.pdf"
     
     email_result = await email_tool.execute(
-        to_email="sabawi@gmail.com",
+        to_email="test@example.com",
         subject="NVIDIA (NVDA) Comprehensive Investment Analysis Report",
         body=f"""Dear Investor,
 

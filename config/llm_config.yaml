@@ -3,82 +3,48 @@ debug:
   log_timing: true
   mock_providers: false
 document_interrogator:
-  # Directory watching and scanning configuration
-  max_files_per_scan: 400                   # ✅ TUNED to 400 (was 150, tested & verified successful)
+  max_files_per_scan: 400
   scan_interval_minutes: 60
   auto_watch_enabled: false
   startup_initialization_delay: 3
-
-  # Embedding service configuration
   embedding:
-    # Model selection
-    model_name: "mxbai-embed-large"        # ✅ Quality-focused model (59.25% retrieval accuracy)
-    dimension: 1024                         # ✅ Full dimension for maximum quality
-
-    # Service configuration
+    model_name: mxbai-embed-large
+    dimension: 1024
     service:
-      host: "127.0.0.1"
+      host: 127.0.0.1
       port: 11434
-      base_url: "http://127.0.0.1:11434"
+      base_url: http://127.0.0.1:11434
       health_check_timeout_seconds: 10
-
-    # Timeout configuration
     timeout:
-      embedding_request: 120                # 120 second timeout per embedding batch
-      service_restart: 5                    # Wait 5 seconds after service restart
-      health_check: 10                      # Health check timeout
-
-    # Retry configuration
+      embedding_request: 120
+      service_restart: 5
+      health_check: 10
     retry:
       max_service_restart_attempts: 3
       retry_delay_seconds: 3
-
-    # Batch processing configuration (CRITICAL for OOM prevention)
     batch_processing:
-      batch_size: 15                        # ✅ TUNED to 15 (was 10, originally 25)
-                                            # 15 × 400-char chunks ≈ 1500-1700 tokens/batch
-                                            # Safe within Ollama's 512-token context window
-                                            # ✅ Tested & verified: completes full scans successfully
-      batch_delay_seconds: 4.0              # ✅ REDUCED to 4.0 (safer chunks allow faster processing)
-                                            # Balanced for stability with improved throughput
-      adaptive_mode_enabled: true           # ✅ NEW: Enable graceful batch size reduction on failure
-      min_batch_size: 1                     # Minimum batch size before giving up
-      adaptive_reduction_factor: 0.5        # Reduce batch size by 50% on failure
-
-  # Document chunking configuration
+      batch_size: 15
+      batch_delay_seconds: 4.0
+      adaptive_mode_enabled: true
+      min_batch_size: 1
+      adaptive_reduction_factor: 0.5
   document_processing:
-    chunk_size: 400                         # ✅ TUNED to 400 (was 250, originally 1000)
-                                            # 400 chars ≈ 100-115 tokens (safe within 512-token context)
-                                            # ✅ Tested & verified: Better semantic quality than 250 chars
-                                            # Still maintains safe context window margin
-    chunk_overlap: 50                       # Overlap for context continuity (13% of chunk_size)
-                                            # Kept from v1.0.3.25, works well with 400-char chunks
-
-    # Chunk validation
-    min_chunk_length: 10                    # Minimum characters per chunk
-    max_chunk_length: 500                   # ✅ TUNED to 500 (proportional to chunk_size)
-
-  # Scaling recommendations (commented for future reference)
-  scaling_notes: |
-    SCALING GUIDELINES (based on empirical research):
-
-    Current configuration optimal for: 1K-10K documents (10K-100K chunks)
-
-    Scaling to 100K+ chunks:
-      1. Reduce dimension: 1024 → 768 (switch to nomic-embed-text, 33% storage savings)
-      2. Implement quantization: FP16 (48% memory reduction) or binary (32x reduction)
-      3. Consider separate FAISS instances per document collection
-
-    Model choice at scale:
-      - <10K chunks: mxbai-embed-large (current, optimal quality)
-      - 10K-100K chunks: Keep mxbai OR switch to nomic for speed
-      - 100K-1M chunks: Consider E5-small (384d) or BGE (768d)
-      - 1M+ chunks: Plan for distributed embedding service
-
-    Embedding service bottleneck analysis:
-      - Batch size 25 × 250 tokens/chunk = 6250 tokens/batch → OOM after 1650 vectors
-      - Batch size 10 × 250 tokens/chunk = 2500 tokens/batch → Sustainable at scale
-      - Time: 27-30 min for 1961 chunks with batch_size=10
+    chunk_size: 400
+    chunk_overlap: 50
+    min_chunk_length: 10
+    max_chunk_length: 500
+  scaling_notes: "SCALING GUIDELINES (based on empirical research):\n\nCurrent configuration\
+    \ optimal for: 1K-10K documents (10K-100K chunks)\n\nScaling to 100K+ chunks:\n\
+    \  1. Reduce dimension: 1024 \u2192 768 (switch to nomic-embed-text, 33% storage\
+    \ savings)\n  2. Implement quantization: FP16 (48% memory reduction) or binary\
+    \ (32x reduction)\n  3. Consider separate FAISS instances per document collection\n\
+    \nModel choice at scale:\n  - <10K chunks: mxbai-embed-large (current, optimal\
+    \ quality)\n  - 10K-100K chunks: Keep mxbai OR switch to nomic for speed\n  -\
+    \ 100K-1M chunks: Consider E5-small (384d) or BGE (768d)\n  - 1M+ chunks: Plan\
+    \ for distributed embedding service\n\nEmbedding service bottleneck analysis:\n\
+    \  - Batch size 25 \xD7 250 tokens/chunk = 6250 tokens/batch \u2192 OOM after\
+    \ 1650 vectors\n  - Batch size 10 \xD7 250 tokens/chunk = 2500 tokens/batch \u2192\
+    \ Sustainable at scale\n  - Time: 27-30 min for 1961 chunks with batch_size=10\n"
 llm:
   fallback:
     auto_switch: true

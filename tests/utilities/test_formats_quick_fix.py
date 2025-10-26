@@ -422,7 +422,7 @@ Validation: Complete end-to-end workflow test"""
         
         # Send email
         email_result = await email_tool.execute(
-            to_email="sabawi@gmail.com",
+            to_email="test@example.com",
             subject=f"TXT Format Test - System Documentation ({timestamp})",
             body=f"""Comprehensive TXT format test completed successfully.
 
@@ -1041,7 +1041,7 @@ This comprehensive strategic business plan demonstrates complete Markdown format
         
         # Send email
         email_result = await email_tool.execute(
-            to_email="sabawi@gmail.com",
+            to_email="test@example.com",
             subject=f"MD Format Test - Strategic Business Plan ({timestamp})",
             body=f"""Comprehensive MD format test completed successfully.
 

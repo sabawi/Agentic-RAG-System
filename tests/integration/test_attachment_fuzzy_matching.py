@@ -33,7 +33,7 @@ async def test_fuzzy_attachment_matching():
     # Test cases that should find fuzzy matches
     test_cases = [
         ("Cover Letter.pdf", "should match cover_letter.pdf"),
-        ("Resume.pdf", "should match resume_al_sabawi.pdf or resume.pdf"),
+        ("Resume.pdf", "should match resume.pdf or similar resume files"),
         ("cover_letter_to_john_wheeler.pdf", "should match exact file"),
         ("RESUME.PDF", "should match resume.pdf (case insensitive)"),
         ("Analysis Report.pdf", "should match analysis_report_2025-08-05_04-36.pdf"),

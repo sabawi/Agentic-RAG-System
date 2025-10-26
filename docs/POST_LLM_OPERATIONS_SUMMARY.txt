@@ -1,0 +1,321 @@
+================================================================================
+POST-LLM PROCESSING OPERATIONS - QUICK REFERENCE
+================================================================================
+
+FILE: /home/sabawi/Development/flaskserver/fastapi_server_complete.py
+LINES: 11,050 total
+
+================================================================================
+SECTION 1: EMAIL INTERCEPTOR (Lines 8218-8219, 9114-9325)
+================================================================================
+TRIGGER: Tool calling model calls secure_email_sender during Phase 1
+STORAGE: email_intercepted (bool), intercepted_email_params (dict)
+
+OPERATIONS:
+1. INTERCEPT EMAIL CALL from Phase 1 (line 8218-8219)
+2. VERIFY NOT programming_task (line 9119)
+3. VERIFY NOT fabricated email (line 9123-9130)
+4. GENERATE DYNAMIC FILENAME (line 9156-9171)
+   - Topic-specific: gaza_middle_east_analysis_{ts}.html
+   - Server-side timestamp: datetime.now() (prevents hallucination)
+5. CREATE MARKDOWN FILE (line 9184-9195)
+   - sandboxed_executor with complete_llm_response
+6. CHECK FILE EXISTS (line 9201-9225)
+   - If exists: PRESERVE
+   - If not: CREATE
+7. CREATE FINAL FORMAT (line 9227-9260)
+   - PDF: convert_to_pdf=True
+   - Code/Data: preserve extension (py, js, sql, etc.)
+   - Default: HTML version
+8. VALIDATE FILE CREATION (line 9265-9289)
+9. SEND EMAIL with attachment (line 9287-9315)
+   - Multi-file preservation (line 9292-9300)
+   - Body fallback (line 9302-9305)
+
+ERROR HANDLING:
+- File creation failure: Skip email (line 9318)
+- Email exception: Caught, logged, traceback dumped (line 9321-9324)
+- Fabricated email: Log warning, block (line 9134-9137)
+
+RESULTS:
+- Stream to user: post_processing: completed
+- Log: completion status + file info
+
+================================================================================
+SECTION 2: LEGACY POST-LLM AUTO-EXECUTION (Lines 9328-9376)
+================================================================================
+TRIGGER: pending_auto_execution=True AND verification_result not None
+CONDITIONS: NOT meta_task
+
+OPERATIONS:
+1. CALL _execute_missing_tools_post_llm() (line 9340-9346)
+   - Inputs: missing_tools[], tool_manager, tools_results, complete_llm_response, user_prompt
+2. ACCUMULATE RESULTS in additional_results string (line 9347)
+3. FORMAT FOR STREAMING (line 9349-9367)
+   - Convert to Ollama JSON format for Discord compatibility
+   - Include: model, created_at, message (role + content), done flag
+4. STREAM TO USER (line 9366)
+
+ERROR HANDLING:
+- Try-except entire block (line 9334-9375)
+- Return error JSON on exception (line 9371-9375)
+
+RESULTS:
+- Streamed in Ollama format
+- Logged at completion
+
+================================================================================
+SECTION 3: _execute_missing_tools_post_llm() FUNCTION (Lines 6580-6830+)
+================================================================================
+ASYNC FUNCTION - Returns accumulated result string
+
+FOR EACH MISSING TOOL:
+
+A. SANDBOXED_EXECUTOR (File Creation)
+   1. Detect format from user_prompt keywords
+      - pdf, html, markdown/md, text/txt
+      - Default: html
+   2. Generate dynamic filename (line 6618-6622)
+   3. Clean LLM response (line 6641)
+      - Remove JSON markers, parameters, metadata
+   4. Fill template placeholders (line 6644)
+      - Name: [Your Name], [YOUR NAME], Your Name, etc.
+      - Phone: [Your Phone Number], [PHONE], etc.
+      - Email: [Your Email Address], [EMAIL], etc.
+      - Source: Extract from user_prompt or tools_results
+   5. Cleanup HTML tags (line 6646-6651)
+      - <br><br> → \n\n
+      - <br> → \n
+      - Remove literal tags: </?[a-zA-Z][^>]*>
+   6. Add headers if missing (line 6654-6673)
+   7. Create file with sandboxed_executor (line 6687-6699)
+      - convert_to_pdf=True if .pdf file
+   8. Track result (line 6702-6706)
+
+B. SECURE_EMAIL_SENDER (Email Execution)
+   
+   CASE 1: HTML Email Request
+   - Detect format="html" or source="previous_response" (line 6712)
+   - Generate complete HTML (line 6717-6722)
+     * Uses HTMLReportGenerator
+     * Saves to sandbox workspace
+   - Send email with 120s timeout (line 6734-6756)
+     * Catch asyncio.TimeoutError
+   
+   CASE 2: Conversation PDF Request
+   - Detect conversation export request (line 6759)
+   - Extract message history from user_prompt (line 6764-6785)
+     * Parse: USER: {...}\nASSISTANT: {...}
+     * If not found: Create summary
+   - Generate PDF (line 6787-6789)
+     * export_conversation_to_pdf() → pdf_service.create_pdf()
+   - Send email with PDF (line 6800-6825)
+     * Include message_count in body
+     * 120s timeout
+
+ERROR HANDLING:
+- Try-except per tool (line 6613+)
+- Tool-specific failure logging
+- Graceful fallback: Continue to next tool
+- Partial completion acceptable
+
+RESULTS:
+- Accumulated in additional_results string
+- Format: "Tool: {name} (post-LLM execution)\nResult: {msg}\n\n"
+
+================================================================================
+SECTION 4: TOOL DEFERRAL - PHASE 1 (Lines 7834-7844)
+================================================================================
+FUNCTION: should_run_sequentially(tool_calls)
+
+CLASSIFICATION:
+- Phase 1 (Search/Analysis): get_news_summaries, stock_analyzer, comprehensive_stock_analyzer
+- Phase 2 (File/Email): sandboxed_executor, secure_email_sender
+
+PURPOSE: Prevent placeholder files - real data must complete first
+
+RETURNS: (phase2_tools_list, phase1_tools_list)
+- Phase 1 executes first
+- Phase 2 deferred
+
+================================================================================
+SECTION 5: TOOL DEFERRAL - PHASE 2 (Lines 7930-7941)
+================================================================================
+OPERATION: Image placeholder replacement within Phase 2 execution
+
+FLOW:
+1. Detect: img_item.get("path") == "user_provided_image_data"
+2. Replace with: actual_images = data.get("images", [])
+3. Purpose: Ensure Phase 2 tools have real images, not placeholders
+
+================================================================================
+SECTION 6: VERIFIER DETECTION (_verify_task_completion) (Lines 5442-5620+)
+================================================================================
+
+DETECTION PRIORITY:
+1. Meta-tasks (highest) → BLOCK file/email
+   - "generate 1-3 broad tags"
+   - "generate a concise title with emoji"
+   - "generate tags"
+   
+2. Email requests → Check for required tools
+   - Keywords: email, send, mail, attach, attachment, etc.
+   
+3. Task pattern matching → 7 patterns
+   - research_save_and_email
+   - multi_file_creation_and_email
+   - stock_report_and_email
+   - news_report_and_email
+   - file_creation_and_email
+   - document_creation_email
+   - pure_email_request
+   
+4. Exclusion patterns (information-only)
+   - "just tell me", "what are", "research", "analyze"
+   - OVERRIDE if explicit file/email request
+   - explicit_file_email_requests list: "email me", "send me", "create file", etc.
+
+RETURNS:
+COMPLETE:
+{
+    "complete": True,
+    "pattern": "meta_task|information_request|programming_task",
+    "reason": "...",
+    "missing_tools": []
+}
+
+INCOMPLETE:
+{
+    "complete": False,
+    "pattern": "research_save_and_email|news_report_and_email",
+    "reason": "...",
+    "missing_tools": ["sandboxed_executor", "secure_email_sender"],
+    "required_sequence": True|False
+}
+
+================================================================================
+SECTION 7: DYNAMIC NAMING FUNCTIONS
+================================================================================
+
+_generate_dynamic_title() (Lines 5668-5728)
+PURPOSE: Generate email subject/report title
+
+LOGIC:
+1. Check "Tool: get_news_summaries" in tools_results
+2. Match keywords: middle east, technology, stock market, etc.
+3. Return topic-specific title OR stock/calendar/email specific OR generic "Analysis Report"
+
+_generate_dynamic_filename() (Lines 5730-5788)
+PURPOSE: Server-side filename generation (prevents LLM hallucination)
+
+LOGIC:
+1. Same keyword matching as dynamic_title
+2. Generate: f"{prefix}_analysis_{timestamp}.{extension}"
+3. Timestamp: datetime.now().strftime('%Y-%m-%d_%H-%M')
+   - SERVER-GENERATED (not LLM)
+   - Prevents: "2025_10_12" hallucinations
+4. Default fallback: "analysis_report_{timestamp}.{extension}"
+
+================================================================================
+SECTION 8: STREAM CONTINUATION LOGIC (Lines 10019-10047)
+================================================================================
+
+MESSAGE HISTORY BUILDING:
+
+MULTIPART CONTENT:
+1. For each part in message.content:
+   - If type="text": append to text_parts
+   - If type="image_url": 
+     * Extract path
+     * Load local file
+     * Base64 encode
+     * Append to images list
+
+SINGLE CONTENT:
+- Convert to string
+- Append to message_history as "{ROLE}: {content}"
+- If user message: update user_prompt
+
+FOLLOW-UP DETECTION:
+- is_followup = len(message_history) > 1
+- If followup: Build conversation_context with history markers
+- Log: FOLLOW-UP DETECTED with message count
+
+SECURITY:
+- Extract ONLY user prompt
+- Discard all other parameters
+- Log: "SECURITY: All other parameters discarded per zero-trust design"
+
+================================================================================
+COMPREHENSIVE POST-PROCESSING OPERATIONS
+================================================================================
+
+FILE CREATION:
+1. Markdown (.md) - LLM response + minimal cleaning
+2. HTML (.html) - LLM response (default for reports)
+3. PDF (.pdf) - LLM response + convert_to_pdf=True
+4. Code/Data (py, js, java, sql, yaml, json, xml, csv, txt) - preserve format
+5. Conversation PDF - markdown + pdf_service.create_pdf()
+6. HTML Email - HTMLReportGenerator + CSS injection
+
+EMAIL SENDING:
+1. Single File - {single_filename}
+2. Multi-File - {csv_list_of_files} (preserve all)
+3. HTML Email - {html_filename}
+4. Conversation PDF - {pdf_filename} + message_count in body
+
+CONTENT PROCESSING:
+1. LLM Cleaning
+   - Remove: JSON markers, parameters, metadata, artifacts
+   - Clean: whitespace (max 2 newlines)
+   
+2. Template Filling
+   - Extract: name patterns, phone patterns, email patterns
+   - Replace: [Your Name], [PHONE], [EMAIL], [Address], [Date]
+   
+3. HTML Cleanup
+   - <br><br> → \n\n
+   - <br> → \n
+   - Remove literal HTML tags
+   
+4. Unicode Normalization
+   - en-dash/em-dash → hyphen
+   - smart quotes → regular quotes
+   - ellipsis → three dots
+
+ERROR HANDLING:
+- Try-except per tool execution
+- Timeout: 120s for email operations
+- File exists: PRESERVE (don't overwrite)
+- Fabricated email: BLOCK with warning
+- Programming task: BLOCK email execution
+- Partial completion: Acceptable (continue if one fails)
+
+RESULTS TRACKING:
+- Stream format: Ollama JSON with message role/content
+- Log format: Status messages with emoji indicators
+- String format: "Tool: {name}\nResult: {msg}\n\n"
+
+================================================================================
+STATE VARIABLES
+================================================================================
+email_intercepted (bool) - Deferred email flag
+intercepted_email_params (dict) - Stored email params
+pending_auto_execution (bool) - Legacy POST-LLM flag
+verification_result (dict) - Task analysis result
+is_meta_task (bool) - Meta-task detection
+complete_llm_response (str) - Full Primary LLM output
+
+================================================================================
+KEY ARCHITECTURAL PATTERNS
+================================================================================
+1. Pattern Matching - Extensive keyword-based detection
+2. Deferred Execution - Email waits for file creation
+3. Phase Sequencing - Phase 1 (data) → Phase 2 (files/email)
+4. Dynamic Naming - Server-side prevents hallucination
+5. Content Pipeline - Clean → Fill → Convert → Send/Save
+6. Error Resilience - Partial completion acceptable
+
+================================================================================
+END OF QUICK REFERENCE
+================================================================================

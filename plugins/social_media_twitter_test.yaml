@@ -1,0 +1,176 @@
+# =============================================================================
+# Social Media Plugin - Twitter/X Test Account
+# =============================================================================
+# Account: Test Twitter/X Account (for development and testing)
+# Purpose: Testing social media publishing functionality
+# Owner: Development Team
+# =============================================================================
+
+metadata:
+  name: "social_media_twitter_test"
+  version: "1.0.0"
+  category: "communications"
+  author: "Platform Team"
+  description: |
+    Publish tweets to test Twitter/X account for development and testing.
+    Uses OAuth 1.0a authentication with API keys and access tokens.
+    Supports tweets up to 280 characters (or longer with Twitter Blue).
+  tags:
+    - social-media
+    - twitter
+    - x
+    - test
+    - publishing
+    - microblogging
+
+execution:
+  type: "python"
+  handler: "handlers/social_media_twitter.py"
+  entrypoint: "execute"
+  timeout: 30                         # 30 seconds (API calls can be slow)
+  memory_limit: 256                   # 256MB
+  cpu_limit: 1.0                      # 1 CPU core
+
+  environment:
+    # Environment variable REFERENCES (actual values in .env)
+    API_KEY_ENV: "TWITTER_TEST_API_KEY"
+    API_SECRET_ENV: "TWITTER_TEST_API_SECRET"
+    ACCESS_TOKEN_ENV: "TWITTER_TEST_ACCESS_TOKEN"
+    ACCESS_SECRET_ENV: "TWITTER_TEST_ACCESS_SECRET"
+
+    # Account configuration (non-secret)
+    ACCOUNT_TYPE: "test"
+    DEFAULT_TWEET_MODE: "extended"    # Support longer tweets
+
+parameters:
+  type: "object"
+  properties:
+    text:
+      type: "string"
+      description: "Tweet text (required)"
+      minLength: 1
+      maxLength: 2800                 # Allow up to 10x normal (for threads/Twitter Blue)
+
+    media_urls:
+      type: "array"
+      description: "URLs of media to attach (images, videos, GIFs)"
+      items:
+        type: "string"
+        format: "uri"
+      maxItems: 4                     # Twitter allows up to 4 images
+
+    reply_to_tweet_id:
+      type: "string"
+      description: "Tweet ID to reply to (creates a reply thread)"
+      pattern: "^[0-9]+$"
+
+    quote_tweet_id:
+      type: "string"
+      description: "Tweet ID to quote (quote tweet)"
+      pattern: "^[0-9]+$"
+
+    poll_options:
+      type: "array"
+      description: "Poll options (creates a poll, max 4 options)"
+      items:
+        type: "string"
+        minLength: 1
+        maxLength: 25
+      minItems: 2
+      maxItems: 4
+
+    poll_duration_minutes:
+      type: "integer"
+      description: "Poll duration in minutes (5 to 10080 = 7 days)"
+      minimum: 5
+      maximum: 10080
+      default: 1440                   # 24 hours
+
+    direct_message_deep_link:
+      type: "string"
+      description: "Deep link to encourage direct messages"
+
+    reply_settings:
+      type: "string"
+      description: "Who can reply to this tweet"
+      enum:
+        - "everyone"
+        - "following"                 # People you follow
+        - "mentioned"                 # Only mentioned users
+      default: "everyone"
+
+  required:
+    - text
+
+security:
+  input_validation:
+    max_string_length: 2800           # Tweet text limit
+    max_array_length: 4               # Max media items
+    allowed_types: ["string", "integer", "array"]
+
+  output_validation:
+    max_output_size: 10485760         # 10MB
+    allowed_content_types: ["application/json"]
+
+  network:
+    enabled: true
+    allowed_domains:
+      - "*.twitter.com"
+      - "twitter.com"
+      - "*.x.com"
+      - "x.com"
+      - "api.twitter.com"
+      - "api.x.com"
+      - "upload.twitter.com"
+    allowed_ports:
+      - 443                           # HTTPS only
+    block_private_ips: true
+
+  filesystem:
+    read_only: true                   # No file writes needed
+    allowed_paths: []
+    blocked_paths:
+      - "/etc"
+      - "/root"
+      - "/home"
+
+monitoring:
+  log_level: "INFO"
+  log_execution: true
+  log_outputs: false                  # Don't log tweets (may be sensitive)
+  metrics:
+    track_execution_time: true
+    track_success_rate: true
+    alert_on_failure_rate: 0.2        # Alert if > 20% failures
+
+dependencies:
+  python_packages:
+    - requests>=2.32.0
+    - requests-oauthlib>=2.0.0        # OAuth 1.0a support
+
+  checks:
+    - type: "env_var"
+      name: "TWITTER_TEST_API_KEY"
+      required: true
+    - type: "env_var"
+      name: "TWITTER_TEST_API_SECRET"
+      required: true
+    - type: "env_var"
+      name: "TWITTER_TEST_ACCESS_TOKEN"
+      required: true
+    - type: "env_var"
+      name: "TWITTER_TEST_ACCESS_SECRET"
+      required: true
+
+error_handling:
+  retry:
+    enabled: true
+    max_attempts: 3
+    backoff_strategy: "exponential"
+    initial_delay: 2
+    retry_on_http_codes: [429, 500, 502, 503, 504]
+
+  degraded_mode:
+    enabled: true
+    disable_after_failures: 5         # Disable after 5 consecutive failures
+    cooldown_period: 300              # 5 minutes

@@ -10,7 +10,7 @@ def test_resume_retrieval():
     """Test that document_search is used to retrieve resume content"""
 
     # Simple prompt that should trigger document_search
-    prompt = "Find and read my resume from the indexed documents. Search for 'Al Sabawi resume' or 'Alaa Sabawi resume' and show me the key qualifications and experience."
+    prompt = "Find and read my resume from the indexed documents. Search for 'John Smith resume' or similar resume documents and show me the key qualifications and experience."
 
     print("🧪 Testing Resume Tool Selection")
     print("=" * 70)

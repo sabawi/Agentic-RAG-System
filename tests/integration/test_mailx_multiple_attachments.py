@@ -25,7 +25,7 @@ def test_mailx_multiple_attachments():
             "-A", test_files[1],  # HTML  
             "-A", test_files[2],  # MD
             "-A", test_files[3],  # TXT
-            "sabawi@gmail.com"
+            "test@example.com"
         ]
         
         print(f"Testing mailx command: {' '.join(cmd)}")

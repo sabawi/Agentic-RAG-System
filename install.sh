@@ -27,8 +27,8 @@ VERIFY_MODE=false
 AUTO_UPGRADE=false  # For non-interactive upgrades
 UPGRADE_STRATEGY=""  # "safe" or "stash" for automated upgrades
 
-# Required Ollama models
-REQUIRED_MODELS=("deepseek-v3.1:671b-cloud" "qwen3:8b" "qwen2.5vl:3b" "bakllava:latest")
+# Required Ollama models (includes cloud models and embeddings)
+REQUIRED_MODELS=("deepseek-v3.1:671b-cloud" "qwen3-vl:235b-cloud" "qwen3:8b" "qwen2.5vl:3b" "bakllava:latest" "mxbai-embed-large")
 
 # System dependencies
 SYSTEM_DEPS=("tesseract-ocr" "wkhtmltopdf" "build-essential" "python3-dev" "python3-venv" "curl" "git")
@@ -575,15 +575,43 @@ try:
 except:
     print('')
 " 2>/dev/null || echo "")
-        
+
+        MISSING_MODELS=()
         for model in "${REQUIRED_MODELS[@]}"; do
             if echo "$AVAILABLE_MODELS" | grep -q "$model"; then
                 log_success "Model available: $model"
             else
                 log_warning "Model not found: $model"
-                echo "To install: ollama pull $model"
+                MISSING_MODELS+=("$model")
             fi
         done
+
+        # Auto-pull missing models
+        if [ ${#MISSING_MODELS[@]} -gt 0 ]; then
+            echo ""
+            log_warning "Missing ${#MISSING_MODELS[@]} required models"
+            echo ""
+            read -p "📦 Pull missing models automatically? (y/n): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                for model in "${MISSING_MODELS[@]}"; do
+                    log_step "Pulling model: $model"
+                    if ollama pull "$model"; then
+                        log_success "Successfully pulled: $model"
+                    else
+                        log_error "Failed to pull: $model"
+                        log_warning "You can pull it manually later: ollama pull $model"
+                    fi
+                done
+            else
+                log_warning "Models not pulled. Install manually with:"
+                for model in "${MISSING_MODELS[@]}"; do
+                    echo "  ollama pull $model"
+                done
+            fi
+        else
+            log_success "All required models are available"
+        fi
     fi
     
     # Update config with Ollama URL

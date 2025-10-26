@@ -15,7 +15,7 @@ def send_test_request(prompt, test_name):
     print(f"{'='*60}")
     
     payload = {
-        "model": "llama3.2:3b",
+        "model": "deepseek-v3.1:671b-cloud",
         "prompt": prompt,
         "stream": False
     }

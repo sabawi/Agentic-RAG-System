@@ -5,7 +5,10 @@ Test document search with threshold filtering directly
 
 import asyncio
 import sys
-sys.path.append('.')
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from document_interrogator import get_document_interrogator
 
@@ -17,7 +20,7 @@ async def test_document_search():
     
     interrogator = get_document_interrogator()
     
-    query = "Alaa Sabawi"
+    query = "John Smith"  # Test query for document search
     k = 20
     
     print(f"🎯 Testing query: '{query}' with k={k}")

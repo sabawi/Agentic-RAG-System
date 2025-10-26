@@ -35,7 +35,11 @@ Recent AI chip developments show strong growth potential.
     )
     
     if file_result["success"]:
-        print(f"✅ Created: {file_result['result']['filename']}")
+        # Handle both dict and string result formats
+        if isinstance(file_result['result'], dict):
+            print(f"✅ Created: {file_result['result'].get('filename', file_result['result'])}")
+        else:
+            print(f"✅ Created: {file_result['result']}")
         
         # Step 2: Send email WITHOUT specifying attachments (let it auto-detect)
         print("\n2. Sending email without specifying attachments...")
@@ -43,7 +47,7 @@ Recent AI chip developments show strong growth potential.
         email_sender = SecureEmailSenderTool()
         
         email_result = await email_sender.execute(
-            to_email="sabawi@gmail.com",
+            to_email="test@example.com",
             subject="NVIDIA Stock Analysis (Auto-Attached Report)",
             body="Hi,\n\nI've completed the NVIDIA stock analysis. The system should automatically attach the recently generated report.\n\nBest regards"
             # NOTE: No 'attachments' parameter - should auto-detect!

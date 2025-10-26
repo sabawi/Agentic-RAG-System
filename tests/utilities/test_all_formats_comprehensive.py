@@ -29,7 +29,7 @@ sys.path.append('/home/sabawi/Development/flaskserver')
 
 class ComprehensiveFormatTester:
     def __init__(self):
-        self.test_email = "sabawi@gmail.com"
+        self.test_email = "test@example.com"
         self.timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         self.sandbox_path = Path("/home/sabawi/Development/flaskserver/sandbox_workspace")
         

@@ -24,7 +24,7 @@ def test_minimal_request():
         "prompt": "What color?",  # Very short prompt
         "images": [data_url],
         "toolsInUse": True,
-        "model": "qwen3:8b"
+        "model": "deepseek-v3.1:671b-cloud"
     }
     
     print("📤 Sending minimal request...")

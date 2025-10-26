@@ -60,7 +60,7 @@ def test_signature_detection():
         print(f"Description: {test_case['description']}")
 
         payload = {
-            "model": "qwen3:8b",
+            "model": "deepseek-v3.1:671b-cloud",
             "messages": [
                 {"role": "user", "content": "Analyze this image or tell me if there's an error."}
             ],

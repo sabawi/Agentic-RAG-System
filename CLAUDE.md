@@ -43,9 +43,10 @@ tests/
 
 ### HOUSEKEEPING DOCUMENTATION (→ docs/housekeeping/)
 **Project management docs NOT relevant to code development:**
-- Status tracking: PHASE_STATUS_*.md, PROJECT_CHANGELOG.md, *_STATUS.md
+- Status tracking: PHASE_STATUS_*.md, PROJECT_CHANGELOG.md, *_STATUS.md, **CHANGELOG_v*.md** (version-specific changelogs)
 - Procedures: ROLLBACK_PROCEDURE*.md, *_TEST_CHECKLIST.md, UNTESTED_CHANGES.md
 - Workflow: AUTOMATION_*PLAN.md, CLI_*QUICKSTART.md
+- **MANDATORY: Every version release MUST have CHANGELOG_vX.X.X.XX.md in docs/housekeeping/status-tracking/**
 
 ### DEVELOPMENT DOCUMENTATION (→ docs/)
 **Technical docs relevant to developers:**
@@ -98,5 +99,5 @@ tests/
 - BEFORE WRITING A NEW UTILITY FUNCTION, SEARCH THE CODEBASE IF THERE IS A WORKING FUNCTION ALREADY WRITTEN TO DO THE SAME WORK. ALWAYS, REUSED EXITING CODE AND IMPROVE IT
 - KEEP INVESTIGATING THE ROOT CAUSE OF A BUG/ISSUE UNTIL YOU HAVE NEAR ~100% OF THE CORRECT AND FULL ROOT CAUSE THEN REPORT IT TO USER
 - NEVER ATTEMPT A CODE FIX UNTIL (1) YOU HAVE SATISFIED THE REQUIREMENTS OF INVESTIGATING THE ROOT CAUSE (2) YOU HAVE PLANNED/ANALYZED/RESEARCH/EXPERIMENTED WITH AND VERIFIED THAT THE FIX WILL WORK WITH HIGH CONFIDENCE (NEAR ~100%)
-- CHECKPOINT PROTOCOL: FOLLOW A STRICT PLAN TO STAGE AND COMMIT FILES TO REPO: review all the code change in this current project diectory and list all changed files tracked and untracked. Examine all current documentations for requiring updates/correction and update them as result of changes (README.md, ./docs/production, other files in ./docs etc). Ensure the directory organization is strictly followed. Ensure security issues are resolved 100% (no passwords/keys/credintials etc)  Update the version numbers to be consistant across ALL files and gitbub README.md, as well as the 'About' box version number on github site. Add core/required files (tracked and new if required only) and stage them for check-in. Ensure the dependencies (./requirements.tx) is uptodate for any new imports. Commit and Push changes.
+- CHECKPOINT PROTOCOL: FOLLOW A STRICT PLAN TO STAGE AND COMMIT FILES TO REPO: review all the code change in this current project diectory and list all changed files tracked and untracked. Examine all current documentations for requiring updates/correction and update them as result of changes (README.md, ./docs/production, other files in ./docs etc). Ensure the directory organization is strictly followed. Ensure security issues are resolved 100% (no passwords/keys/credintials etc). Update the version numbers to be consistant across ALL files and gitbuh README.md, as well as the 'About' box version number on github site. **MANDATORY: Create version-specific changelog at docs/housekeeping/status-tracking/CHANGELOG_vX.X.X.XX.md documenting all changes, new features, fixes, dependencies, breaking changes, and migration guide.** Add core/required files (tracked and new if required only) and stage them for check-in. Ensure the dependencies (./requirements.txt) is uptodate for any new imports. Commit and Push changes.
 - NO FULL CONTENT OF BINARY FILE SHOULD BE DUMPED IN THE LOGS. ONLY FIRST 100 BYTES e.g."/HmfPngUAfPjhh1i6dGmx/Rw+fBiTJk1Cu3bt0KBBA9So ..."

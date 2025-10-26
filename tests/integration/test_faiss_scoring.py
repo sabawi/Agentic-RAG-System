@@ -24,9 +24,9 @@ async def analyze_faiss_scoring():
         return
     
     test_queries = [
-        ("Alaa Sabawi", "Exact name match"),
-        ("ALAA", "First name only"),
-        ("SABAWI", "Last name only"),
+        ("John Smith", "Exact name match"),
+        ("JOHN", "First name only"),
+        ("SMITH", "Last name only"),
         ("driver license", "Document type"),
         ("completely unrelated random text", "Unrelated query"),
         ("passport", "Generic document term"),

@@ -5,7 +5,10 @@ Test Google Calendar authentication with automatic token regeneration
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from user_tools.google_calendar_scheduler import GoogleCalendarSchedulerTool
 

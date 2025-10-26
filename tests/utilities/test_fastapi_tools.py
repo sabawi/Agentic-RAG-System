@@ -15,7 +15,7 @@ def test_fastapi_tools():
     # Test request similar to what the client would send
     payload = {
         "prompt": "get news about middle east", 
-        "model": "qwen3:8b",
+        "model": "deepseek-v3.1:671b-cloud",
         "toolsInUse": True,
         "system": "You are a helpful assistant."
     }

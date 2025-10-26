@@ -13,7 +13,8 @@ def test_file_needs_reindexing():
     """Test the file checking logic directly"""
     
     # Test file that should be in database
-    file_path = "/home/sabawi/Documents/Al Sabawi-2017-05-01.txt"
+    # NOTE: This test requires a file to be indexed - update with actual test file path
+    file_path = "/path/to/test/document.txt"  # FIXME: Update with test data file
     
     # Calculate current file stats
     file_stat = Path(file_path).stat()

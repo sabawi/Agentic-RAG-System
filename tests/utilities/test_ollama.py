@@ -81,7 +81,7 @@ def test_simple_ollama_prompt():
     print("\n💬 Testing simple Ollama prompt...")
     try:
         payload = {
-            "model": "llama3.2:3b",  # Default model
+            "model": "deepseek-v3.1:671b-cloud",  # Default model
             "prompt": "What is the capital of France? Answer in one sentence.",
             "stream": False
         }
@@ -112,7 +112,7 @@ def test_streaming_prompt():
     print("\n🌊 Testing streaming prompt...")
     try:
         payload = {
-            "model": "llama3.2:3b",
+            "model": "deepseek-v3.1:671b-cloud",
             "prompt": "Count from 1 to 5, one number per line.",
             "stream": True
         }
@@ -151,7 +151,7 @@ def test_ollama_with_tools():
         payload = {
             "prompt": "What's the current date and time? Also get me information about Apple stock (AAPL).",
             "toolsInUse": True,
-            "model": "llama3.2:3b",
+            "model": "deepseek-v3.1:671b-cloud",
             "tools_calling_model": "llama3.2:3b"
         }
         
@@ -198,7 +198,7 @@ def test_performance():
     def make_request(i):
         try:
             payload = {
-                "model": "llama3.2:3b",
+                "model": "deepseek-v3.1:671b-cloud",
                 "prompt": f"What is 2 + {i}? Just give the number.",
                 "stream": False
             }

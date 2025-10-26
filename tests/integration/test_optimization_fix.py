@@ -4,6 +4,13 @@ Test the enhanced validation system that should catch content mismatches
 """
 
 import asyncio
+import sys
+from pathlib import Path
+
+# Add project root and experimental directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "archive" / "experimental"))
+
 from optimization_safety import OptimizationValidator
 
 async def test_content_mismatch_detection():

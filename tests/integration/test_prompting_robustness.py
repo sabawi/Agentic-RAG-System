@@ -52,7 +52,7 @@ def send_test_request(prompt, test_name):
     payload = {
         "prompt": prompt,
         "toolsInUse": True,
-        "model": "llama3.2:3b",
+        "model": "deepseek-v3.1:671b-cloud",
         "temperature": 0.1
     }
     

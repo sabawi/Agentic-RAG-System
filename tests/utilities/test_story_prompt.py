@@ -24,7 +24,7 @@ def test_story_with_email():
     print("="*70)
 
     prompt = """
-    Write a short story based on my fortune and email it to sabawi@gmail.com
+    Write a short story based on my fortune and email it to test@example.com
     then write the story into a file in sandbox_workspace/mydocuments.
     Make sure you give it an interesting name
     """

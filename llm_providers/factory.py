@@ -76,6 +76,9 @@ class LLMProviderFactory:
             elif provider_type == 'qwen':
                 from .qwen import QwenProvider
                 cls.register_provider('qwen', QwenProvider)
+            elif provider_type == 'gemini':
+                from .gemini import GeminiProvider
+                cls.register_provider('gemini', GeminiProvider)
             else:
                 logger.warning(f"⚠️ Unknown provider type for import: {provider_type}")
         except ImportError as e:
@@ -89,7 +92,7 @@ class LLMProviderFactory:
             List of available provider type strings
         """
         # Try to import all known providers
-        for provider_type in ['ollama', 'openai', 'openrouter', 'qwen']:
+        for provider_type in ['ollama', 'openai', 'openrouter', 'qwen', 'gemini']:
             if provider_type not in cls._providers:
                 cls._import_provider(provider_type)
 
@@ -115,7 +118,7 @@ def _auto_register_providers():
     factory = LLMProviderFactory()
     
     # Register providers that are available
-    for provider_type in ['ollama', 'openai', 'openrouter', 'qwen']:
+    for provider_type in ['ollama', 'openai', 'openrouter', 'qwen', 'gemini']:
         try:
             factory._import_provider(provider_type)
         except Exception as e:

@@ -41,7 +41,7 @@ async def test_complete_workflow():
             
             email_sender = SecureEmailSenderTool()
             email_result = await email_sender.execute(
-                to_email="sabawi@gmail.com",
+                to_email="test@example.com",
                 subject="NVIDIA (NVDA) Comprehensive Stock Analysis Report",
                 body="Please find attached the comprehensive stock analysis report for NVIDIA Corporation (NVDA). This report includes real-time market data, fundamental analysis, technical indicators, recent news sentiment, and investment recommendations.\n\nBest regards,\nStock Analysis System",
                 attachments=file_info['filename']  # Just the filename since it's in sandbox

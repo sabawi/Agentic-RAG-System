@@ -30,7 +30,7 @@ def find_project_root():
 
 # Test configuration
 SERVER_URL = "http://localhost:5000"
-TEST_EMAIL = "sabawi@outlook.com"
+TEST_EMAIL = "test@example.com"
 
 async def test_complete_workflow():
     """Test the complete workflow with PDF generation and email sending"""

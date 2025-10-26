@@ -1,0 +1,158 @@
+{
+  "summary": {
+    "total": 18,
+    "passed": 9,
+    "failed": 9,
+    "success_rate": 50.0,
+    "total_duration": 180.0154266357422,
+    "avg_duration": 10.00085703531901
+  },
+  "results": [
+    {
+      "file": "utilities/test_dependency_reordering.py",
+      "success": false,
+      "duration": 0.09176921844482422,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/utilities/test_dependency_reordering.py\", line 28, in <module>\n    from dependency_analyzer import analyze_tool_dependencies\nModuleNotFoundError: No module named 'dependency_analyzer'\n",
+      "returncode": 1
+    },
+    {
+      "file": "integration/test_email_retriever_functional.py",
+      "success": false,
+      "duration": 0.09569787979125977,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_email_retriever_functional.py\", line 23, in <module>\n    from utils.email_library_adapter import EmailSearchCriteria\nModuleNotFoundError: No module named 'utils'\n",
+      "returncode": 1
+    },
+    {
+      "file": "integration/test_auto_attach.py",
+      "success": false,
+      "duration": 2.0542380809783936,
+      "stdout": "ed successfully (supports CSS @page)\n\ud83c\udfaf PDF SERVICE: Singleton instance created - this is THE ONLY PDF service\n\ud83c\udfaf CentralizedPDFService: PDF CREATION REQUEST RECEIVED\n   \ud83d\udcc4 Title: nvidia_stock_report\n   \ud83d\udcc1 Output: /home/sabawi/Development/flaskserver/tests/integration/sandbox_workspace/nvidia_stock_report.pdf\n   \ud83d\udcdd Content Type: auto\n   \ud83d\udccf Content Length: 178 chars\n\ud83d\udd0d CentralizedPDFService: Auto-detected content type: text\n\ud83d\udd27 CentralizedPDFService: Using WeasyPrint for PDF generation (full CSS @page support)\n\ud83c\udfa8 CentralizedPDFService: Looking for CSS at /home/sabawi/Development/flaskserver/config/pdf_styles.css\n\ud83c\udfa8 CentralizedPDFService: Applied CSS styling from /home/sabawi/Development/flaskserver/config/pdf_styles.css\n\u2705 CentralizedPDFService: PDF created successfully at /home/sabawi/Development/flaskserver/tests/integration/sandbox_workspace/nvidia_stock_report.pdf\n\u2705 PDF file verified: /home/sabawi/Development/flaskserver/tests/integration/sandbox_workspace/nvidia_stock_report.pdf (11932 bytes)\n",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_auto_attach.py\", line 61, in <module>\n    asyncio.run(test_auto_attachment())\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.13/asyncio/runners.py\", line 195, in run\n    return runner.run(main)\n           ~~~~~~~~~~^^^^^^\n  File \"/usr/lib/python3.13/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^\n  File \"/usr/lib/python3.13/asyncio/base_events.py\", line 725, in run_until_complete\n    return future.result()\n           ~~~~~~~~~~~~~^^\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_auto_attach.py\", line 38, in test_auto_attachment\n    print(f\"\u2705 Created: {file_result['result']['filename']}\")\n                         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\nTypeError: string indices must be integers, not 'str'\n",
+      "returncode": 1
+    },
+    {
+      "file": "utilities/test_plugin_manager.py",
+      "success": true,
+      "duration": 1.16719651222229,
+      "stdout": "2:\n   - Success: False\n   - Error: Input validation failed: [\"Schema validation failed: 'invalid_value' is not one ...\n   - Consecutive failures: 2\n\n   Attempt 3:\n   - Success: False\n   - Error: Input validation failed: [\"Schema validation failed: 'invalid_value' is not one ...\n   - Consecutive failures: 3\n\n   Checking system status after failures:\n   - Plugins loaded: 8\n   - Plugins disabled: 0\n   - \u26a0\ufe0f  Fortune plugin still active (consecutive failures: 3)\n\n============================================================\n  Testing Retry Logic\n============================================================\n\n   Testing with invalid input (should not retry on validation error):\n   - Success: False\n   - Error: Input validation failed: [\"Schema validation failed: 'invalid_category' is not one of ['any', 'short', 'long', 'offensive']\"]\n   - Attempts: 1\n\n============================================================\n  All Tests Completed!\n============================================================\n\n",
+      "stderr": "d_value' is not one of ['any', 'short', 'long', 'offensive']\nPlugin fortune_message: Input validation failed: [\"Schema validation failed: 'invalid_value' is not one of ['any', 'short', 'long', 'offensive']\"]\nPlugin fortune_message input validation error: 'invalid_value' is not one of ['any', 'short', 'long', 'offensive']\nPlugin fortune_message: Input validation failed: [\"Schema validation failed: 'invalid_value' is not one of ['any', 'short', 'long', 'offensive']\"]\nPlugin fortune_message input validation error: 'invalid_value' is not one of ['any', 'short', 'long', 'offensive']\nPlugin fortune_message: Input validation failed: [\"Schema validation failed: 'invalid_value' is not one of ['any', 'short', 'long', 'offensive']\"]\nPlugin fortune_message input validation error: 'invalid_category' is not one of ['any', 'short', 'long', 'offensive']\nPlugin fortune_message: Input validation failed: [\"Schema validation failed: 'invalid_category' is not one of ['any', 'short', 'long', 'offensive']\"]\n",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_race_condition_fix.py",
+      "success": true,
+      "duration": 74.77740979194641,
+      "stdout": "\ud83d\udd27 TESTING RACE CONDITION FIX\n============================================================\n\nStep 1: Creating PLTR report with race condition fix...\n\ud83d\udcca Report creation completed in 6.86 seconds\n   Result: True\n\nStep 2: Immediately testing email attachment (race condition test)...\n\ud83d\udce7 Email creation completed in 29.52 seconds\n   \u2705 Email created with 0 attachments\n\n\u274c FAILURE: Race condition still exists\n\nStep 3: Simulating complete workflow with timing...\n   \ud83d\udd04 Task 1: Creating report...\n   \ud83d\udd04 Task 2: Sending email...\n\ud83d\udd04 Pre-flight check: Verifying 1 attachment(s)...\n\u274c Missing: PLTR_workflow_test.pdf - File does not exist in current directory or sandbox workspace\n\ud83d\udeab FAIL FAST: 1 attachment(s) not found - exiting immediately\n   \u274c Not found: PLTR_workflow_test.pdf\n   \ud83d\udce7 Email result: False\n   \ud83d\udce7 Message: None\n\n\ud83d\udcc8 WORKFLOW RESULTS:\n   \ud83d\udcca Report creation: \u2705 SUCCESS\n   \ud83d\udce7 Email sending: \u274c FAILED\n   \u23f1\ufe0f Total workflow time: 37.64 seconds\n   \ud83d\udcc1 Final file check: File not found \u274c\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_prompt_fix.py",
+      "success": true,
+      "duration": 5.9955408573150635,
+      "stdout": "\ud83e\uddea Testing Fixed Prompt Format\n========================================\nPrompt: Send an email to test@example.com with subject 'Test' and body 'Hello world'\nFormat: ['prompt', 'toolsInUse', 'model']\nStatus: 200\n\u2705 SUCCESS - No more KeyError!\n  Chunk 1: ['model', 'response', 'done']\n  Chunk 2: ['model', 'response', 'done']\n  Chunk 3: ['model', 'response', 'done']\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_optimization_safety.py",
+      "success": false,
+      "duration": 0.18358993530273438,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_optimization_safety.py\", line 12, in <module>\n    from optimization_safety import (\n    ...<4 lines>...\n    )\nModuleNotFoundError: No module named 'optimization_safety'\n",
+      "returncode": 1
+    },
+    {
+      "file": "integration/test_file_creation.py",
+      "success": true,
+      "duration": 11.637744426727295,
+      "stdout": "\ud83e\uddea Testing Enhanced Stock Analyzer with File Creation\n============================================================\n\n1. Testing HTML format with file creation...\n\u2705 Analysis completed successfully\n   Content length: 3671 characters\n\u274c No file was created\n\n2. Testing auto-generated filename...\n\u274c Auto-generated file creation failed\n\n============================================================\n\ud83c\udfaf Test Complete!\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_email_provider_fix.py",
+      "success": true,
+      "duration": 2.4032630920410156,
+      "stdout": "\ud83e\uddea Testing Email Provider Default Change\n==================================================\n\n1. Testing without provider parameter (should use sendmail/mailx/mutt/msmtp)...\n\ud83d\udce7 PLAIN TEXT EMAIL: Sending text summary without file attachments\n\u26a0\ufe0f Falling back to sSMTP - known issues with attachments.\n\ud83d\udd27 Alternative mail agents not available or failed.\n\ud83d\udce7 Sent 231 bytes to /usr/sbin/sendmail\n\u2705 SUCCESS: Email sent without trying Gmail first\n   Result: \u2705 Email sent successfully via sendmail\n\ud83d\udce7 TO: test@example.com\n\ud83d\udce7 SUBJECT: Provider Test\n\ud83d\udce7 BODY: Testing default provider change...\n\ud83d\udcce ATTACHMENTS: None\n\ud83d\udcca RECIPIENTS: 1\n\u2705 CONFIRMED: Using local mail agents (sendmail/mailx)\n\n==================================================\n\ud83d\udccb Expected behavior:\n   \u2705 No 'Warning: No sender email configured for gmail' message\n   \u2705 Should go directly to sendmail/mailx/mutt/msmtp\n   \u2705 Should show '\ud83d\udcce Trying msmtp/mailx/mutt for better MIME support'\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "utilities/test_financial_news.py",
+      "success": true,
+      "duration": 24.787811279296875,
+      "stdout": "quest: look up the latest financial news as of today then summarize it\n\n\ud83d\udd0d Expected server logs:\n   - 'Processing tool calls with direct keyword analysis...'\n   - 'Calling news tool for topic: financial' (or similar)\n   - 'Tool: get_news_summaries'\n   - 'Latest News:' in the results\n\n\ud83d\udcca Status: 200\n\ud83d\udce1 Processing stream (looking for news content)...\n   \ud83d\udcf0 Found: 'financial' in chunk 2\n   \ud83d\udcca Processed 10 chunks...\n   \ud83d\udcf0 Found: 'market' in chunk 15\n   \ud83d\udcca Processed 20 chunks...\n   \ud83d\udcca Processed 30 chunks...\n   \ud83d\udcca Processed 40 chunks...\n   \ud83d\udcca Processed 50 chunks...\n   \ud83d\uded1 Stopping after 50 chunks\n\n\ud83d\udcca Analysis Results:\n   Chunks processed: 50\n   Total response length: 3710 characters\n   News indicators found: 2\n   \u2705 News-related content detected: financial, market\n   \ud83c\udfaf SUCCESS: Financial news tool appears to be working!\n\n==================================================\n\ud83d\udcca Summary:\n\u274c News tool function has issues\n\ud83d\udd27 Need to fix the tool function first\n\n\ud83d\udca1 Check your server logs for detailed execution info!\n",
+      "stderr": "10/25/2025 07:55:40 PM - \u26a0\ufe0f Config file not found: config/llm_config.yaml, using defaults\n10/25/2025 07:55:40 PM - \ud83c\udf9b\ufe0f OptimizationController initialized - Status: DISABLED\n10/25/2025 07:55:40 PM - \u2705 Configuration loaded from /home/sabawi/Development/flaskserver/config/llm_config.yaml\n",
+      "returncode": 0
+    },
+    {
+      "file": "utilities/test_tool_calling_simple.py",
+      "success": true,
+      "duration": 10.159111499786377,
+      "stdout": "\ud83e\uddea Simple Tool Execution Test\n========================================\n\ud83d\udce4 Request: {'prompt': 'AAPL stock', 'toolsInUse': True}\n\ud83d\udd0d Check your server logs for:\n   - 'Processing tool calls with direct keyword analysis...'\n   - 'Calling stock tool for symbol: AAPL'\n   - 'Executed tools: [...]'\n   - 'Tools results length: X characters'\n   - 'Final prompt length: X characters'\n\n\u274c Test failed: HTTPConnectionPool(host='localhost', port=5000): Read timed out.\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "unit/test_update_image_config.py",
+      "success": false,
+      "duration": 0.040396928787231445,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/unit/test_update_image_config.py\", line 13, in <module>\n    from llm_config_tool import LLMConfigTool\nModuleNotFoundError: No module named 'llm_config_tool'\n",
+      "returncode": 1
+    },
+    {
+      "file": "integration/test_document_search_direct.py",
+      "success": false,
+      "duration": 0.07848715782165527,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_document_search_direct.py\", line 10, in <module>\n    from document_interrogator import get_document_interrogator\nModuleNotFoundError: No module named 'document_interrogator'\n",
+      "returncode": 1
+    },
+    {
+      "file": "utilities/test_arxiv_pdf.py",
+      "success": true,
+      "duration": 19.34775948524475,
+      "stdout": "..\n\ud83d\udcca Status: 200\n\ud83d\udce1 Reading PDF response stream...\n   \ud83d\udcdd Processed 15 chunks, 79 chars...\n   \ud83d\udcdd Processed 30 chunks, 150 chars...\n   \ud83d\udcdd Processed 45 chunks, 215 chars...\n   \ud83d\udcdd Processed 60 chunks, 286 chars...\n   \ud83d\udcdd Processed 75 chunks, 388 chars...\n   \ud83d\udcdd Processed 90 chunks, 455 chars...\n   \ud83d\udcdd Processed 105 chunks, 528 chars...\n   \ud83d\udcdd Processed 120 chunks, 611 chars...\n   \ud83d\uded1 Stopping after 120 chunks\n\n\ud83d\udcca PDF Analysis Results:\n   Chunks processed: 120\n   Response length: 611 characters\n   Processing time: 19.2 seconds\n   \u26a1 TOOLS LIKELY EXECUTED: Response indicates PDF processing\n   \ud83d\udcdd Sample response: Of course. Based on the context provided, here is a detailed explanation of the paper \"Timelike boundary and corner terms in the causal set action\" by Fay Dowker, Roger Liu, and Daniel Lloyd-Jones.\n\n### Overview and Core Objective\n\nThis paper is a contribution to **causal set theory**, an approach to quantum gravity where spacetime is fundamentally discrete and represented by a network of causalit...\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "regression/test_post_processing_regression.py",
+      "success": true,
+      "duration": 26.91926860809326,
+      "stdout": "",
+      "stderr": "- INFO - \n==================================================\n2025-10-25 19:56:59,389 - INFO - \ud83d\udcca QUICK REGRESSION TEST SUMMARY\n2025-10-25 19:56:59,390 - INFO - ==================================================\n2025-10-25 19:56:59,390 - INFO - Simple Query (No Tools): \u2705 PASS (0.61s, 1 chars)\n2025-10-25 19:56:59,390 - INFO - Tool Calling Query: \u2705 PASS (19.12s, 1621 chars)\n2025-10-25 19:56:59,390 - INFO - Non-Streaming Simple Query: \u2705 PASS (0.89s, 1891 chars)\n2025-10-25 19:56:59,390 - INFO - \n------------------------------\n2025-10-25 19:56:59,390 - INFO - Total: 3 | Passed: 3 | Failed: 0\n2025-10-25 19:56:59,391 - INFO - \ud83c\udf89 All tests passed! Post-processing removal successful.\n2025-10-25 19:56:59,391 - INFO - \n\ud83d\udd27 Current Configuration Check:\n2025-10-25 19:56:59,391 - INFO - - Verify think parameter is properly passed to Ollama\n2025-10-25 19:56:59,391 - INFO - - Verify output renders AS-IS without post-processing\n2025-10-25 19:56:59,391 - INFO - - Verify both streaming and non-streaming work\n",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_calendar_auth.py",
+      "success": false,
+      "duration": 0.036978721618652344,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_calendar_auth.py\", line 10, in <module>\n    from user_tools.google_calendar_scheduler import GoogleCalendarSchedulerTool\nModuleNotFoundError: No module named 'user_tools'\n",
+      "returncode": 1
+    },
+    {
+      "file": "integration/test_optimization_fix.py",
+      "success": false,
+      "duration": 0.07611203193664551,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_optimization_fix.py\", line 7, in <module>\n    from optimization_safety import OptimizationValidator\nModuleNotFoundError: No module named 'optimization_safety'\n",
+      "returncode": 1
+    },
+    {
+      "file": "integration/test_passport_scores.py",
+      "success": false,
+      "duration": 0.16305112838745117,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_passport_scores.py\", line 11, in <module>\n    from document_interrogator import get_document_interrogator\nModuleNotFoundError: No module named 'document_interrogator'\n",
+      "returncode": 1
+    }
+  ],
+  "seed": 42,
+  "sample_percent": 15.0
+}

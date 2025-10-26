@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.26"  # ✅ Tuning: Optimized chunk_size: 400, batch_size: 15, max_files: 400 (tested & verified)
+VERSION = "1.0.3.34"  # 🧪 TEST: Comprehensive test cleanup & security hardening + cloud migration
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE

@@ -1,0 +1,158 @@
+{
+  "summary": {
+    "total": 18,
+    "passed": 11,
+    "failed": 7,
+    "success_rate": 61.111111111111114,
+    "total_duration": 234.71401071548462,
+    "avg_duration": 13.039667261971367
+  },
+  "results": [
+    {
+      "file": "integration/test_html_cleaning.py",
+      "success": true,
+      "duration": 36.678200483322144,
+      "stdout": "\ud83d\ude80 Testing clean HTML creation (no file type specified)...\n\ud83d\udce4 Request: {'prompt': 'Research latest tech news and create a report, then email it to sabawi@gmail.com', 'model': 'deepseek-v3.1:671b-cloud', 'stream': False}\n\u23f3 Waiting for response (no timeout)...\n\ud83d\udce8 Response Status: 200\n\ud83d\udcc4 Response Length: 26109 characters\n\ud83d\udccb Last 5 response lines:\n  {\"model\": \"deepseek-v3.1:671b-cloud\", \"response\": \" via\", \"done\": false}\n  {\"model\": \"deepseek-v3.1:671b-cloud\", \"response\": \" email\", \"done\": false}\n  {\"model\": \"deepseek-v3.1:671b-cloud\", \"response\": \" distribution\", \"done\": false}\n  {\"model\": \"deepseek-v3.1:671b-cloud\", \"response\": \".\", \"done\": false}\n  {\"model\": \"deepseek-v3.1:671b-cloud\", \"response\": \"\", \"done\": true}\n\u274c Post-processing may not have completed\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "unit/test_image_config_usage.py",
+      "success": false,
+      "duration": 0.035590171813964844,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/unit/test_image_config_usage.py\", line 11, in <module>\n    from utils.config_loader import config_loader\nModuleNotFoundError: No module named 'utils'\n",
+      "returncode": 1
+    },
+    {
+      "file": "vision_regression/test_signature_detection.py",
+      "success": true,
+      "duration": 17.38216781616211,
+      "stdout": "R\nDescription: Invalid base64 characters\n\u26a0\ufe0f  Result: UNCLEAR RESPONSE\n   Response preview: {\"id\":\"chatcmpl-1761438034\",\"object\":\"chat.completion\",\"created\":1761438034,\"model\":\"deepseek-v3.1:671b-cloud\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"stop\"}...\n\u274c UNEXPECTED: Got unclear, expected error\n\n\ud83d\udcdd Test 4: Data URI Format\nExpected: SUCCESS\nDescription: PNG in data URI format\n\u26a0\ufe0f  Result: UNCLEAR RESPONSE\n   Response preview: {\"id\":\"chatcmpl-1761438038\",\"object\":\"chat.completion\",\"created\":1761438038,\"model\":\"deepseek-v3.1:671b-cloud\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"stop\"}...\n\u274c UNEXPECTED: Got unclear, expected success\n\n============================================================\n\ud83c\udfaf KEY IMPROVEMENTS:\n\u2705 Signature-based detection (no more arbitrary length limits)\n\u2705 User error reporting (no more silent failures)\n\u2705 Format validation (PNG, JPEG, GIF, etc.)\n\u2705 Clear error messages with helpful suggestions\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "utilities/test_race_condition_verification.py",
+      "success": true,
+      "duration": 37.5753436088562,
+      "stdout": "\ud83c\udfaf TESTING EXACT SCENARIO FROM LOGS\n==================================================\n\n\ud83d\udcca Step 1: Calling comprehensive_stock_analyzer (exact parameters from logs)\n   Parameters: create_file=True, filename='PLTR_report.pdf', format='pdf', ticker='PLTR'\n   Result: SUCCESS\n\n\ud83d\udce7 Step 2: Calling secure_email_sender (exact parameters from logs)\n   Parameters: attachments='PLTR_report.pdf', to_email='sabawi@gmail.com', etc.\n\ud83d\udd04 Pre-flight check: Verifying 1 attachment(s)...\n\u274c Missing: PLTR_report.pdf - File does not exist in current directory or sandbox workspace\n\ud83d\udeab FAIL FAST: 1 attachment(s) not found - exiting immediately\n   \u274c Not found: PLTR_report.pdf\n   Result: FAILED\n   Message: None\n\n\ud83d\udd0d VERIFICATION:\n   \u274c File does not exist\n\n\ud83c\udfaf FINAL ASSESSMENT:\n   \u274c FAILURE! Issues still exist:\n      - File creation failed\n      - Email sending failed\n      - File is missing or empty\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_llm_abstraction.py",
+      "success": false,
+      "duration": 0.08394289016723633,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_llm_abstraction.py\", line 16, in <module>\n    from llm_providers import LLMProviderFactory, LLMProvider\nModuleNotFoundError: No module named 'llm_providers'\n",
+      "returncode": 1
+    },
+    {
+      "file": "utilities/test_missing_endpoints.py",
+      "success": true,
+      "duration": 9.570045709609985,
+      "stdout": "\ud83d\udd27 Testing Fixed Endpoints\n========================================\n\u2705 Server is running\n\n\ud83e\uddea Testing /retrieve_system_prompts endpoint...\n   Status: 200\n   \u274c Request error: 'str' object has no attribute 'get'\n\n\ud83e\uddea Testing /llama3_1b/stream endpoint (flexible parameters)...\n   Status: 200\n   \u2705 Stream endpoint accepts flexible parameters\n   \u2705 Streaming working (0 chunks received)\n\n\ud83e\uddea Testing /llama3_1b/stream endpoint with tools...\n   Status: 200\n   \u2705 Stream endpoint with tools working\n   \u26a0\ufe0f Stream working but tool execution unclear\n\n========================================\n\ud83d\udcca Test Results:\n   \u274c FAIL System Prompts Retrieval\n   \u2705 PASS Flexible Stream Parameters\n   \u2705 PASS Stream with Tools\n\n\ud83c\udfaf 2/3 tests passed\n\u26a0\ufe0f Some endpoints still need attention.\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "regression/test_llm_configurations.py",
+      "success": false,
+      "duration": 0.2957890033721924,
+      "stdout": "",
+      "stderr": "e 725, in run_until_complete\n    return future.result()\n           ~~~~~~~~~~~~~^^\n  File \"/home/sabawi/Development/flaskserver/tests/regression/test_llm_configurations.py\", line 492, in main\n    await tester.run_all_tests()\n  File \"/home/sabawi/Development/flaskserver/tests/regression/test_llm_configurations.py\", line 459, in run_all_tests\n    self.backup_config()\n    ~~~~~~~~~~~~~~~~~~^^\n  File \"/home/sabawi/Development/flaskserver/tests/regression/test_llm_configurations.py\", line 40, in backup_config\n    shutil.copy(self.config_file, self.backup_config_file)\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.13/shutil.py\", line 428, in copy\n    copyfile(src, dst, follow_symlinks=follow_symlinks)\n    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.13/shutil.py\", line 260, in copyfile\n    with open(src, 'rb') as fsrc:\n         ~~~~^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'config/llm_config.yaml'\n",
+      "returncode": 1
+    },
+    {
+      "file": "utilities/test_post_processing_fix.py",
+      "success": true,
+      "duration": 35.866350412368774,
+      "stdout": "\u23f3 Waiting for server to be ready...\n\ud83e\uddea Testing POST-PROCESSING Fix - Gaza Email Request\n======================================================================\n\ud83d\udcdd Prompt: Deep search for the latest top and crucial news from Gaza and the Middle East as of today. Sort them...\n======================================================================\n\n\ud83d\udce4 Sending request...\n\u2705 Request completed in 28.73s\n\n\ud83d\udcca Streaming response chunks:\n----------------------------------------------------------------------\n\n\ud83d\udcca Total chunks received: 1\n----------------------------------------------------------------------\n\n\ud83d\udd0d Checking server logs for confirmation...\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_wikipedia_query_formatting.py",
+      "success": false,
+      "duration": 3.272596836090088,
+      "stdout": "",
+      "stderr": "PM - \u2705 Configuration loaded from /home/sabawi/Development/flaskserver/config/llm_config.yaml\nTraceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_wikipedia_query_formatting.py\", line 12, in <module>\n    from fastapi_server_complete import AsyncToolManager\n  File \"/home/sabawi/Development/flaskserver/fastapi_server_complete.py\", line 269, in <module>\n    logging.FileHandler('logs/fastapi_complete.log'),\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.13/logging/__init__.py\", line 1219, in __init__\n    StreamHandler.__init__(self, self._open())\n                                 ~~~~~~~~~~^^\n  File \"/usr/lib/python3.13/logging/__init__.py\", line 1248, in _open\n    return open_func(self.baseFilename, self.mode,\n                     encoding=self.encoding, errors=self.errors)\nFileNotFoundError: [Errno 2] No such file or directory: '/home/sabawi/Development/flaskserver/tests/integration/logs/fastapi_complete.log'\n",
+      "returncode": 1
+    },
+    {
+      "file": "regression/test_regression_fix.py",
+      "success": true,
+      "duration": 16.244905710220337,
+      "stdout": "\ud83d\udd0d REGRESSION FIX TEST\n==============================\n\ud83e\uddea Testing PDF conversation export...\nStatus: 200\n\u274c Error: Expecting value: line 1 column 1 (char 0)\n\ud83e\uddea Testing image analysis...\nStatus: 200\n\u274c Error: Expecting value: line 1 column 1 (char 0)\n\n\ud83d\udcca TEST RESULTS\n====================\nPDF Export: \u274c FAIL\nImage Analysis: \u274c FAIL\n\n\u26a0\ufe0f  Some tests failed - Check server logs\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "unit/test_interactive_updates.py",
+      "success": false,
+      "duration": 0.10007548332214355,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/unit/test_interactive_updates.py\", line 13, in <module>\n    from llm_config_tool import LLMConfigTool\nModuleNotFoundError: No module named 'llm_config_tool'\n",
+      "returncode": 1
+    },
+    {
+      "file": "utilities/test_security_validator.py",
+      "success": true,
+      "duration": 0.2273094654083252,
+      "stdout": " /home/sabawi/Development/flaskserver/plugins/handlers/test.py']\n   Warnings: []\n\n3. Excessive Memory Test:\n   Valid: False\n   Errors: ['Memory limit 9999MB exceeds maximum 2048MB', 'Plugin handler not found: /home/sabawi/Development/flaskserver/plugins/handlers/test.py']\n   Warnings: []\n\n============================================================\n  Testing Fortune Plugin Validation\n============================================================\n\n1. Fortune Plugin Definition Validation:\n   Valid: True\n   Errors: []\n   Warnings: []\n\n2. Valid Fortune Input Validation:\n   Valid: True\n   Errors: []\n\n3. Invalid Fortune Input Validation (bad enum):\n   Valid: False\n   Errors: [\"Schema validation failed: 'invalid_category' is not one of ['any', 'short', 'long', 'offensive']\"]\n\n4. Fortune Output Validation:\n   Valid: True\n   Errors: []\n   Warnings: []\n\n============================================================\n  All Tests Completed!\n============================================================\n\n",
+      "stderr": "Plugin test_plugin - Injection attack detected: sql_injection\nPlugin test_plugin - Injection attack detected: command_injection\nPlugin test_plugin - Injection attack detected: xss\nPlugin test_plugin - Sensitive data detected: ssn (1 matches)\nPlugin test_plugin - Sensitive data detected: credit_card (1 matches)\nPlugin fortune_message input validation error: 'invalid_category' is not one of ['any', 'short', 'long', 'offensive']\n",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_email_retriever_functional.py",
+      "success": true,
+      "duration": 0.23012566566467285,
+      "stdout": "\ud83d\ude80 STARTING EMAIL RETRIEVER FUNCTION VERIFICATION TESTS\n============================================================\n\ud83e\uddea TEST: EmailSearchCriteria creation\n\u2705 PASSED: EmailSearchCriteria creation with all parameters\n\u2705 PASSED: EmailSearchCriteria defaults work correctly\n\ud83e\uddea TEST: Email sorting (newest first)\n\u2705 PASSED: Email sorting (newest first) works correctly\n\ud83e\uddea TEST: Parameter validation\n\u2705 PASSED: lookback_days validation works correctly\n\u2705 PASSED: max_results validation works correctly\n\ud83e\uddea TEST: Tool parameter structure\n\u2705 PASSED: Tool parameter structure is correct\n\ud83e\uddea TEST: Default consistency across system\n\u2705 PASSED: All defaults are consistent\n\ud83e\uddea TEST: Basic tool execution\n\u2705 PASSED: Tool initialization works\n\n============================================================\n\ud83c\udf89 ALL EMAIL RETRIEVER FVT TESTS COMPLETED SUCCESSFULLY!\n\u2705 FUNCTION VERIFICATION TESTS: PASSED\n",
+      "stderr": "tion source: /home/sabawi/Development/flaskserver/config/llm_config.yaml\nINFO:user_tools.email_retriever:\ud83d\ude80 Initializing EmailRetrieverTool with config: /home/sabawi/Development/flaskserver/config/llm_config.yaml\nINFO:utils.config_loader:\ud83d\udd27 Config loader initialized with file: /home/sabawi/Development/flaskserver/config/llm_config.yaml\nINFO:utils.config_loader:\u2705 Configuration loaded from /home/sabawi/Development/flaskserver/config/llm_config.yaml\nINFO:utils.email_library_adapter:Loaded email config with 7 providers\nINFO:utils.email_library_adapter:Created email library config: /tmp/tmp4va2j7hy.yaml\nINFO:user_tools.email_retriever:\u2705 EmailRetrieverTool initialized successfully\nINFO:user_tools.email_retriever:\ud83d\udce7 Available providers: ['gmail_primary', 'gmail_work', 'outlook_personal', 'outlook_work', 'yahoo_personal', 'icloud_personal', 'custom_server'] (default: gmail_primary)\nINFO:user_tools.email_retriever:\ud83d\udd27 Configuration source: /home/sabawi/Development/flaskserver/config/llm_config.yaml\n",
+      "returncode": 0
+    },
+    {
+      "file": "utilities/test_6_tools.py",
+      "success": true,
+      "duration": 0.3171727657318115,
+      "stdout": "\ud83d\udd27 Testing 6 Tools (Same as FastAPI Server)\n==================================================\n\ud83d\udd27 Testing with 6 tools (same as FastAPI)...\n\ud83d\udcdd Using exact same system prompt as FastAPI...\n\ud83d\udcca Response Status: 402\n\u274c Request failed: {\"StatusCode\":402,\"Status\":\"402 Payment Required\",\"error\":\"you've reached your weekly usage limit, please upgrade to continue\"}\n\n==================================================\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_enhanced_executor.py",
+      "success": true,
+      "duration": 0.12338900566101074,
+      "stdout": " DEBUG: filename='', action='execute', has_content=False, content_length=0\n\ud83d\udd0d EXECUTE_COMMAND DEBUG: command='python /home/sabawi/Development/flaskserver/test_report_script.py'\n\ud83d\udd0d EXECUTE_COMMAND DEBUG: return_code=0\n\ud83d\udd0d EXECUTE_COMMAND DEBUG: stdout_length=90\n\ud83d\udd0d EXECUTE_COMMAND DEBUG: stderr_length=0\n\ud83d\udd0d EXECUTE_COMMAND DEBUG: stdout_sample='Created report file: reports/TSLA_comprehensive_analysis.pdf\nInitial file size: 101 bytes\n...'\n\u2705 Sandboxed executor completed successfully!\n\ud83d\udccb Output: {'command': 'python /home/sabawi/Development/flaskserver/test_report_script.py', 'return_code': 0, 'stdout': 'Created report file: reports/TSLA_comprehensive_analysis.pdf\\nInitial file size: 101 bytes\\n', 'stderr': '', 'execution_time': 0.02, 'working_directory': '/home/sabawi/Development/flaskserver/tests/integration/sandbox_workspace', 'error_analysis': None}\n\u274c Report file not found at: /home/sabawi/Development/flaskserver/sandbox_workspace/reports/TSLA_comprehensive_analysis.pdf\n\ud83e\uddf9 Cleaned up test script\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_direct_tool.py",
+      "success": false,
+      "duration": 0.0966341495513916,
+      "stdout": "Testing sandboxed executor directly...\n\u2705 Sandbox initialized at: /home/sabawi/Development/flaskserver/tests/integration/sandbox_workspace\n",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_direct_tool.py\", line 50, in <module>\n    test_direct_tool()\n    ~~~~~~~~~~~~~~~~^^\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_direct_tool.py\", line 30, in test_direct_tool\n    result = tool.execute_action({\n             ^^^^^^^^^^^^^^^^^^^\nAttributeError: 'SandboxedExecutorTool' object has no attribute 'execute_action'\n",
+      "returncode": 1
+    },
+    {
+      "file": "utilities/test_prompt_simplified.py",
+      "success": true,
+      "duration": 76.53524041175842,
+      "stdout": "----------------------------------------\n\u2705 Response received (0 chars)\n\ud83d\udcca Citation analysis:\n   - Has citations: NO\n   - Citation markers: 0\n\u274c FAILURE: No citations found\n\ud83d\udcdd Response preview (first 200 chars):\n   ...\n\n\u23f3 Waiting 3 seconds before next test...\n\n\ud83d\udccb TEST 2: Financial News\nPrompt: What are the latest financial market developments today?\n----------------------------------------\n\u2705 Response received (0 chars)\n\ud83d\udcca Citation analysis:\n   - Has citations: NO\n   - Citation markers: 0\n\u274c FAILURE: No citations found\n\ud83d\udcdd Response preview (first 200 chars):\n   ...\n\n\u23f3 Waiting 3 seconds before next test...\n\n\ud83d\udccb TEST 3: Wikipedia Query\nPrompt: Tell me about artificial intelligence and its recent developments\n----------------------------------------\n\u2705 Response received (0 chars)\n\ud83d\udcca Citation analysis:\n   - Has citations: NO\n   - Citation markers: 0\n\u274c FAILURE: No citations found\n\ud83d\udcdd Response preview (first 200 chars):\n   ...\n\n\ud83c\udfc1 TESTING COMPLETE\n============================================================\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_provider_comparison.py",
+      "success": false,
+      "duration": 0.0791311264038086,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_provider_comparison.py\", line 13, in <module>\n    from llm_providers.factory import LLMProviderFactory\nModuleNotFoundError: No module named 'llm_providers'\n",
+      "returncode": 1
+    }
+  ],
+  "seed": 100,
+  "sample_percent": 15.0
+}

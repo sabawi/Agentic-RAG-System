@@ -10,8 +10,8 @@ def test_complete_workflow():
     
     # Create a comprehensive request that would generate HTML content
     test_request = {
-        "prompt": "Create a PDF report called comprehensive_test.pdf about artificial intelligence and machine learning trends, include sections about transformers, computer vision, and natural language processing, then email it to sabawi@gmail.com",
-        "model": "qwen3:8b", 
+        "prompt": "Create a PDF report called comprehensive_test.pdf about artificial intelligence and machine learning trends, include sections about transformers, computer vision, and natural language processing, then email it to test@example.com",
+        "model": "deepseek-v3.1:671b-cloud", 
         "stream": False
     }
     

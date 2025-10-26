@@ -1,0 +1,158 @@
+{
+  "summary": {
+    "total": 18,
+    "passed": 16,
+    "failed": 2,
+    "success_rate": 88.88888888888889,
+    "total_duration": 203.6498041152954,
+    "avg_duration": 11.3138780064053
+  },
+  "results": [
+    {
+      "file": "utilities/test_dependency_reordering.py",
+      "success": true,
+      "duration": 0.09619379043579102,
+      "stdout": "   1. get_stock_and_company_data\n   2. get_news_summaries\n\n\ud83e\udde0 ANALYZING DEPENDENCIES...\n\n\u2705 ANALYSIS SUCCESS\n\n\ud83d\udccb DETECTED DEPENDENCIES: {}\n\n\ud83c\udfaf EXECUTION PLAN (1 stages):\n   Stage 1 (\u26a1 PARALLEL): ['get_news_summaries', 'get_stock_and_company_data']\n\n\ud83d\udd0d VERIFICATION:\n   \u2705 CORRECT: Both tools in Stage 1 (parallel)\n   \u2705 No dependencies detected\n\n======================================================================\nTEST: Cycle Detection\n======================================================================\n\n\u26a0\ufe0f  SKIPPING: Cyclic dependencies cannot occur with current symbolic reference system\n   ({{WEBPAGE_CONTENT}} always points to lookup_website)\n   (Semantic rules are acyclic by design)\n\n======================================================================\nTEST SUMMARY\n======================================================================\n\u2705 PASS: Out-of-Order Reordering (B,C,A) \u2192 (A,B,C)\n\u2705 PASS: Parallel Independent Tools\n\u2705 PASS: Cycle Detection\n\nTotal: 3/3 tests passed\n\n\ud83c\udf89 ALL TESTS PASSED!\n",
+      "stderr": "INFO: \ud83e\udde0 DEPENDENCY ANALYSIS: Analyzing 3 tool calls\nINFO: \u2705 DEPENDENCY ANALYSIS COMPLETE: 3 execution stages\nINFO:    Stage 1: ['lookup_website'] (sequential)\nINFO:    Stage 2: ['sandboxed_executor'] (sequential)\nINFO:    Stage 3: ['secure_email_sender'] (sequential)\nINFO: \ud83e\udde0 DEPENDENCY ANALYSIS: Analyzing 2 tool calls\nINFO: \u2705 DEPENDENCY ANALYSIS COMPLETE: 1 execution stages\nINFO:    Stage 1: ['get_news_summaries', 'get_stock_and_company_data'] (parallel)\n",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_email_retriever_functional.py",
+      "success": true,
+      "duration": 0.23306012153625488,
+      "stdout": "\ud83d\ude80 STARTING EMAIL RETRIEVER FUNCTION VERIFICATION TESTS\n============================================================\n\ud83e\uddea TEST: EmailSearchCriteria creation\n\u2705 PASSED: EmailSearchCriteria creation with all parameters\n\u2705 PASSED: EmailSearchCriteria defaults work correctly\n\ud83e\uddea TEST: Email sorting (newest first)\n\u2705 PASSED: Email sorting (newest first) works correctly\n\ud83e\uddea TEST: Parameter validation\n\u2705 PASSED: lookback_days validation works correctly\n\u2705 PASSED: max_results validation works correctly\n\ud83e\uddea TEST: Tool parameter structure\n\u2705 PASSED: Tool parameter structure is correct\n\ud83e\uddea TEST: Default consistency across system\n\u2705 PASSED: All defaults are consistent\n\ud83e\uddea TEST: Basic tool execution\n\u2705 PASSED: Tool initialization works\n\n============================================================\n\ud83c\udf89 ALL EMAIL RETRIEVER FVT TESTS COMPLETED SUCCESSFULLY!\n\u2705 FUNCTION VERIFICATION TESTS: PASSED\n",
+      "stderr": "tion source: /home/sabawi/Development/flaskserver/config/llm_config.yaml\nINFO:user_tools.email_retriever:\ud83d\ude80 Initializing EmailRetrieverTool with config: /home/sabawi/Development/flaskserver/config/llm_config.yaml\nINFO:utils.config_loader:\ud83d\udd27 Config loader initialized with file: /home/sabawi/Development/flaskserver/config/llm_config.yaml\nINFO:utils.config_loader:\u2705 Configuration loaded from /home/sabawi/Development/flaskserver/config/llm_config.yaml\nINFO:utils.email_library_adapter:Loaded email config with 7 providers\nINFO:utils.email_library_adapter:Created email library config: /tmp/tmpt0awxm36.yaml\nINFO:user_tools.email_retriever:\u2705 EmailRetrieverTool initialized successfully\nINFO:user_tools.email_retriever:\ud83d\udce7 Available providers: ['gmail_primary', 'gmail_work', 'outlook_personal', 'outlook_work', 'yahoo_personal', 'icloud_personal', 'custom_server'] (default: gmail_primary)\nINFO:user_tools.email_retriever:\ud83d\udd27 Configuration source: /home/sabawi/Development/flaskserver/config/llm_config.yaml\n",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_auto_attach.py",
+      "success": true,
+      "duration": 4.180890798568726,
+      "stdout": "nfiguration file available\n\n\u274c msmtp failed, trying next option...\n\ud83d\udd27 Trying mailx for better MIME attachment support...\n\ud83d\udcce Added attachment: /tmp/mailx_attachment_nvidia_stock_report.pdf (11932 bytes)\n\ud83d\udce7 Sending via mailx: /usr/bin/mailx -s NVIDIA Stock Analysis (Auto-Attached Report) -A /tmp/mailx_attachment_nvidia_stock_report.pdf sabawi@gmail.com\n\ud83d\udcdd Email body length: 131 chars\n\ud83d\udce7 mailx return code: 0\n\ud83d\uddd1\ufe0f Cleaned up: /tmp/mailx_attachment_nvidia_stock_report.pdf\n\u2705 Email sent successfully via mailx\n\ud83e\uddf9 AUTO-CLEANUP: Removed generated file: nvidia_stock_report.pdf\n\ud83e\uddf9 AUTO-CLEANUP: Successfully removed 1 generated files: nvidia_stock_report.pdf\n\u2705 Email sent with auto-detected attachment!\n   Result: \u2705 Email sent successfully via sendmail\n\ud83d\udce7 TO: sabawi@gmail.com\n\ud83d\udce7 SUBJECT: NVIDIA Stock Analysis (Auto-Attached Report)\n\ud83d\udce7 BODY: Hi,\n\nI've completed the NVIDIA stock analysis. The system should automatically attach the recently g...\n\ud83d\udcce ATTACHMENTS: ['nvidia_stock_report.pdf (NOT FOUND)']\n\ud83d\udcca RECIPIENTS: 1\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "utilities/test_plugin_manager.py",
+      "success": true,
+      "duration": 1.1690988540649414,
+      "stdout": "2:\n   - Success: False\n   - Error: Input validation failed: [\"Schema validation failed: 'invalid_value' is not one ...\n   - Consecutive failures: 2\n\n   Attempt 3:\n   - Success: False\n   - Error: Input validation failed: [\"Schema validation failed: 'invalid_value' is not one ...\n   - Consecutive failures: 3\n\n   Checking system status after failures:\n   - Plugins loaded: 8\n   - Plugins disabled: 0\n   - \u26a0\ufe0f  Fortune plugin still active (consecutive failures: 3)\n\n============================================================\n  Testing Retry Logic\n============================================================\n\n   Testing with invalid input (should not retry on validation error):\n   - Success: False\n   - Error: Input validation failed: [\"Schema validation failed: 'invalid_category' is not one of ['any', 'short', 'long', 'offensive']\"]\n   - Attempts: 1\n\n============================================================\n  All Tests Completed!\n============================================================\n\n",
+      "stderr": "d_value' is not one of ['any', 'short', 'long', 'offensive']\nPlugin fortune_message: Input validation failed: [\"Schema validation failed: 'invalid_value' is not one of ['any', 'short', 'long', 'offensive']\"]\nPlugin fortune_message input validation error: 'invalid_value' is not one of ['any', 'short', 'long', 'offensive']\nPlugin fortune_message: Input validation failed: [\"Schema validation failed: 'invalid_value' is not one of ['any', 'short', 'long', 'offensive']\"]\nPlugin fortune_message input validation error: 'invalid_value' is not one of ['any', 'short', 'long', 'offensive']\nPlugin fortune_message: Input validation failed: [\"Schema validation failed: 'invalid_value' is not one of ['any', 'short', 'long', 'offensive']\"]\nPlugin fortune_message input validation error: 'invalid_category' is not one of ['any', 'short', 'long', 'offensive']\nPlugin fortune_message: Input validation failed: [\"Schema validation failed: 'invalid_category' is not one of ['any', 'short', 'long', 'offensive']\"]\n",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_race_condition_fix.py",
+      "success": true,
+      "duration": 71.57480597496033,
+      "stdout": "\ud83d\udd27 TESTING RACE CONDITION FIX\n============================================================\n\nStep 1: Creating PLTR report with race condition fix...\n\ud83d\udcca Report creation completed in 4.60 seconds\n   Result: True\n\nStep 2: Immediately testing email attachment (race condition test)...\n\ud83d\udce7 Email creation completed in 29.52 seconds\n   \u2705 Email created with 0 attachments\n\n\u274c FAILURE: Race condition still exists\n\nStep 3: Simulating complete workflow with timing...\n   \ud83d\udd04 Task 1: Creating report...\n   \ud83d\udd04 Task 2: Sending email...\n\ud83d\udd04 Pre-flight check: Verifying 1 attachment(s)...\n\u274c Missing: PLTR_workflow_test.pdf - File does not exist in current directory or sandbox workspace\n\ud83d\udeab FAIL FAST: 1 attachment(s) not found - exiting immediately\n   \u274c Not found: PLTR_workflow_test.pdf\n   \ud83d\udce7 Email result: False\n   \ud83d\udce7 Message: None\n\n\ud83d\udcc8 WORKFLOW RESULTS:\n   \ud83d\udcca Report creation: \u2705 SUCCESS\n   \ud83d\udce7 Email sending: \u274c FAILED\n   \u23f1\ufe0f Total workflow time: 36.75 seconds\n   \ud83d\udcc1 Final file check: File not found \u274c\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_prompt_fix.py",
+      "success": true,
+      "duration": 8.21422266960144,
+      "stdout": "\ud83e\uddea Testing Fixed Prompt Format\n========================================\nPrompt: Send an email to test@example.com with subject 'Test' and body 'Hello world'\nFormat: ['prompt', 'toolsInUse', 'model']\nStatus: 200\n\u2705 SUCCESS - No more KeyError!\n  Chunk 1: ['model', 'response', 'done']\n  Chunk 2: ['model', 'response', 'done']\n  Chunk 3: ['model', 'response', 'done']\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_optimization_safety.py",
+      "success": true,
+      "duration": 0.19243264198303223,
+      "stdout": "ication detects corruption\n\u2705 Test 1.1.3 PASSED: Deep copy prevents external modifications\n\u2705 Test 1.1.4 PASSED: Empty tool results handled gracefully\n\u2705 Test 1.1.5 PASSED: Malformed tool results handled safely\n\n\ud83d\udd0d Testing OptimizationValidator...\nDEBUG: Score = 95.16129032258064, Issues = []\n\u2705 Test 2.1.1 PASSED: Tool coverage validation works\nDEBUG Keyword test: Score = 96.7741935483871, Issues = []\n\u2705 Test 2.1.2 PASSED: Keyword preservation validation works\n\u2705 Test 2.1.3 PASSED: User intent alignment validation works\n\u2705 Test 2.1.4 PASSED: Compression ratio validation works\n\n\ud83d\udee1\ufe0f Testing SafeOptimization...\n\u2705 Test 1.2.1 PASSED: Successful optimization works\n\u2705 Test 1.2.2 PASSED: Validation failure triggers fallback\n\u2705 Test 1.2.3 PASSED: Exception triggers safe fallback\n\u2705 Test 1.2.4 PASSED: Integrity failure triggers emergency fallback\n\n============================================================\n\ud83c\udf89 ALL PHASE 1 TESTS COMPLETED SUCCESSFULLY!\n\u2705 Safety infrastructure is bulletproof and ready for use\n",
+      "stderr": "\ud83d\udea8 INTEGRITY VIOLATION: Tool 0 data corrupted\n\u26a0\ufe0f OPTIMIZATION FAILED VALIDATION: Score 94.0\nIssues: []\n\ud83d\udea8 OPTIMIZATION ERROR: Simulated optimization failure\n\ud83d\udea8 PRESERVATION INTEGRITY FAILED - Using emergency fallback\n",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_file_creation.py",
+      "success": true,
+      "duration": 13.450557231903076,
+      "stdout": "\ud83e\uddea Testing Enhanced Stock Analyzer with File Creation\n============================================================\n\n1. Testing HTML format with file creation...\n\u2705 Analysis completed successfully\n   Content length: 2198 characters\n\u274c No file was created\n\n2. Testing auto-generated filename...\n\u274c Auto-generated file creation failed\n\n============================================================\n\ud83c\udfaf Test Complete!\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_email_provider_fix.py",
+      "success": true,
+      "duration": 3.2233288288116455,
+      "stdout": "\ud83e\uddea Testing Email Provider Default Change\n==================================================\n\n1. Testing without provider parameter (should use sendmail/mailx/mutt/msmtp)...\n\ud83d\udce7 PLAIN TEXT EMAIL: Sending text summary without file attachments\n\u26a0\ufe0f Falling back to sSMTP - known issues with attachments.\n\ud83d\udd27 Alternative mail agents not available or failed.\n\ud83d\udce7 Sent 231 bytes to /usr/sbin/sendmail\n\u2705 SUCCESS: Email sent without trying Gmail first\n   Result: \u2705 Email sent successfully via sendmail\n\ud83d\udce7 TO: test@example.com\n\ud83d\udce7 SUBJECT: Provider Test\n\ud83d\udce7 BODY: Testing default provider change...\n\ud83d\udcce ATTACHMENTS: None\n\ud83d\udcca RECIPIENTS: 1\n\u2705 CONFIRMED: Using local mail agents (sendmail/mailx)\n\n==================================================\n\ud83d\udccb Expected behavior:\n   \u2705 No 'Warning: No sender email configured for gmail' message\n   \u2705 Should go directly to sendmail/mailx/mutt/msmtp\n   \u2705 Should show '\ud83d\udcce Trying msmtp/mailx/mutt for better MIME support'\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "utilities/test_financial_news.py",
+      "success": true,
+      "duration": 19.242682456970215,
+      "stdout": "s as of today then summarize it\n\n\ud83d\udd0d Expected server logs:\n   - 'Processing tool calls with direct keyword analysis...'\n   - 'Calling news tool for topic: financial' (or similar)\n   - 'Tool: get_news_summaries'\n   - 'Latest News:' in the results\n\n\ud83d\udcca Status: 200\n\ud83d\udce1 Processing stream (looking for news content)...\n   \ud83d\udcf0 Found: 'financial' in chunk 1\n   \ud83d\udcca Processed 10 chunks...\n   \ud83d\udcf0 Found: 'market' in chunk 14\n   \ud83d\udcca Processed 20 chunks...\n   \ud83d\udcf0 Found: 'stock' in chunk 28\n   \ud83d\udcca Processed 30 chunks...\n   \ud83d\udcca Processed 40 chunks...\n   \ud83d\udcca Processed 50 chunks...\n   \ud83d\uded1 Stopping after 50 chunks\n\n\ud83d\udcca Analysis Results:\n   Chunks processed: 50\n   Total response length: 3683 characters\n   News indicators found: 3\n   \u2705 News-related content detected: financial, market, stock\n   \ud83c\udfaf SUCCESS: Financial news tool appears to be working!\n\n==================================================\n\ud83d\udcca Summary:\n\u274c News tool function has issues\n\ud83d\udd27 Need to fix the tool function first\n\n\ud83d\udca1 Check your server logs for detailed execution info!\n",
+      "stderr": "10/25/2025 08:05:45 PM - \u26a0\ufe0f Config file not found: config/llm_config.yaml, using defaults\n10/25/2025 08:05:45 PM - \ud83c\udf9b\ufe0f OptimizationController initialized - Status: DISABLED\n10/25/2025 08:05:45 PM - \u2705 Configuration loaded from /home/sabawi/Development/flaskserver/config/llm_config.yaml\n",
+      "returncode": 0
+    },
+    {
+      "file": "utilities/test_tool_calling_simple.py",
+      "success": true,
+      "duration": 10.157513618469238,
+      "stdout": "\ud83e\uddea Simple Tool Execution Test\n========================================\n\ud83d\udce4 Request: {'prompt': 'AAPL stock', 'toolsInUse': True}\n\ud83d\udd0d Check your server logs for:\n   - 'Processing tool calls with direct keyword analysis...'\n   - 'Calling stock tool for symbol: AAPL'\n   - 'Executed tools: [...]'\n   - 'Tools results length: X characters'\n   - 'Final prompt length: X characters'\n\n\u274c Test failed: HTTPConnectionPool(host='localhost', port=5000): Read timed out.\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "unit/test_update_image_config.py",
+      "success": false,
+      "duration": 0.35744595527648926,
+      "stdout": "============= Config Loader After Updates ====================\n\n\ud83d\udccb TESTING CONFIG LOADER AFTER UPDATES\n==================================================\n1\ufe0f\u20e3 Testing config_loader after all updates...\n   \u2705 Provider: ollama\n\u274c Config loader test after updates failed: 'model'\n\u274c FAILED: Config Loader After Updates\n\n==================== Compliance After Updates ====================\n\n\ud83d\udd12 TESTING COMPLIANCE AFTER UPDATES\n==================================================\n\u274c Compliance check failed: name 'ENV_VAR_OPENAI' is not defined\n\u274c FAILED: Compliance After Updates\n\n======================================================================\n\ud83d\udcca UPDATE TEST SUMMARY:\n======================================================================\n\u274c FAILED: Update Ollama\u2192OpenAI\n\u274c FAILED: Update OpenAI\u2192Ollama\n\u274c FAILED: Update Model Within Provider\n\u274c FAILED: Config Loader After Updates\n\u274c FAILED: Compliance After Updates\n\n\ud83c\udfaf OVERALL: 0/5 update tests passed\n\u26a0\ufe0f  SOME UPDATE TESTS FAILED - Issues need to be addressed\n",
+      "stderr": "st_update_image_config.py\", line 139, in test_update_model_within_provider\n    tool = LLMConfigTool()\n  File \"/home/sabawi/Development/flaskserver/tools/llm_config_tool.py\", line 63, in __init__\n    'api_key': ENV_VAR_OPENAI,\n               ^^^^^^^^^^^^^^\nNameError: name 'ENV_VAR_OPENAI' is not defined\nTraceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/unit/test_update_image_config.py\", line 202, in test_config_loader_after_updates\n    print(f\"   \u2705 Model: {image_config['config']['model']}\")\n                          ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^\nKeyError: 'model'\nTraceback (most recent call last):\n  File \"/home/sabawi/Development/flaskserver/tests/unit/test_update_image_config.py\", line 234, in test_compliance_after_updates\n    tool = LLMConfigTool()\n  File \"/home/sabawi/Development/flaskserver/tools/llm_config_tool.py\", line 63, in __init__\n    'api_key': ENV_VAR_OPENAI,\n               ^^^^^^^^^^^^^^\nNameError: name 'ENV_VAR_OPENAI' is not defined\n",
+      "returncode": 1
+    },
+    {
+      "file": "integration/test_document_search_direct.py",
+      "success": true,
+      "duration": 7.9243457317352295,
+      "stdout": "\ud83d\udd0d Testing Document Search with Threshold Filtering\n============================================================\n\ud83c\udfaf Testing query: 'Alaa Sabawi' with k=20\n\ud83d\udcca FAISS index total vectors: 0\n\nStep 1: Testing search_similar method (with threshold filtering)\n\ud83d\udcca Filtered results: 0 chunks returned\n\nStep 2: Testing full document search pipeline\n\ud83d\udcca Pipeline results: 0 chunks found\n",
+      "stderr": "th a following CUDA\n    configurations:  12.6 following instructions at\n    https://pytorch.org/get-started/locally/\n    \n  warnings.warn(matched_cuda_warn.format(matched_arches))\n/home/sabawi/Development/flaskserver/venv/lib/python3.13/site-packages/torch/cuda/__init__.py:326: UserWarning: \nNVIDIA GeForce GTX 860M with CUDA capability sm_50 is not compatible with the current PyTorch installation.\nThe current PyTorch install supports CUDA capabilities sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120.\nIf you want to use the NVIDIA GeForce GTX 860M GPU with PyTorch, please check the instructions at https://pytorch.org/get-started/locally/\n\n  warnings.warn(\nFailed to initialize easyocr: CUDA error: no kernel image is available for execution on the device\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.\n\n",
+      "returncode": 0
+    },
+    {
+      "file": "utilities/test_arxiv_pdf.py",
+      "success": true,
+      "duration": 22.69041609764099,
+      "stdout": "..\n\ud83d\udcca Status: 200\n\ud83d\udce1 Reading PDF response stream...\n   \ud83d\udcdd Processed 15 chunks, 73 chars...\n   \ud83d\udcdd Processed 30 chunks, 152 chars...\n   \ud83d\udcdd Processed 45 chunks, 212 chars...\n   \ud83d\udcdd Processed 60 chunks, 285 chars...\n   \ud83d\udcdd Processed 75 chunks, 362 chars...\n   \ud83d\udcdd Processed 90 chunks, 451 chars...\n   \ud83d\udcdd Processed 105 chunks, 524 chars...\n   \ud83d\udcdd Processed 120 chunks, 608 chars...\n   \ud83d\uded1 Stopping after 120 chunks\n\n\ud83d\udcca PDF Analysis Results:\n   Chunks processed: 120\n   Response length: 608 characters\n   Processing time: 22.5 seconds\n   \u26a1 TOOLS LIKELY EXECUTED: Response indicates PDF processing\n   \ud83d\udcdd Sample response: Of course. Based on the context provided by the tools, here is a detailed explanation of the paper \"Timelike boundary and corner terms in the causal set action\" by Fay Dowker, Roger Liu, and Daniel Lloyd-Jones.\n\n### Overview and Core Objective\n\nThis paper is a contribution to **Causal Set Theory**, an approach to quantum gravity. The central idea of causal set theory is that spacetime is fundament...\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "regression/test_post_processing_regression.py",
+      "success": true,
+      "duration": 32.67661380767822,
+      "stdout": "",
+      "stderr": " INFO - \n==================================================\n2025-10-25 20:07:16,132 - INFO - \ud83d\udcca QUICK REGRESSION TEST SUMMARY\n2025-10-25 20:07:16,132 - INFO - ==================================================\n2025-10-25 20:07:16,133 - INFO - Simple Query (No Tools): \u2705 PASS (0.83s, 13 chars)\n2025-10-25 20:07:16,133 - INFO - Tool Calling Query: \u2705 PASS (24.19s, 1451 chars)\n2025-10-25 20:07:16,133 - INFO - Non-Streaming Simple Query: \u2705 PASS (1.38s, 1891 chars)\n2025-10-25 20:07:16,133 - INFO - \n------------------------------\n2025-10-25 20:07:16,133 - INFO - Total: 3 | Passed: 3 | Failed: 0\n2025-10-25 20:07:16,133 - INFO - \ud83c\udf89 All tests passed! Post-processing removal successful.\n2025-10-25 20:07:16,133 - INFO - \n\ud83d\udd27 Current Configuration Check:\n2025-10-25 20:07:16,133 - INFO - - Verify think parameter is properly passed to Ollama\n2025-10-25 20:07:16,133 - INFO - - Verify output renders AS-IS without post-processing\n2025-10-25 20:07:16,133 - INFO - - Verify both streaming and non-streaming work\n",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_calendar_auth.py",
+      "success": true,
+      "duration": 0.31969618797302246,
+      "stdout": "inner with Diana at Loleta Italian Restaurant this Sunday at 7:20 PM\n\ud83d\udd04 Testing authentication and event creation...\n\ud83d\udcdd Result:\n\ud83d\udd10 **Google Calendar Authentication Required**\n\nTo use the Google Calendar scheduler, you need to set up authentication:\n\n**Setup Steps:**\n\n1. **Get Google Credentials:**\n   - Go to [Google Cloud Console](https://console.cloud.google.com/)\n   - Create a new project or select existing\n   - Enable Google Calendar API\n   - Create OAuth 2.0 credentials (Desktop Application)\n   - Download the JSON file as 'credentials.json'\n\n2. **File Locations:**\n   - Place credentials.json at: `./credentials.json`\n   - Token will be saved at: `./token.pickle`\n\n3. **Initial Authentication:**\n   - Complete OAuth flow (requires browser access)\n   - Token will be saved for future use\n\n**Current Status:** Not authenticated\n\n**Alternative:** For now, I can provide a Google Calendar link you can use to manually create the event.\n============================================================\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_optimization_fix.py",
+      "success": true,
+      "duration": 0.09042143821716309,
+      "stdout": ".7%', \"WARNING: User intent keywords missing: ['Development', 'HTML', 'extract', 'introductory', 'fill', 'Technologies', 'City', 'Crontab', 'Research', 'format', 'john.wheeler@example.com', 'write', 'Read', 'John', 'pdf', 'formatted', 'State', 'resume', 'complete', 'html', 'LLC', 'user@example.com', 'research', 'Software Development and Research at Crontab Technologies', 'Example', 'Software']\", 'CRITICAL: Optimized content contains generic error response - 6 error indicators detected']\nCritical Issues: 1\n\u2705 SUCCESS: Enhanced validation correctly REJECTED the failed optimization!\n   Score: 44.9 < 75.0 threshold\n   Critical Issues: 1\n\n\ud83e\uddea Testing Good Optimization\n==============================\nValidation Score: 87.5\nIs Safe: True\nIssues: ['WARNING: High keyword loss but content appears structured: 77.8%']\n\u2705 SUCCESS: Good optimization correctly PASSED validation!\n\n============================================================\n\ud83c\udf89 ALL TESTS PASSED: Enhanced validation system working correctly!\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "file": "integration/test_passport_scores.py",
+      "success": false,
+      "duration": 7.8560779094696045,
+      "stdout": "\ud83d\udd0d Testing Passport Document Similarity Scores\n============================================================\n\ud83c\udfaf Testing query: 'Alaa Sabawi' with k=100\n\n",
+      "stderr": "\n    asyncio.run(test_passport_scores())\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.13/asyncio/runners.py\", line 195, in run\n    return runner.run(main)\n           ~~~~~~~~~~^^^^^^\n  File \"/usr/lib/python3.13/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^\n  File \"/usr/lib/python3.13/asyncio/base_events.py\", line 725, in run_until_complete\n    return future.result()\n           ~~~~~~~~~~~~~^^\n  File \"/home/sabawi/Development/flaskserver/tests/integration/test_passport_scores.py\", line 36, in test_passport_scores\n    scores, indices = store.faiss_index.search(query_vector, min(k, store.faiss_index.ntotal))\n                      ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/sabawi/Development/flaskserver/venv/lib/python3.13/site-packages/faiss/class_wrappers.py\", line 351, in replacement_search\n    assert k > 0\n           ^^^^^\nAssertionError\n",
+      "returncode": 1
+    }
+  ],
+  "seed": 42,
+  "sample_percent": 15.0
+}

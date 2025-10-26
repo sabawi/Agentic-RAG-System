@@ -10,7 +10,7 @@ import time
 def test_gaza_email():
     """Test that email is sent when requested with news search"""
 
-    prompt = "Deep search for the latest top and crucial news from Gaza and the Middle East as of today. Sort them by published date and importance. Expand and discuss key items in details. Cite date/time and sources of the news for each item. Email the full search in html attachment to sabawi@gmail.com"
+    prompt = "Deep search for the latest top and crucial news from Gaza and the Middle East as of today. Sort them by published date and importance. Expand and discuss key items in details. Cite date/time and sources of the news for each item. Email the full search in html attachment to test@example.com"
 
     print("🧪 Testing POST-PROCESSING Fix - Gaza Email Request")
     print("=" * 70)

@@ -12,8 +12,8 @@ def test_pdf_conversation_request():
     print("🧪 Testing PDF conversation export...")
     
     payload = {
-        "prompt": "Email the above response as PDF to sabawi@gmail.com",
-        "model": "qwen3:8b", 
+        "prompt": "Email the above response as PDF to test@example.com",
+        "model": "deepseek-v3.1:671b-cloud", 
         "toolsInUse": True,
         "stream": False,
         "prompt_context": """
@@ -22,7 +22,7 @@ def test_pdf_conversation_request():
         ASSISTANT: 2+2 equals 4.
         
         === CURRENT REQUEST ===
-        Email the above response as PDF to sabawi@gmail.com
+        Email the above response as PDF to test@example.com
         """
     }
     
@@ -49,7 +49,7 @@ def test_image_analysis():
     
     payload = {
         "prompt": "I want to analyze an image. Use the image_to_text tool to help me.",
-        "model": "qwen3:8b",
+        "model": "deepseek-v3.1:671b-cloud",
         "toolsInUse": True,
         "stream": False
     }

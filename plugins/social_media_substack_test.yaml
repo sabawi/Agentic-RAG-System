@@ -1,0 +1,140 @@
+# =============================================================================
+# Social Media Plugin - Substack Test Account
+# =============================================================================
+# Account: Test Substack Blog (for development and testing)
+# Purpose: Testing social media publishing functionality
+# Owner: Development Team
+# =============================================================================
+
+metadata:
+  name: "social_media_substack_test"
+  version: "1.0.0"
+  category: "communications"
+  author: "Platform Team"
+  description: |
+    Publish to test Substack blog for development and testing.
+    Use this plugin to test social media publishing functionality before
+    using production accounts. Supports HTML content with XSS sanitization.
+  tags:
+    - social-media
+    - substack
+    - test
+    - publishing
+
+execution:
+  type: "python"
+  handler: "handlers/social_media_substack.py"
+  entrypoint: "execute"
+  timeout: 30                         # 30 seconds (publishing can be slow)
+  memory_limit: 256                   # 256MB
+  cpu_limit: 1.0                      # 1 CPU core
+
+  environment:
+    # Environment variable REFERENCES (actual values in .env)
+    ACCOUNT_EMAIL_ENV: "SUBSTACK_TEST_EMAIL"
+    ACCOUNT_PASSWORD_ENV: "SUBSTACK_TEST_PASSWORD"
+
+    # Account configuration (non-secret)
+    ACCOUNT_TYPE: "test"
+    DEFAULT_VISIBILITY: "everyone"
+
+parameters:
+  type: "object"
+  properties:
+    title:
+      type: "string"
+      description: "Post title (required)"
+      minLength: 1
+      maxLength: 200
+
+    content:
+      type: "string"
+      description: "Post content in HTML format"
+      minLength: 1
+      maxLength: 1000000              # 1MB max
+
+    subtitle:
+      type: "string"
+      description: "Optional post subtitle"
+      maxLength: 500
+
+    visibility:
+      type: "string"
+      description: "Post visibility level"
+      enum:
+        - "everyone"                  # Public
+        - "paid_subscribers"          # Paid only
+        - "founding_members"          # Founding members only
+      default: "everyone"
+
+    send_email:
+      type: "boolean"
+      description: "Send email notification to subscribers"
+      default: true
+
+  required:
+    - title
+    - content
+
+security:
+  input_validation:
+    max_string_length: 1000000        # 1MB for content
+    max_array_length: 100
+    allowed_types: ["string", "boolean"]
+
+  output_validation:
+    max_output_size: 10485760         # 10MB
+    allowed_content_types: ["application/json"]
+
+  network:
+    enabled: true
+    allowed_domains:
+      - "*.substack.com"
+      - "substack.com"
+      - "api.substack.com"
+    allowed_ports:
+      - 443                           # HTTPS only
+    block_private_ips: true
+
+  filesystem:
+    read_only: true                   # No file writes needed
+    allowed_paths: []
+    blocked_paths:
+      - "/etc"
+      - "/root"
+      - "/home"
+
+monitoring:
+  log_level: "INFO"
+  log_execution: true
+  log_outputs: false                  # Don't log content (may be sensitive)
+  metrics:
+    track_execution_time: true
+    track_success_rate: true
+    alert_on_failure_rate: 0.2        # Alert if > 20% failures
+
+dependencies:
+  python_packages:
+    - python-substack>=1.0.0
+    - requests>=2.32.0
+    - bleach>=6.0.0
+
+  checks:
+    - type: "env_var"
+      name: "SUBSTACK_TEST_EMAIL"
+      required: true
+    - type: "env_var"
+      name: "SUBSTACK_TEST_PASSWORD"
+      required: true
+
+error_handling:
+  retry:
+    enabled: true
+    max_attempts: 3
+    backoff_strategy: "exponential"
+    initial_delay: 2
+
+  degraded_mode:
+    enabled: true
+    disable_after_failures: 5         # Disable after 5 consecutive failures
+    cooldown_period: 300              # 5 minutes

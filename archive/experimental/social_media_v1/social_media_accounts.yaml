@@ -1,0 +1,79 @@
+# Social Media Accounts Configuration
+# Version: 1.0.3.11
+# Last Updated: October 18, 2025
+#
+# This file configures social media publishing accounts for the Agentic-RAG system.
+# Multiple accounts per platform are supported.
+#
+# SECURITY NOTE: Actual credentials (passwords, tokens, API keys) should be stored
+# in the .env file, not here. This file only references environment variable names.
+
+accounts:
+  # Substack Publishing Accounts
+  substack:
+    - name: "agentic-developer"
+      description: "Technical blog for AI and development topics"
+      publication_url: "https://agentic-developer.substack.com"
+      email_env: "SUBSTACK_AGENTIC_EMAIL"      # Reference to .env variable
+      password_env: "SUBSTACK_AGENTIC_PASSWORD"  # Reference to .env variable
+      enabled: true
+      default: true  # Default account when platform but not account specified
+
+    - name: "personal-blog"
+      description: "Personal writing and reflections"
+      publication_url: "https://personal-blog.substack.com"
+      email_env: "SUBSTACK_PERSONAL_EMAIL"
+      password_env: "SUBSTACK_PERSONAL_PASSWORD"
+      enabled: false  # Disabled accounts won't be used
+      default: false
+
+  # Medium Publishing Accounts
+  medium:
+    - name: "tech-writer"
+      description: "Technology articles and tutorials"
+      integration_token_env: "MEDIUM_TECH_TOKEN"  # Self-issued integration token
+      enabled: false  # Set to true when ready to use
+      default: true
+
+  # Twitter/X Publishing Accounts
+  twitter:
+    - name: "tech-updates"
+      description: "Technology news and updates"
+      api_key_env: "TWITTER_TECH_API_KEY"
+      api_secret_env: "TWITTER_TECH_API_SECRET"
+      access_token_env: "TWITTER_TECH_ACCESS_TOKEN"
+      access_secret_env: "TWITTER_TECH_ACCESS_SECRET"
+      enabled: false  # Set to true when ready to use
+      default: true
+
+# Platform-specific settings
+settings:
+  substack:
+    default_visibility: "everyone"  # Options: everyone, paid_subscribers, founding_members
+    default_send_email: true  # Send notification email to subscribers
+
+  medium:
+    default_publish_status: "draft"  # Options: public, draft, unlisted
+    default_license: "all-rights-reserved"  # Creative Commons options available
+    default_notify_followers: false
+
+  twitter:
+    default_enable_replies: true
+    default_enable_retweets: true
+    default_enable_likes: true
+
+# Publishing defaults (can be overridden per-post)
+defaults:
+  save_drafts: true  # Save local copies before publishing
+  drafts_directory: "./drafts/social_media"
+  require_confirmation: false  # If true, require user confirmation before posting
+  log_posts: true  # Log all published posts
+  posts_log_file: "./logs/social_media_posts.json"
+
+# Feature flags
+features:
+  enable_substack: true   # Enable/disable entire platform
+  enable_medium: false    # Not yet implemented
+  enable_twitter: false   # Not yet implemented
+  enable_scheduling: false  # Future feature: schedule posts
+  enable_cross_posting: false  # Future feature: post to multiple platforms

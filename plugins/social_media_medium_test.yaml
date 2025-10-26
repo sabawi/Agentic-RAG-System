@@ -1,0 +1,172 @@
+# =============================================================================
+# Social Media Plugin - Medium Test Account
+# =============================================================================
+# Account: Test Medium Account (for development and testing)
+# Purpose: Testing social media publishing functionality
+# Owner: Development Team
+# =============================================================================
+
+metadata:
+  name: "social_media_medium_test"
+  version: "1.0.0"
+  category: "communications"
+  author: "Platform Team"
+  description: |
+    Publish to test Medium account for development and testing.
+    Medium uses integration tokens for authentication (no password required).
+    Supports Markdown or HTML content with automatic conversion.
+  tags:
+    - social-media
+    - medium
+    - test
+    - publishing
+    - blogging
+
+execution:
+  type: "python"
+  handler: "handlers/social_media_medium.py"
+  entrypoint: "execute"
+  timeout: 30                         # 30 seconds (publishing can be slow)
+  memory_limit: 256                   # 256MB
+  cpu_limit: 1.0                      # 1 CPU core
+
+  environment:
+    # Environment variable REFERENCE (actual value in .env)
+    INTEGRATION_TOKEN_ENV: "MEDIUM_TEST_TOKEN"
+
+    # Account configuration (non-secret)
+    ACCOUNT_TYPE: "test"
+    DEFAULT_PUBLISH_STATUS: "draft"
+    CONTENT_FORMAT: "html"            # html or markdown
+
+parameters:
+  type: "object"
+  properties:
+    title:
+      type: "string"
+      description: "Post title (required)"
+      minLength: 1
+      maxLength: 100                  # Medium title limit
+
+    content:
+      type: "string"
+      description: "Post content in HTML or Markdown format"
+      minLength: 1
+      maxLength: 1000000              # 1MB max
+
+    content_format:
+      type: "string"
+      description: "Content format: html or markdown"
+      enum:
+        - "html"
+        - "markdown"
+      default: "html"
+
+    publish_status:
+      type: "string"
+      description: "Publication status"
+      enum:
+        - "public"                    # Publish immediately
+        - "draft"                     # Save as draft
+        - "unlisted"                  # Unlisted (accessible via URL only)
+      default: "draft"
+
+    tags:
+      type: "array"
+      description: "Post tags (max 5)"
+      items:
+        type: "string"
+        minLength: 1
+        maxLength: 25
+      maxItems: 5
+      default: []
+
+    canonical_url:
+      type: "string"
+      description: "Canonical URL if cross-posting"
+      format: "uri"
+
+    notify_followers:
+      type: "boolean"
+      description: "Notify followers of publication"
+      default: false
+
+    license:
+      type: "string"
+      description: "Content license"
+      enum:
+        - "all-rights-reserved"
+        - "cc-40-by"
+        - "cc-40-by-sa"
+        - "cc-40-by-nd"
+        - "cc-40-by-nc"
+        - "cc-40-by-nc-nd"
+        - "cc-40-by-nc-sa"
+        - "cc-40-zero"
+        - "public-domain"
+      default: "all-rights-reserved"
+
+  required:
+    - title
+    - content
+
+security:
+  input_validation:
+    max_string_length: 1000000        # 1MB for content
+    max_array_length: 5               # Max 5 tags
+    allowed_types: ["string", "boolean", "array"]
+
+  output_validation:
+    max_output_size: 10485760         # 10MB
+    allowed_content_types: ["application/json"]
+
+  network:
+    enabled: true
+    allowed_domains:
+      - "*.medium.com"
+      - "medium.com"
+      - "api.medium.com"
+    allowed_ports:
+      - 443                           # HTTPS only
+    block_private_ips: true
+
+  filesystem:
+    read_only: true                   # No file writes needed
+    allowed_paths: []
+    blocked_paths:
+      - "/etc"
+      - "/root"
+      - "/home"
+
+monitoring:
+  log_level: "INFO"
+  log_execution: true
+  log_outputs: false                  # Don't log content (may be sensitive)
+  metrics:
+    track_execution_time: true
+    track_success_rate: true
+    alert_on_failure_rate: 0.2        # Alert if > 20% failures
+
+dependencies:
+  python_packages:
+    - requests>=2.32.0
+    - bleach>=6.0.0
+    - markdown>=3.0.0                 # For markdown to HTML conversion
+
+  checks:
+    - type: "env_var"
+      name: "MEDIUM_TEST_TOKEN"
+      required: true
+
+error_handling:
+  retry:
+    enabled: true
+    max_attempts: 3
+    backoff_strategy: "exponential"
+    initial_delay: 2
+    retry_on_http_codes: [429, 500, 502, 503, 504]
+
+  degraded_mode:
+    enabled: true
+    disable_after_failures: 5         # Disable after 5 consecutive failures
+    cooldown_period: 300              # 5 minutes
