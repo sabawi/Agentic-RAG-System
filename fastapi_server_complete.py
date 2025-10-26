@@ -7192,9 +7192,49 @@ async def llama_stream(request: Request):
 
                     if validation_result['is_valid']:
                         logger.info(f"🖼️ Image {i+1}: Valid {validation_result['format']} image ({validation_result['size_bytes']} bytes)")
-                        processed_images.append(validation_result['processed_data'])
-                        image_exists = True
-                        continue
+
+                        # Apply image resizing if needed using image_utils module
+                        try:
+                            from image_utils import process_image_for_vision_model
+                            import yaml
+
+                            # Load vision config from llm_config.yaml
+                            try:
+                                config_path = os.path.join(os.path.dirname(__file__), 'config', 'llm_config.yaml')
+                                with open(config_path, 'r') as f:
+                                    llm_config = yaml.safe_load(f)
+                                    vision_config = llm_config.get('vision', {}).get('image_processing', {})
+                            except Exception as e:
+                                logger.warning(f"🖼️ Failed to load vision config, using defaults: {e}")
+                                vision_config = {
+                                    'max_size_mb': 1.0,
+                                    'resize_quality': 85,
+                                    'max_dimension': 2048,
+                                    'preserve_aspect_ratio': True
+                                }
+
+                            # Process/resize the image
+                            processed_data, metadata = process_image_for_vision_model(
+                                validation_result['processed_data'],
+                                vision_config
+                            )
+
+                            # Log resize results
+                            if metadata.get('was_resized'):
+                                logger.info(f"🖼️ Image {i+1}: Resized from {metadata['original_size_mb']:.2f}MB to {metadata['final_size_mb']:.2f}MB ({metadata['reduction_percent']:.1f}% reduction)")
+                                logger.info(f"🖼️ Image {i+1}: Dimensions {metadata['original_dimensions']} → {metadata['final_dimensions']}")
+                            else:
+                                logger.info(f"🖼️ Image {i+1}: No resize needed ({metadata['final_size_mb']:.2f}MB)")
+
+                            processed_images.append(processed_data)
+                            image_exists = True
+                            continue
+
+                        except Exception as resize_error:
+                            logger.warning(f"🖼️ Image {i+1}: Resize failed, using original: {resize_error}")
+                            processed_images.append(validation_result['processed_data'])
+                            image_exists = True
+                            continue
                     else:
                         # Check if it might be a file path before declaring failure
                         if not ('/' in img_data or '\\' in img_data or any(img_data.endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'])):
