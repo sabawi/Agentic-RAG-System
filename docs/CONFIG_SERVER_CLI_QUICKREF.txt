@@ -1,0 +1,52 @@
+=====================================================
+  CONFIG SERVER CLI - QUICK REFERENCE CARD
+=====================================================
+
+📋 LIST & STATUS
+  ./config_server_cli.py ls                 # List all aliases
+  ./config_server_cli.py status             # Show active models
+  ./config_server_cli.py show --alias NAME  # Show alias details
+
+➕ ADD MODEL ALIAS
+  ./config_server_cli.py add --alias NAME --provider TYPE --model MODEL [OPTIONS]
+
+  Providers: ollama, openai, openrouter, qwen, gemini
+
+  Examples:
+    ./config_server_cli.py add --alias qwen_local --provider ollama --model qwen3:8b
+    ./config_server_cli.py add --alias gpt4_cloud --provider openai --model gpt-4o
+    ./config_server_cli.py add --alias deepseek_or --provider openrouter --model deepseek/deepseek-r1
+    ./config_server_cli.py add --alias gemini_flash --provider gemini --model gemini-1.5-flash
+
+🔄 SET ACTIVE MODEL
+  ./config_server_cli.py set --alias NAME --as ROLE
+
+  Roles: primary, tool_calling, arbitrator, vision
+
+  Examples:
+    ./config_server_cli.py set --alias qwen_local --as primary
+    ./config_server_cli.py set --alias gpt4_cloud --as tool_calling
+    ./config_server_cli.py set --alias gpt4_cloud --as arbitrator
+    ./config_server_cli.py set --alias qwen3_vl_cloud --as vision
+
+✏️ UPDATE ALIAS
+  ./config_server_cli.py update --alias NAME [OPTIONS]
+
+  Examples:
+    ./config_server_cli.py update --alias qwen_local --model qwen3:7b
+    ./config_server_cli.py update --alias gpt4_cloud --timeout 300 --temperature 0.5
+
+🗑️ DELETE ALIAS
+  ./config_server_cli.py delete --alias NAME [--force]
+
+  Examples:
+    ./config_server_cli.py delete --alias old_model
+    ./config_server_cli.py delete --alias old_model --force  # Force if active
+
+📚 FULL DOCUMENTATION
+  See: docs/CLI_MODEL_MANAGEMENT.md
+
+=====================================================
+UPDATED: 2025-10-26 - Reflects config_server_cli.py v1.0.1
+         Added: Gemini provider, Vision role support
+=====================================================
