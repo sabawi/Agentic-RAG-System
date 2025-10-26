@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.34"  # 🧪 TEST: Comprehensive test cleanup & security hardening + cloud migration
+VERSION = "1.0.3.35"  # 🐛 FIX: Protobuf dependency conflict with google-generativeai
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE
