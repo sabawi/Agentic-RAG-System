@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.37"  # ✨ FEATURE: Agent system reorganization + 5 new agents + common utilities
+VERSION = "1.0.3.38"  # 🐛 FIX: Add missing openai package to requirements.txt
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE
