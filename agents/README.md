@@ -8,20 +8,68 @@ This directory contains autonomous agents that leverage the Agentic-RAG server's
 agents/
 ├── README.md                    # This file
 ├── AGENTS_OVERVIEW.md           # Comprehensive agents documentation
+├── QUICKSTART.md                # Quick start guide
+├── TESTING_RESULTS.md           # Testing documentation
 ├── agent_template.py            # Template for building new agents
-├── stock_monitor_agent.py       # Example: Stock portfolio monitor
 │
-├── news_retriever/              # News Retrieval Agent
+├── common/                      # Shared utilities for all agents
+│   ├── agent_utils.py          # Core agent utilities
+│   ├── report_utils.py         # HTML report generation
+│   ├── __init__.py
+│   └── README.md
+│
+├── research_assistant/          # Academic paper aggregation
+│   ├── research_assistant.py
+│   ├── config.py
+│   ├── requirements.txt
+│   ├── README.md
+│   └── research_output/
+│
+├── email_digest/                # Email summarization
+│   ├── email_digest.py
+│   ├── config.py
+│   ├── requirements.txt
+│   ├── README.md
+│   └── email_digests/
+│
+├── market_sentiment/            # Market sentiment analysis
+│   ├── market_sentiment.py
+│   ├── config.py
+│   ├── requirements.txt
+│   ├── README.md
+│   └── sentiment_reports/
+│
+├── document_intelligence/       # Document processing
+│   ├── document_intelligence.py
+│   ├── config.py
+│   ├── requirements.txt
+│   ├── README.md
+│   └── document_reports/
+│
+├── social_media_tracker/        # Social media monitoring
+│   ├── social_media_tracker.py
+│   ├── config.py
+│   ├── requirements.txt
+│   ├── README.md
+│   └── social_reports/
+│
+├── stock_monitor/               # Stock portfolio monitoring
+│   ├── stock_monitor.py
+│   ├── config.py
+│   ├── requirements.txt
+│   ├── README.md
+│   └── stock_reports/
+│
+├── news_retriever/              # News retrieval
 │   ├── news_retriever_improved.py
 │   ├── config.py
 │   ├── requirements.txt
 │   ├── README.md
 │   └── news_output/
 │
-└── system_tuner/                # Autonomous System Tuner
+└── system_tuner/                # Autonomous system tuner
     ├── autonomous_system_tuner.py
     ├── README.md
-    ├── system_tuner.log
     └── system_tuning_backups/
 ```
 
@@ -29,7 +77,133 @@ agents/
 
 ## 🤖 Available Agents
 
-### 1. **News Retriever Agent** 📰
+### 1. **Research Assistant Agent** 📚
+**Location:** `research_assistant/`
+**Purpose:** Automated academic and research paper aggregation
+
+**Features:**
+- Monitor specific topics for new academic papers
+- Summarize papers for quick review
+- Track citation trends and research developments
+- Generate reading lists and literature reviews
+- Send curated research digests via email
+
+**Quick Start:**
+```bash
+cd research_assistant
+./research_assistant.py --daily --topics "machine learning" "AI"
+```
+
+**Documentation:** [research_assistant/README.md](research_assistant/README.md)
+
+---
+
+### 2. **Email Digest Agent** 📧
+**Location:** `email_digest/`
+**Purpose:** Automated email summarization and priority management
+
+**Features:**
+- Generate morning email summaries from multiple providers
+- Extract action items and categorize by importance
+- Analyze email sentiment and urgency
+- Send HTML-formatted digest reports
+- Track email patterns and trends
+
+**Quick Start:**
+```bash
+cd email_digest
+./email_digest.py --morning --provider gmail_primary
+```
+
+**Documentation:** [email_digest/README.md](email_digest/README.md)
+
+---
+
+### 3. **Market Sentiment Analyzer** 📈
+**Location:** `market_sentiment/`
+**Purpose:** Monitor market sentiment from news and analyze trends
+
+**Features:**
+- Aggregate financial news and social media sentiment
+- Analyze market trends and sentiment
+- Generate charts and visualizations
+- Create sentiment trend reports
+- Send investment recommendations
+
+**Quick Start:**
+```bash
+cd market_sentiment
+./market_sentiment.py --daily --symbols AAPL TSLA NVDA
+```
+
+**Documentation:** [market_sentiment/README.md](market_sentiment/README.md)
+
+---
+
+### 4. **Document Intelligence Agent** 📄
+**Location:** `document_intelligence/`
+**Purpose:** Automated document processing and insight extraction
+
+**Features:**
+- Monitor document folders for new files
+- Extract key information using document interrogation
+- Create executive summaries
+- Track document changes and versions
+- Generate searchable archives
+
+**Quick Start:**
+```bash
+cd document_intelligence
+./document_intelligence.py --daily --dirs ~/documents ~/reports
+```
+
+**Documentation:** [document_intelligence/README.md](document_intelligence/README.md)
+
+---
+
+### 5. **Social Media Trend Tracker** 📱
+**Location:** `social_media_tracker/`
+**Purpose:** Monitor and analyze social media trends and brand mentions
+
+**Features:**
+- Track brand mentions and social media activity
+- Analyze sentiment and trending topics
+- Monitor competitor activity
+- Generate visual reports and trend analysis
+- Create weekly social media reports
+
+**Quick Start:**
+```bash
+cd social_media_tracker
+./social_media_tracker.py --daily --brands "Nike" "Adidas"
+```
+
+**Documentation:** [social_media_tracker/README.md](social_media_tracker/README.md)
+
+---
+
+### 6. **Stock Monitor Agent** 💹
+**Location:** `stock_monitor/`
+**Purpose:** Real-time stock portfolio monitoring with alerts
+
+**Features:**
+- Monitor stock portfolio performance
+- Alert on significant price changes
+- Generate performance reports
+- Integrate related news
+- Assess portfolio risk
+
+**Quick Start:**
+```bash
+cd stock_monitor
+./stock_monitor.py --daily --symbols AAPL TSLA NVDA
+```
+
+**Documentation:** [stock_monitor/README.md](stock_monitor/README.md)
+
+---
+
+### 7. **News Retriever Agent** 📰
 **Location:** `news_retriever/`
 **Purpose:** Automatically fetch and deliver news summaries
 
@@ -50,16 +224,16 @@ python news_retriever_improved.py --once
 
 ---
 
-### 2. **Autonomous System Tuner** ⚙️
+### 8. **Autonomous System Tuner** ⚙️
 **Location:** `system_tuner/`
 **Purpose:** Self-optimizing system performance tuner
 
 **Features:**
-- **Phase 1:** Discovers system capabilities and limitations
-- **Phase 2:** Researches optimal tuning strategies via LLM
-- **Phase 3:** Plans safe, reversible optimizations
-- **Phase 4:** Executes changes with full backup
-- **Phase 5:** Validates improvements and reports
+- Discovers system capabilities and limitations
+- Researches optimal tuning strategies via LLM
+- Plans safe, reversible optimizations
+- Executes changes with full backup
+- Validates improvements and reports
 
 **Quick Start:**
 ```bash
@@ -84,28 +258,25 @@ python autonomous_system_tuner.py --dry-run
 curl http://localhost:5000/health
 ```
 
-2. **Python Virtual Environment:**
+2. **Dependencies Installed:**
 ```bash
-# Each agent has its own venv (optional)
-cd news_retriever
-python3 -m venv venv
-source venv/bin/activate
+# Install project dependencies (from project root)
 pip install -r requirements.txt
 ```
 
 ### Running Your First Agent
 
-**News Retriever (Quick Test):**
+**Research Assistant (Quick Test):**
 ```bash
-cd news_retriever
-python news_retriever_improved.py --test    # Test connection
-python news_retriever_improved.py --once    # Fetch news once
+cd research_assistant
+./research_assistant.py --test    # Test connection
+./research_assistant.py --daily --topics "AI" "machine learning"    # Run once
 ```
 
-**System Tuner (Safe Dry-Run):**
+**Email Digest (Morning Briefing):**
 ```bash
-cd system_tuner
-python autonomous_system_tuner.py --dry-run  # Plan only, no changes
+cd email_digest
+./email_digest.py --morning --provider gmail_primary
 ```
 
 ---
@@ -125,27 +296,75 @@ Edit `my_custom_agent.py`:
 3. Add custom methods as needed
 4. Update CLI arguments
 
-### Method 2: Study the Examples
+### Method 2: Create Agent Directory
 
-Learn from working agents:
-- **Simple:** `news_retriever_improved.py` - Single-purpose agent
-- **Complex:** `autonomous_system_tuner.py` - Multi-phase autonomous agent
-- **Domain-specific:** `stock_monitor_agent.py` - Financial data agent
+For a properly organized agent:
+```bash
+mkdir my_custom_agent
+cd my_custom_agent
+
+# Copy template
+cp ../agent_template.py my_custom_agent.py
+
+# Create support files
+touch requirements.txt config.py README.md .gitignore
+
+# Create output directory
+mkdir output
+```
+
+### Method 3: Use Common Utilities
+
+Leverage shared utilities for cleaner code:
+```python
+from common import (
+    create_openai_client,
+    test_server_connection,
+    execute_with_retry,
+    setup_agent_logging,
+    create_html_report,
+    save_html_report
+)
+
+# Setup
+logger = setup_agent_logging("my_agent")
+client = create_openai_client("http://localhost:5000/v1")
+
+# Test connection
+if not test_server_connection(client, logger):
+    sys.exit(1)
+
+# Execute with retry
+result = execute_with_retry(
+    client,
+    prompt="Your prompt here",
+    task_description="Fetching data",
+    logger=logger
+)
+
+# Save report
+html = create_html_report("My Report", result)
+save_html_report(html, Path("output"), logger=logger)
+```
+
+**Benefits of Using Common Utilities:**
+- Eliminates code duplication
+- Consistent error handling and retry logic
+- Standardized HTML reports
+- Centralized logging configuration
 
 ---
 
 ## 📚 Documentation
 
 ### Main Documentation
-- **[AGENTS_OVERVIEW.md](AGENTS_OVERVIEW.md)** - Comprehensive guide to all agents
-  - Available server tools
-  - Agent ideas and use cases
-  - Best practices
-  - Troubleshooting
+- **[README.md](README.md)** - This file
+- **[AGENTS_OVERVIEW.md](AGENTS_OVERVIEW.md)** - Comprehensive agent guide
+- **[QUICKSTART.md](QUICKSTART.md)** - Quick start guide
+- **[common/README.md](common/README.md)** - Shared utilities documentation
 
 ### Agent-Specific
-- **[news_retriever/README.md](news_retriever/README.md)** - News agent guide
-- **[system_tuner/README.md](system_tuner/README.md)** - System tuner guide
+Each agent directory contains its own `README.md` with detailed usage instructions.
 
 ### Server Documentation
 - **[../docs/production/USER_GUIDE.md](../docs/production/USER_GUIDE.md)** - Server features and API
@@ -184,57 +403,13 @@ All agents can leverage these server tools:
 
 ---
 
-## 💡 Agent Ideas
-
-Build agents for:
-
-1. **Stock Portfolio Monitor** ✅ (Example included!)
-   - Daily performance reports
-   - Price alerts
-   - Email notifications
-
-2. **Document Summarizer**
-   - Watch folder for new PDFs
-   - Auto-summarize and email
-   - Maintain searchable archive
-
-3. **Email Digest**
-   - Morning briefing from overnight emails
-   - Priority categorization
-   - Action item extraction
-
-4. **Research Aggregator**
-   - Track specific topics
-   - Daily paper digest
-   - Trend analysis
-
-5. **Calendar Assistant**
-   - Daily schedule briefs
-   - Meeting reminders
-   - Travel time calculations
-
-6. **Web Monitor**
-   - Track websites for changes
-   - Keyword alerts
-   - Content archiving
-
-7. **Financial Analyst**
-   - News + stock correlation
-   - Portfolio recommendations
-   - Market sentiment analysis
-
-8. **System Tuner** ✅ (Implemented!)
-   - Autonomous performance optimization
-   - Self-learning tuner
-   - Safe and reversible
-
----
-
-## 🔧 Common Patterns
+## 💡 Common Patterns
 
 ### Pattern 1: Scheduled Task
 ```python
-# Run every N hours/minutes
+import schedule
+
+# Run every N hours
 schedule.every(N).hours.do(task_function)
 
 while True:
@@ -242,87 +417,45 @@ while True:
     time.sleep(60)
 ```
 
-### Pattern 2: Retry Logic
+### Pattern 2: Using Common Utilities
 ```python
-for attempt in range(1, max_retries + 1):
-    try:
-        result = execute_task()
-        return result
-    except Exception as e:
-        if attempt < max_retries:
-            wait_time = 2 ** attempt  # Exponential backoff
-            time.sleep(wait_time)
-```
+from common import execute_with_retry, setup_agent_logging
 
-### Pattern 3: LLM Interaction
-```python
-client = openai.OpenAI(base_url=server_url, api_key="not-required")
+logger = setup_agent_logging("my_agent")
 
-response = client.chat.completions.create(
-    model="Agentic-RAG-Model1",
-    messages=[{"role": "user", "content": prompt}],
-    temperature=0.7
+result = execute_with_retry(
+    client,
+    prompt="Your prompt",
+    task_description="Task description",
+    logger=logger
 )
-
-result = response.choices[0].message.content
 ```
 
-### Pattern 4: CLI Arguments
+### Pattern 3: HTML Report Generation
 ```python
-parser = argparse.ArgumentParser(description="My Agent")
-parser.add_argument('--once', action='store_true')
-parser.add_argument('--schedule', action='store_true')
-parser.add_argument('--test', action='store_true')
-args = parser.parse_args()
+from common import create_html_report, save_html_report
+
+html = create_html_report("Title", content)
+filepath = save_html_report(html, output_dir, logger=logger)
 ```
 
 ---
 
 ## 📊 Performance Tips
 
-### Efficient API Calls
-- Use single, well-crafted prompts
-- Explicitly reference server tools
-- Leverage streaming for long responses
-
-### Error Handling
-- Implement retry logic with exponential backoff
-- Log all errors with context
-- Graceful degradation on failures
-
-### Resource Management
-- Clean up temporary files
-- Close connections properly
-- Monitor memory usage
-
-### Testing
-- Always include test mode (`--test`)
-- Provide run-once mode for debugging
-- Test before deploying to schedule
+- **Efficient API Calls**: Use single, well-crafted prompts
+- **Error Handling**: Implement retry logic with exponential backoff (use `execute_with_retry`)
+- **Resource Management**: Clean up temporary files and close connections
+- **Testing**: Always test with `--test` mode before scheduling
 
 ---
 
 ## 🛡️ Best Practices
 
-1. **Logging**
-   - Use Python's logging module
-   - Log to both file and console
-   - Include timestamps and severity
-
-2. **Configuration**
-   - Use CLI arguments
-   - Environment variables for secrets
-   - Config files for static settings
-
-3. **Safety**
-   - Validate inputs
-   - Handle errors gracefully
-   - Provide rollback capability
-
-4. **Documentation**
-   - Clear README for each agent
-   - Usage examples
-   - Troubleshooting guide
+1. **Logging**: Use `setup_agent_logging` for consistent logging
+2. **Configuration**: Use `config.py` files for settings, `.env` for secrets
+3. **Safety**: Validate inputs and handle errors gracefully
+4. **Documentation**: Include README.md with usage examples in each agent directory
 
 ---
 
@@ -333,113 +466,43 @@ args = parser.parse_args()
 # Check if server is running
 curl http://localhost:5000/health
 
-# Verify server URL in agent config
-# Default: http://localhost:5000/v1
+# Test connection
+cd agent_directory
+./agent_script.py --test
 ```
 
 ### Module Import Errors
 ```bash
-# Ensure virtual environment is activated
-source venv/bin/activate
+# Install dependencies
+pip install -r requirements.txt
 
-# Install/reinstall dependencies
+# Or install from project root
+cd /path/to/flaskserver
 pip install -r requirements.txt
 ```
 
 ### Permission Errors
 ```bash
 # Make agent executable
-chmod +x agent_name.py
-
-# Check file permissions
-ls -l agent_name.py
+chmod +x agent_script.py
 ```
 
 ### Logging Issues
 ```bash
 # Check log file
 tail -f agent_name.log
-
-# Enable verbose logging
-python agent_name.py --verbose
 ```
-
----
-
-## 📈 Agent Performance
-
-### News Retriever
-- **Execution Time:** ~60-90 seconds
-- **API Calls:** 1 (optimized)
-- **Output Size:** ~15KB HTML
-- **Success Rate:** 95%+ with retry logic
-
-### System Tuner
-- **Discovery Phase:** ~5 seconds
-- **Research Phase:** ~60 seconds (LLM query)
-- **Execution Phase:** 2-5 minutes
-- **Overall:** 3-6 minutes for complete tuning
-
----
-
-## 🎓 Learning Resources
-
-### Understanding Agents
-1. Study `agent_template.py` - Basic structure
-2. Review `news_retriever_improved.py` - Simple agent
-3. Analyze `autonomous_system_tuner.py` - Complex agent
-
-### Server Integration
-- Review server tool documentation
-- Test tools via API: `http://localhost:5000/docs`
-- Check server logs for tool execution
-
-### Python Best Practices
-- Logging: Python logging module
-- CLI: argparse library
-- Scheduling: schedule library
-- API: OpenAI client library
-
----
-
-## 🚀 Contributing
-
-To add a new agent:
-
-1. **Create subdirectory:**
-```bash
-mkdir agents/my_agent
-```
-
-2. **Copy template:**
-```bash
-cp agent_template.py agents/my_agent/my_agent.py
-```
-
-3. **Implement functionality:**
-   - Customize `agent_task()` method
-   - Add specific logic
-   - Update CLI arguments
-
-4. **Add documentation:**
-```bash
-# Create README.md in agent directory
-agents/my_agent/README.md
-```
-
-5. **Test thoroughly:**
-```bash
-python my_agent.py --test
-python my_agent.py --once
-```
-
-6. **Update this README:**
-   - Add to "Available Agents" section
-   - Include quick start example
 
 ---
 
 ## 📝 Version History
+
+- **v2.0.0** (2025-10-27)
+  - Added 5 new agents: Research Assistant, Email Digest, Market Sentiment, Document Intelligence, Social Media Tracker
+  - Reorganized all agents into subdirectories
+  - Added common utilities module
+  - Created comprehensive documentation for each agent
+  - Added config.py files for all agents
 
 - **v1.0.0** (2025-10-25)
   - Initial agents directory structure
@@ -461,26 +524,29 @@ Part of the Agentic-RAG Server project.
 **Test an agent:**
 ```bash
 cd agent_name
-python agent_script.py --test
+./agent_script.py --test
 ```
 
 **Run once:**
 ```bash
-python agent_script.py --once
+./agent_script.py --once  # or --daily, --weekly depending on agent
 ```
 
 **Schedule:**
 ```bash
-python agent_script.py --schedule
+./agent_script.py --schedule  # or --schedule-daily, --schedule-morning, etc.
 ```
 
 **Get help:**
 ```bash
-python agent_script.py --help
+./agent_script.py --help
 ```
 
 ---
 
 **Happy Agent Building!** 🤖
 
-For detailed documentation, see [AGENTS_OVERVIEW.md](AGENTS_OVERVIEW.md)
+For detailed documentation, see:
+- [AGENTS_OVERVIEW.md](AGENTS_OVERVIEW.md) - Comprehensive guide
+- Individual agent README.md files in each subdirectory
+- [common/README.md](common/README.md) - Shared utilities guide

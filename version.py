@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.36"  # 🐛 FIX: Base64 image resizing - integrate image_utils.py for vision model
+VERSION = "1.0.3.37"  # ✨ FEATURE: Agent system reorganization + 5 new agents + common utilities
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE

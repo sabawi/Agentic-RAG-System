@@ -1,0 +1,20 @@
+# Output directories
+email_digests/
+
+# Log files
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+env/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo

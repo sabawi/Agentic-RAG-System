@@ -1,0 +1,3 @@
+# Requirements for Stock Monitor Agent
+openai>=1.0.0
+schedule>=1.1.0

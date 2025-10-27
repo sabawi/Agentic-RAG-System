@@ -149,3 +149,6 @@ proto-plus>=1.26.0
 
 # Selenium WebDriver Dependencies (added 2025-09-16)
 webdriver-manager>=4.0.0
+
+# Agent Scheduling Dependencies (added 2025-10-27)
+schedule>=1.1.0
