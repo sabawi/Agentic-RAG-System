@@ -1387,6 +1387,141 @@ context_window_size: 8192    # CRITICAL: Context management
 max_tokens: 4096            # CRITICAL: Output limit
 ```
 
+### Plugin Development
+
+The system supports a powerful plugin architecture for extending functionality with isolated, process-based tools. Plugins are auto-discovered at server startup and run with resource isolation.
+
+#### When to Use Plugins vs User Tools
+
+**Use Plugins when you need:**
+- **Process isolation** - Separate memory space, CPU/memory limits
+- **Resource control** - Timeout, memory limit, CPU limit per execution
+- **Security boundaries** - Strict input/output validation, sandboxed execution
+- **Drop-in deployment** - Just add `.yaml` + handler, no server restart needed after initial load
+- **Third-party integration** - External services that may be unreliable or resource-intensive
+
+**Use User Tools (in `/user_tools/`) when you need:**
+- **Performance** - Direct function calls, no process overhead
+- **Shared state** - Access to server memory, database connections
+- **Complex orchestration** - Multi-step workflows requiring server context
+- **Core functionality** - Essential features that must always be available
+
+#### Quick Start: Creating Your First Plugin
+
+**1. Create plugin definition** (`/plugins/my_tool.yaml`):
+```yaml
+name: my_tool
+description: Brief description of what your tool does
+version: 1.0.0
+parameters:
+  - name: input_param
+    type: string
+    description: What this parameter does
+    required: true
+handler: plugins/handlers/my_tool.py
+```
+
+**2. Create plugin handler** (`/plugins/handlers/my_tool.py`):
+```python
+#!/usr/bin/env python3
+"""Plugin handler implementation"""
+
+async def execute(params: dict) -> dict:
+    """
+    Main execution function called by plugin system.
+
+    Args:
+        params: Validated input parameters from YAML definition
+
+    Returns:
+        dict: Must contain 'success' (bool) and 'result' keys
+    """
+    try:
+        input_param = params.get('input_param')
+
+        # Your plugin logic here
+        result = f"Processed: {input_param}"
+
+        return {
+            'success': True,
+            'result': result
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e)
+        }
+```
+
+**3. Test your plugin:**
+```bash
+# Restart server to load new plugin
+./stop_complete.sh && ./start_complete.sh
+
+# Check logs for plugin loading
+tail -f logs/server_complete.log | grep "🔌"
+# Expected: 🔌 Loaded N plugins in X.XXXs (should include my_tool)
+
+# Test via API
+curl -X POST http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Agentic-RAG-Model1", "messages": [{"role": "user", "content": "Use my_tool with input hello"}]}'
+```
+
+#### Plugin Resource Configuration (Optional)
+
+Plugins work with sensible defaults. Only add configuration to `config/llm_config.yaml` if you need custom settings:
+
+```yaml
+plugins:
+  enabled: true  # Default: true
+
+  plugin_defaults:
+    execution:
+      timeout: 60          # Default: 60 seconds
+      memory_limit: 256    # Default: 256MB
+      cpu_limit: 1.0       # Default: 1.0 CPU core
+      max_timeout: 600     # Maximum allowed timeout
+
+    security:
+      input_validation:
+        max_string_length: 102400   # Default: 100KB
+        max_array_length: 1000      # Default: 1000 items
+      output_validation:
+        max_result_size: 1048576    # Default: 1MB
+
+  # Optional: Per-plugin overrides
+  my_heavy_tool:
+    execution:
+      timeout: 180         # 3 minutes for resource-intensive operations
+      memory_limit: 512    # 512MB for large data processing
+```
+
+#### Plugin Documentation
+
+For comprehensive plugin development and management information:
+
+- **📖 Start Here:** `/docs/PLUGIN_USER_GUIDE.md` - Complete user guide with examples
+- **🏗️ Architecture:** `/docs/PLUGIN_ARCHITECTURE_DESIGN.md` - Technical design and implementation
+- **⚡ Quick Start:** `/docs/QUICK_PLUGIN_GUIDE.md` - Fast tutorial for plugin creation
+- **📝 Cheat Sheet:** `/docs/PLUGIN_CHEAT_SHEET.md` - Common patterns and troubleshooting
+- **🎯 Example:** `/docs/FORTUNE_PLUGIN_EXAMPLE.md` - Real-world plugin implementation
+
+#### Plugin Decision Matrix
+
+| Requirement | Plugin | User Tool |
+|------------|--------|-----------|
+| Process isolation needed | ✅ | ❌ |
+| Resource limits required | ✅ | ❌ |
+| Third-party API integration | ✅ | ⚠️ |
+| Sub-second response time critical | ❌ | ✅ |
+| Needs server state access | ❌ | ✅ |
+| Complex multi-step workflows | ❌ | ✅ |
+| Drop-in deployment | ✅ | ❌ |
+| Security-sensitive operations | ✅ | ⚠️ |
+
+**Note:** The plugin system is separate from LLM configuration. See `/docs/PROJECT_CONFIGURATION_DIRECTIVE.md` for details on the distinction between LLM config (explicit, mandatory) and plugin config (auto-discovery, optional).
+
 ---
 
 ## 6. Arbitrator System

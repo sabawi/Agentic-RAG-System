@@ -225,6 +225,106 @@ grep -r "3600\|8192\|11434" --include="*.py" .
 
 ---
 
+## 🔌 PLUGIN CONFIGURATION (SEPARATE SYSTEM)
+
+**IMPORTANT:** Plugins use a **separate configuration architecture** from LLM configuration documented above.
+
+### Plugin Configuration Model
+
+- **Auto-discovery:** Plugins in `/plugins/*.yaml` are automatically loaded on server startup
+- **Optional configuration:** Add `plugins:` section to `llm_config.yaml` for customization only if needed
+- **Default behavior:** Sensible defaults (60s timeout, 256MB memory limit, 1.0 CPU limit)
+- **Process isolation:** Plugins run in separate processes with resource limits
+
+### Current Plugin Status
+
+Check server logs on startup:
+```bash
+tail logs/server_complete.log | grep "🔌"
+# Output example: 🔌 Loaded 8 plugins in 0.048s
+```
+
+### Plugin Documentation
+
+See dedicated plugin documentation for detailed information:
+
+- **📖 User Guide:** `/docs/PLUGIN_USER_GUIDE.md` (Start here!)
+- **🏗️ Architecture Design:** `/docs/PLUGIN_ARCHITECTURE_DESIGN.md`
+- **⚡ Quick Start:** `/docs/QUICK_PLUGIN_GUIDE.md`
+- **📝 Cheat Sheet:** `/docs/PLUGIN_CHEAT_SHEET.md`
+- **🎯 Example Plugin:** `/docs/FORTUNE_PLUGIN_EXAMPLE.md`
+
+### When to Add `plugins:` to llm_config.yaml
+
+You only need to add plugin configuration if you want to:
+1. **Override resource limits** (increase timeouts, memory, CPU)
+2. **Customize security settings** (string length, array limits)
+3. **Explicitly disable plugin system** (not recommended)
+4. **Set per-plugin overrides** (different settings for specific plugins)
+
+### Example Plugin Configuration (Optional)
+
+```yaml
+plugins:
+  enabled: true  # Optional: explicitly enable/disable plugin system
+
+  plugin_defaults:
+    execution:
+      timeout: 120  # Override default 60s
+      memory_limit: 512  # Override default 256MB (in MB)
+      cpu_limit: 2.0  # Override default 1.0 (number of CPU cores)
+      max_timeout: 600  # Maximum allowed timeout
+      max_memory_limit: 4096  # Maximum allowed memory
+
+    security:
+      input_validation:
+        max_string_length: 204800  # Double default (102400)
+        max_array_length: 2000  # Double default (1000)
+      output_validation:
+        max_result_size: 2097152  # 2MB max result
+
+  # Optional: Per-plugin overrides
+  social_media_twitter_test:
+    execution:
+      timeout: 180  # Social media operations may need more time
+```
+
+### Plugin vs LLM Configuration
+
+| Aspect | LLM Configuration | Plugin Configuration |
+|--------|-------------------|----------------------|
+| **Purpose** | Core LLM behavior | Tool extensions |
+| **Location** | `llm_config.yaml` (required) | `llm_config.yaml` (optional) |
+| **Discovery** | Explicit configuration | Auto-discovery from `/plugins/` |
+| **Defaults** | Must be configured | Sensible defaults provided |
+| **Failure Mode** | Fail-fast if missing | Use defaults if missing |
+| **This Directive** | Fully applies | Separate architecture |
+
+### Key Differences
+
+1. **LLM config is mandatory** - server fails without it
+2. **Plugin config is optional** - system works with sensible defaults
+3. **Plugins auto-discover** - just drop YAML + handler in `/plugins/`
+4. **Different paradigm** - plugins are "drop-in extensions" not core infrastructure
+
+### Plugin Configuration Compliance
+
+✅ **Plugin configuration is compliant when:**
+- Plugin YAML files are in `/plugins/` directory
+- Plugin handlers are in `/plugins/handlers/` directory
+- Optional `plugins:` section in llm_config.yaml if custom settings needed
+- Plugins load successfully on server startup (check logs)
+
+❌ **Plugin configuration issues:**
+- Hardcoded plugin settings in server code
+- Plugin logic embedded in main server file
+- Missing plugin handler files
+- Invalid YAML syntax in plugin definitions
+
+**NOTE:** This directive focuses on LLM configuration. For comprehensive plugin documentation, see the dedicated plugin guides listed above.
+
+---
+
 **DIRECTIVE AUTHORITY:** Project Architecture Team
 **ENFORCEMENT:** Mandatory for all developers
 **REVIEW CYCLE:** Quarterly or as needed

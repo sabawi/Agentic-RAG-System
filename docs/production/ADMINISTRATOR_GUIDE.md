@@ -1544,6 +1544,300 @@ curl http://localhost:5000/documents/stats
 
 ---
 
+## 7A. PLUGIN SYSTEM ADMINISTRATION
+
+The plugin system provides process-isolated, resource-controlled extensions to server functionality. Plugins are auto-discovered at server startup and require no code changes to deploy.
+
+### Plugin Overview
+
+**Key Features:**
+- **Auto-Discovery**: Drop `.yaml` + handler files in `/plugins/` directory
+- **Process Isolation**: Each plugin runs in separate process with resource limits
+- **Zero-Config**: Works with sensible defaults (60s timeout, 256MB memory, 1.0 CPU)
+- **Optional Configuration**: Override defaults in `config/llm_config.yaml` only if needed
+
+### Checking Plugin Status
+
+**Verify Plugins on Startup:**
+```bash
+# Check server startup logs for plugin loading
+tail -100 logs/server_complete.log | grep "🔌"
+
+# Expected output:
+# 🔌 Loaded 8 plugins in 0.048s
+# 🔌 Plugin: get_news_summaries (v1.0.0)
+# 🔌 Plugin: social_media_twitter_test (v1.0.0)
+# ...
+```
+
+**List Loaded Plugins:**
+```bash
+# Check server logs for complete plugin list
+grep "🔌 Plugin:" logs/server_complete.log | tail -20
+
+# Should show all loaded plugins with versions
+```
+
+### Installing New Plugins
+
+**1. Deploy Plugin Files:**
+```bash
+# Copy plugin definition
+cp your_plugin.yaml /path/to/server/plugins/
+
+# Copy plugin handler
+cp your_plugin.py /path/to/server/plugins/handlers/
+
+# Set proper permissions
+chmod 644 plugins/your_plugin.yaml
+chmod 755 plugins/handlers/your_plugin.py
+```
+
+**2. Restart Server:**
+```bash
+# Stop server
+./stop_complete.sh
+
+# Start server (plugins auto-load)
+./start_complete.sh
+
+# Verify plugin loaded
+tail -f logs/server_complete.log | grep "🔌 Plugin: your_plugin"
+```
+
+**3. Verify Plugin Availability:**
+```bash
+# Test plugin execution via API
+curl -X POST http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Agentic-RAG-Model1",
+    "messages": [{
+      "role": "user",
+      "content": "Use your_plugin to test functionality"
+    }]
+  }'
+```
+
+### Plugin Configuration (Optional)
+
+**Default Configuration (No Configuration Needed):**
+
+Plugins work out-of-the-box with these defaults:
+- Timeout: 60 seconds
+- Memory limit: 256MB
+- CPU limit: 1.0 core
+- Max string length: 100KB
+- Max array length: 1000 items
+
+**Custom Configuration:**
+
+Only add to `config/llm_config.yaml` if you need to override defaults:
+
+```yaml
+plugins:
+  enabled: true  # Optional: explicitly enable/disable
+
+  plugin_defaults:
+    execution:
+      timeout: 120          # Override default 60s
+      memory_limit: 512     # Override default 256MB
+      cpu_limit: 2.0        # Override default 1.0 CPU
+      max_timeout: 600      # Maximum allowed timeout
+
+    security:
+      input_validation:
+        max_string_length: 204800   # 200KB (double default)
+        max_array_length: 2000      # 2000 items (double default)
+      output_validation:
+        max_result_size: 2097152    # 2MB max result
+
+  # Per-plugin overrides (optional)
+  social_media_twitter_test:
+    execution:
+      timeout: 180         # Social media operations may take longer
+      memory_limit: 512    # More memory for image processing
+```
+
+**Apply Configuration Changes:**
+```bash
+# Edit configuration
+vim config/llm_config.yaml
+
+# Restart server to apply changes
+./stop_complete.sh && ./start_complete.sh
+
+# Verify changes in logs
+tail -f logs/server_complete.log | grep -i plugin
+```
+
+### Monitoring Plugin Execution
+
+**Real-Time Plugin Monitoring:**
+```bash
+# Monitor all plugin activity
+tail -f logs/server_complete.log | grep -E "(🔌|Plugin)"
+
+# Monitor plugin execution times
+tail -f logs/server_complete.log | grep "execution_time"
+
+# Monitor plugin errors
+tail -f logs/server_complete.log | grep -E "(Plugin.*error|Plugin.*failed)"
+```
+
+**Plugin Performance Analysis:**
+```bash
+# Check for slow plugins (>30s execution time)
+grep "execution_time" logs/server_complete.log | awk '$NF > 30' | tail -20
+
+# Count plugin invocations by type
+grep "🔌 Plugin:" logs/server_complete.log | cut -d: -f2 | sort | uniq -c | sort -rn
+
+# Find plugins hitting timeout limits
+grep "Plugin.*timeout" logs/server_complete.log | tail -20
+```
+
+### Troubleshooting Plugins
+
+**Plugin Not Loading:**
+
+```bash
+# 1. Check plugin YAML syntax
+python3 -c "import yaml; yaml.safe_load(open('plugins/your_plugin.yaml'))"
+
+# 2. Verify handler file exists
+ls -la plugins/handlers/your_plugin.py
+
+# 3. Check handler is executable
+chmod +x plugins/handlers/your_plugin.py
+
+# 4. Check for errors in server logs
+grep "your_plugin" logs/server_complete.log | grep -i error
+```
+
+**Plugin Execution Failures:**
+
+```bash
+# Check for timeout errors
+grep "your_plugin.*timeout" logs/server_complete.log
+
+# Solution: Increase timeout in config/llm_config.yaml
+# plugins:
+#   your_plugin:
+#     execution:
+#       timeout: 180  # Increase from default 60s
+
+# Check for memory errors
+grep "your_plugin.*memory" logs/server_complete.log
+
+# Solution: Increase memory limit
+# plugins:
+#   your_plugin:
+#     execution:
+#       memory_limit: 512  # Increase from default 256MB
+```
+
+**Plugin Process Issues:**
+
+```bash
+# Check for orphaned plugin processes
+ps aux | grep "plugin" | grep -v grep
+
+# Kill orphaned processes if found
+pkill -f "plugin.*your_plugin"
+
+# Restart server for clean state
+./stop_complete.sh && sleep 5 && ./start_complete.sh
+```
+
+### Plugin Security
+
+**File Permissions:**
+```bash
+# Secure plugin directory
+chmod 755 plugins/
+chmod 755 plugins/handlers/
+
+# Plugin YAML files should be read-only
+chmod 644 plugins/*.yaml
+
+# Handler scripts should be executable
+chmod 755 plugins/handlers/*.py
+```
+
+**Resource Limits:**
+
+Monitor resource usage to prevent plugin abuse:
+```bash
+# Monitor plugin memory usage
+ps aux --sort=-%mem | grep plugin | head -10
+
+# Monitor plugin CPU usage
+ps aux --sort=-%cpu | grep plugin | head -10
+
+# Set stricter limits if needed in config/llm_config.yaml
+```
+
+### Plugin Maintenance
+
+**Updating Plugins:**
+```bash
+# 1. Stop server
+./stop_complete.sh
+
+# 2. Update plugin files
+cp updated_plugin.yaml plugins/
+cp updated_handler.py plugins/handlers/
+
+# 3. Start server
+./start_complete.sh
+
+# 4. Verify update
+tail -f logs/server_complete.log | grep "🔌 Plugin: updated_plugin"
+```
+
+**Disabling Plugins:**
+```bash
+# Method 1: Remove plugin files
+mv plugins/your_plugin.yaml plugins/disabled/
+mv plugins/handlers/your_plugin.py plugins/handlers/disabled/
+
+# Method 2: Disable entire plugin system (config/llm_config.yaml)
+# plugins:
+#   enabled: false
+
+# Restart server
+./stop_complete.sh && ./start_complete.sh
+```
+
+**Backup Plugin Configuration:**
+```bash
+# Backup all plugins
+tar -czf plugins_backup_$(date +%Y%m%d).tar.gz plugins/
+
+# Restore from backup
+tar -xzf plugins_backup_20251026.tar.gz
+```
+
+### Plugin Documentation
+
+For detailed plugin development and architecture information:
+
+- **📖 User Guide:** `/docs/PLUGIN_USER_GUIDE.md` - Complete usage guide
+- **🏗️ Architecture:** `/docs/PLUGIN_ARCHITECTURE_DESIGN.md` - System design details
+- **⚡ Quick Start:** `/docs/QUICK_PLUGIN_GUIDE.md` - Fast deployment tutorial
+- **📝 Cheat Sheet:** `/docs/PLUGIN_CHEAT_SHEET.md` - Common operations reference
+- **🎯 Example:** `/docs/FORTUNE_PLUGIN_EXAMPLE.md` - Reference implementation
+
+**Configuration Directive:**
+
+See `/docs/PROJECT_CONFIGURATION_DIRECTIVE.md` for information on:
+- Plugin configuration vs LLM configuration architecture
+- Auto-discovery model vs explicit configuration
+- When plugin configuration is required vs optional
+
+---
+
 ## 8. SECURITY ADMINISTRATION (A-3)
 
 ### Email Security Setup
