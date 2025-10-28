@@ -15,7 +15,7 @@ Features:
 - Automated email delivery of reports
 
 Author: Agentic-RAG Development Team
-Version: 1.0.3
+Version: 1.0.4
 """
 
 import argparse
@@ -354,9 +354,60 @@ CRITICAL FORMATTING REQUIREMENTS:
             task_description="Document analysis"
         )
 
+    def fetch_stock_data_for_companies(self, companies: List[str]) -> Optional[str]:
+        """
+        Fetch stock data for multiple companies.
+
+        Args:
+            companies: List of company names or ticker symbols
+
+        Returns:
+            Dictionary with company data or None if failed
+        """
+        companies_str = ", ".join(companies)
+
+        prompt = f"""
+Please fetch current stock and company data for the following companies: {companies_str}
+
+Use the get_stock_and_company_data tool for EACH company to get:
+- Current stock price
+- Market capitalization
+- 52-week high/low
+- P/E ratio
+- Recent price change percentage
+
+Format the response as a structured summary with each company's data clearly listed.
+Include the EXACT numerical values returned by the tool.
+
+Example format:
+Company: Tesla
+Stock Price: $250.50
+Market Cap: $795.2 billion
+52-Week Range: $101.81 - $278.98
+P/E Ratio: 79.45
+Price Change: +2.5%
+
+[Repeat for each company]
+"""
+
+        response = execute_with_retry(
+            self.client,
+            prompt,
+            max_retries=self.max_retries,
+            temperature=0.1,  # Very low for factual data retrieval
+            max_tokens=2048,
+            logger=self.logger,
+            task_description="Stock data fetching"
+        )
+
+        if response:
+            self.logger.info(f"Fetched stock data for {len(companies)} companies")
+
+        return response
+
     def analyze_competitors(self) -> Optional[str]:
         """
-        Analyze competitors.
+        Analyze competitors with structured data fetching and visualization.
 
         Returns:
             Competitor analysis as string or None if failed
@@ -364,28 +415,71 @@ CRITICAL FORMATTING REQUIREMENTS:
         if not self.competitors:
             return "No competitors provided for analysis."
 
+        # Phase 1: Fetch stock data for all competitors first
+        self.logger.info(f"Phase 1: Fetching stock data for competitors: {', '.join(self.competitors)}")
+
+        # Include primary company if specified
+        companies_to_analyze = []
+        if self.company:
+            companies_to_analyze.append(self.company)
+        companies_to_analyze.extend(self.competitors)
+
+        stock_data = self.fetch_stock_data_for_companies(companies_to_analyze)
+
+        if not stock_data:
+            self.logger.warning("Failed to fetch stock data, proceeding without structured data")
+            stock_data = "Stock data unavailable"
+
+        # Phase 2: Create visualization with the fetched data
+        self.logger.info("Phase 2: Creating visualizations with real stock data")
+        visualization_prompt = f"""
+Using the following REAL stock data, create a stock price comparison chart:
+
+{stock_data}
+
+Create a professional bar chart or line chart comparing the current stock prices and market caps.
+Use the EXACT values from the data above.
+Include proper labels, a legend, and a title.
+"""
+
+        visualization_result = execute_with_retry(
+            self.client,
+            f"analytical_visualizer: {visualization_prompt}",
+            max_retries=2,
+            temperature=0.3,
+            max_tokens=2048,
+            logger=self.logger,
+            task_description="Competitor visualization"
+        )
+
+        # Phase 3: Comprehensive competitor analysis
+        self.logger.info("Phase 3: Generating comprehensive competitor analysis")
         competitors_str = ", ".join(self.competitors)
-        
-        prompt = f"""
+
+        analysis_prompt = f"""
 Please perform a comprehensive competitor analysis for: {competitors_str}
 
-Use multiple tools to gather competitive intelligence:
+REAL STOCK DATA ALREADY FETCHED:
+{stock_data}
+
+Use this data and gather additional intelligence:
 1. Use search_web to find recent news and developments
 2. Use get_news_summaries for latest updates
-3. Use get_stock_and_company_data for financial comparisons
-4. Use analytical_visualizer to create comparison charts
+3. Reference the stock data provided above for financial comparisons
 
 Provide a detailed competitor analysis including:
 
 1. Market share and positioning
-2. Financial performance comparison
+2. Financial performance comparison (using the data above)
 3. Product/service offerings comparison
 4. Strategic initiatives and roadmaps
 5. Strengths and weaknesses
 6. Recent developments and news
-7. Market capitalization comparison
+7. Market capitalization comparison (using data above)
 8. Growth strategies
 9. Competitive advantages/disadvantages
+
+{f"VISUALIZATION CREATED:{chr(10)}{visualization_result}" if visualization_result else ""}
 
 CRITICAL FORMATTING REQUIREMENTS:
 1. OUTPUT MUST BE HTML CONTENT ONLY - NO markdown syntax anywhere
@@ -400,11 +494,12 @@ CRITICAL FORMATTING REQUIREMENTS:
    - <strong> and <em> for emphasis (NOT ** or *)
    - <div class="info">, <div class="high">, <div class="medium"> for styled sections
 6. Start directly with content (e.g., <h2>Competitor Analysis</h2><p>Content here...</p>)
+7. Include the visualization if it was created above
 """
 
         return execute_with_retry(
             self.client,
-            prompt,
+            analysis_prompt,
             max_retries=self.max_retries,
             temperature=0.5,  # Higher for comparative analysis
             max_tokens=4096,

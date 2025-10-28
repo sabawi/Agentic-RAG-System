@@ -36,6 +36,44 @@ An advanced AI-powered server with multi-LLM orchestration, tool calling, docume
 - **[CLI Model Management](docs/CLI_MODEL_MANAGEMENT.md)** - 🆕 Easy model switching and configuration
 - **[News Sources Configuration](docs/NEWS_SOURCES_CONFIGURATION.md)** - Customize news sources without code changes
 
+## 🤖 Pre-Built Intelligent Agents
+
+Explore **production-ready agent examples** in the `./agents` directory showcasing the server's powerful capabilities:
+
+### Featured Agents
+- **[Business Intelligence Agent](agents/business_intelligence/)** - Automated strategic analysis with market research, financial analysis, competitor intelligence, and executive reporting
+- **[Stock Monitor Agent](agents/stock_monitor/)** - Real-time portfolio monitoring with price alerts and automated email notifications
+- **[News Retriever Agent](agents/news_retriever/)** - Multi-source news aggregation with intelligent summarization
+- **[Market Sentiment Agent](agents/market_sentiment/)** - Financial market sentiment analysis and trend detection
+- **[Social Media Tracker](agents/social_media_tracker/)** - Social media monitoring and engagement analytics
+- **[Document Intelligence Agent](agents/document_intelligence/)** - Document analysis and insight extraction
+- **[Email Digest Agent](agents/email_digest/)** - Smart email summarization and priority detection
+- **[Research Assistant Agent](agents/research_assistant/)** - Academic research with paper search and synthesis
+
+### Getting Started with Agents
+```bash
+# Explore available agents
+cd agents
+ls -l
+
+# Run a specific agent (example: Business Intelligence)
+cd business_intelligence
+./business_intelligence.py --test
+
+# View agent documentation
+cat README.md
+```
+
+**Key Features Demonstrated:**
+- Multi-tool orchestration (news, web search, stock data, documents)
+- Automated scheduling and monitoring
+- Professional HTML report generation
+- Email delivery integration
+- Data visualization and charts
+- Graceful error handling and retry logic
+
+**Learn More**: See [agents/README.md](agents/README.md) for the complete agent catalog and development guide.
+
 ## 🚀 Quick Start
 
 ### Automated Installation (Recommended)
