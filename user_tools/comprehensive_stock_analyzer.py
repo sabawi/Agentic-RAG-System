@@ -42,9 +42,9 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
     
     @property
     def description(self) -> str:
-        # 🚨 PROTECTED: Clean description without aggressive language or conflicts  
+        # 🚨 PROTECTED: Clean description without aggressive language or conflicts
         # NEVER add emojis, "PRIMARY", "ULTIMATE" or redirections - breaks multi-tool calling
-        return "COMPLETE individual stock analysis including real-time data, fundamentals, news analysis, and sentiment for ONE specific ticker (AAPL, MSFT, etc). INCLUDES relevant company news and analysis. Do NOT use for: general market news, market summaries, multiple stocks. This tool provides ALL needed data for single stock analysis."
+        return "COMPLETE individual stock analysis including real-time data, fundamentals, news analysis, and sentiment for ONE specific ticker (AAPL, MSFT, etc). INCLUDES relevant company news and analysis. IMPORTANT: Use detailed=true parameter when user requests fundamental analysis, DCF valuation, financial ratios, or projections to get full financial statements and comprehensive analysis. Do NOT use for: general market news, market summaries, multiple stocks. This tool provides ALL needed data for single stock analysis."
     
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -55,6 +55,11 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
                     "type": "string",
                     "description": "Stock ticker symbol (e.g., 'AAPL', 'MSFT', 'GOOGL')",
                     "pattern": "^[A-Z]{1,5}$"
+                },
+                "detailed": {
+                    "type": "boolean",
+                    "description": "Set to true to include comprehensive financial statements, 20+ financial ratios, DCF intrinsic valuation, and 3-year projections. Use detailed=true when user asks for fundamental analysis, valuation, or financial metrics.",
+                    "default": False
                 }
             },
             "required": ["ticker"]
@@ -242,7 +247,16 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
             return "N/A"
         try:
             if isinstance(dividend_yield, (int, float)) and dividend_yield > 0:
-                return f"{dividend_yield:.2%}"
+                # Handle inconsistent yfinance data formats
+                # Dividend yields are typically < 10%, so if value > 0.1 (10%),
+                # it's likely already in percentage form and needs conversion
+                if dividend_yield > 0.1:
+                    # Value is likely already a percentage (e.g., 0.38 = 38%)
+                    # Convert back to decimal and format
+                    return f"{dividend_yield / 100:.2%}"
+                else:
+                    # Value is in decimal form (e.g., 0.0038 = 0.38%)
+                    return f"{dividend_yield:.2%}"
             else:
                 return "N/A"
         except:
@@ -561,6 +575,7 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
         """Fetch raw financial data for the specified ticker"""
         try:
             ticker = kwargs.get("ticker", "").upper().strip()
+            detailed = kwargs.get("detailed", False)
 
             if not ticker:
                 return {
@@ -601,8 +616,58 @@ class ComprehensiveStockAnalyzerTool(BaseUserTool):
             news_items = self._get_company_news(ticker, company_name)
             news_sentiment = self._analyze_news_sentiment(news_items, ticker)
 
-            # Return ONLY raw data - no analysis, no file creation
+            # Generate basic analysis
             raw_data_report = self._analyze_data(real_time_data, ticker, news_items, news_sentiment)
+
+            # Check if detailed analysis is requested AND enabled
+            if detailed:
+                from config.feature_flags import FeatureFlags
+
+                if FeatureFlags.ENABLE_DETAILED_ANALYSIS:
+                    try:
+                        # Import detailed analysis utilities
+                        from utils.financial_statements_extractor import FinancialStatementsExtractor
+                        from utils.financial_ratio_calculator import FinancialRatioCalculator
+                        from utils.dcf_calculator import DCFCalculator
+                        from utils.projection_engine import ProjectionEngine
+
+                        detailed_output = []
+
+                        # Extract financial statements
+                        if FeatureFlags.DETAILED_ANALYSIS_FINANCIAL_STATEMENTS:
+                            extractor = FinancialStatementsExtractor()
+                            financials = extractor.extract_financials(ticker)
+                            if financials:
+                                detailed_output.append(extractor.format_for_llm(financials, ticker))
+
+                        # Calculate financial ratios
+                        if FeatureFlags.DETAILED_ANALYSIS_FINANCIAL_RATIOS:
+                            ratio_calc = FinancialRatioCalculator()
+                            ratios = ratio_calc.calculate_all_ratios(financials, real_time_data)
+                            detailed_output.append(ratio_calc.format_ratios_for_llm(ratios, ticker))
+
+                        # Calculate DCF valuation
+                        if FeatureFlags.DETAILED_ANALYSIS_DCF_VALUATION:
+                            dcf_calc = DCFCalculator()
+                            dcf_result = dcf_calc.calculate_intrinsic_value(ticker, financials, real_time_data)
+                            detailed_output.append(dcf_calc.format_dcf_for_llm(dcf_result, ticker))
+
+                        # Generate projections
+                        if FeatureFlags.DETAILED_ANALYSIS_PROJECTIONS:
+                            projector = ProjectionEngine()
+                            projections = projector.generate_projections(ticker, financials)
+                            detailed_output.append(projector.format_projections_for_llm(projections, ticker))
+
+                        # Append detailed analysis to basic report
+                        if detailed_output:
+                            raw_data_report += "\n\n" + "\n".join(detailed_output)
+
+                    except Exception as e:
+                        # Graceful degradation - if detailed analysis fails, just log and continue
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"Detailed analysis failed for {ticker}: {e}")
+                        raw_data_report += f"\n\n⚠️ **Note**: Detailed analysis partially unavailable - {str(e)}"
 
             return {
                 "success": True,

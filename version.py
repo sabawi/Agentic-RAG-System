@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.39"  # 📚 DOCS: Complete agent system implementation documentation
+VERSION = "1.0.3.42"  # 📝 DOCS: Improve tool description for detailed analysis parameter
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE
