@@ -1,0 +1,13 @@
+CRITICAL FORMATTING REQUIREMENTS:
+1. OUTPUT MUST BE HTML CONTENT ONLY - NO markdown syntax anywhere
+2. DO NOT wrap output in code blocks (NO ```html or ``` markers)
+3. DO NOT include <!DOCTYPE>, <html>, <head>, or <body> tags
+4. Generate HTML CONTENT FRAGMENTS that will be inserted into an existing HTML document
+5. Use semantic HTML tags:
+   - <h2>, <h3>, <h4> for headings (NOT # ## ###)
+   - <p> for paragraphs
+   - <ul><li> and <ol><li> for lists (NOT - or *)
+   - <table><tr><th><td> for tables (NOT | pipes |)
+   - <strong> and <em> for emphasis (NOT ** or *)
+   - <div class="info">, <div class="high">, <div class="medium"> for styled sections
+6. Start directly with content (e.g., <h2>Market Overview</h2><p>Content here...</p>)
