@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.43"  # 🚀 FEATURE: Enhanced Data Collection (SEC EDGAR, Academic Research, Enhanced RSS, +38 news sources)
+VERSION = "1.0.3.44"  # 🚀 FEATURE: Business Intelligence Agent v1.0.5 (Context-aware analysis, citations, peer comparison, investment recommendations, data sources)
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE

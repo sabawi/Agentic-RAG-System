@@ -15,7 +15,7 @@ Features:
 - Automated email delivery of reports
 
 Author: Agentic-RAG Development Team
-Version: 1.0.4
+Version: 1.0.5
 """
 
 import argparse
@@ -48,6 +48,9 @@ from common.report_utils import (
     save_html_report,
     send_email_report
 )
+# Import context detection and citation formatting (v1.0.5 enhancements)
+from common.context_detector import AnalysisContext
+from common.citation_formatter import CitationFormatter
 
 
 def clean_html_response(content: str) -> str:
@@ -149,13 +152,25 @@ class BusinessIntelligenceAgent:
             log_file="business_intelligence.log"
         )
 
+        # Initialize context detector (v1.0.5 enhancement)
+        self.context = AnalysisContext(
+            company=company,
+            competitors=competitors,
+            sectors=sectors,
+            research_topics=research_topics
+        )
+
+        # Initialize citation formatter (v1.0.5 enhancement)
+        self.citation_formatter = CitationFormatter()
+
         # Combine all targets for monitoring
         all_targets = [self.company] if self.company else []
         all_targets.extend(self.competitors)
         all_targets.extend(self.sectors)
         all_targets.extend(self.research_topics)
-        
+
         self.logger.info(f"BusinessIntelligenceAgent initialized for: {', '.join(filter(None, all_targets))}")
+        self.logger.info(f"Context detected: {self.context.context_type}")
 
     def test_connection(self) -> bool:
         """Test connection to the server."""
@@ -185,7 +200,8 @@ Use multiple tools to gather comprehensive market intelligence:
 1. Use get_news_summaries to find the latest news about these companies/sectors
 2. Use search_web to gather additional market insights
 3. Use published_papers_search to find academic research
-4. Use analytical_visualizer to create relevant charts if possible
+
+IMPORTANT: Focus on DATA and ANALYSIS with citations. Do NOT create generic placeholder visualizations.
 
 Provide a comprehensive market research report including:
 
@@ -197,6 +213,27 @@ Provide a comprehensive market research report including:
 6. Regulatory impacts
 7. Consumer behavior changes
 8. Competitive landscape overview
+
+🚨 MANDATORY CITATION REQUIREMENT (v1.0.5 Enhancement) 🚨
+EVERY SINGLE data point, statistic, projection, or claim MUST include an inline citation marker.
+This is NOT optional - failure to include citations will result in rejection.
+
+REQUIRED FORMAT (use HTML exactly as shown):
+- News articles: <span class="citation">[Source: NEWS_SOURCE, "ARTICLE_TITLE", DATE]</span>
+- Research papers: <span class="citation">[Source: AUTHORS, "PAPER_TITLE", VENUE, YEAR]</span>
+- Web sources: <span class="citation">[Source: DOMAIN, "PAGE_TITLE", accessed DATE]</span>
+- Market data: <span class="citation">[Source: DATA_PROVIDER, as of DATE]</span>
+
+REQUIRED EXAMPLE (notice citation marker immediately after data):
+<p>The EV market is projected to grow at 23% CAGR <span class="citation">[Source: Bloomberg, "Electric Vehicle Market Outlook", 2024-10-15]</span></p>
+<p>Global smartphone sales reached 1.2B units <span class="citation">[Source: IDC, "Worldwide Quarterly Mobile Phone Tracker", Q3 2024]</span></p>
+
+VERIFICATION CHECKLIST - Before submitting, ensure:
+✓ Every numerical value has inline <span class="citation">
+✓ Every market projection has inline <span class="citation">
+✓ Every trend claim has inline <span class="citation">
+✓ Every statistic has inline <span class="citation">
+✓ Citation appears IMMEDIATELY after the data value (not end of paragraph)
 
 CRITICAL FORMATTING REQUIREMENTS:
 1. OUTPUT MUST BE HTML CONTENT ONLY - NO markdown syntax anywhere
@@ -247,6 +284,26 @@ Use the comprehensive_stock_analyzer and get_stock_and_company_data tools to gat
 7. Quarterly and annual performance
 8. Analyst ratings and target prices
 9. Risk factors and concerns
+
+🚨 MANDATORY CITATION REQUIREMENT (v1.0.5 Enhancement) 🚨
+EVERY SINGLE numerical data point, statistic, or factual claim MUST include an inline citation marker.
+This is NOT optional - failure to include citations will result in rejection.
+
+REQUIRED FORMAT (use HTML exactly as shown):
+- SEC filings: <span class="citation">[Source: {company} 10-K/10-Q filed DATE, p.XX]</span>
+- Market data: <span class="citation">[Source: Yahoo Finance, as of DATE]</span>
+- Calculated metrics: <span class="citation">[Calculated: FORMULA (Data from: SOURCE)]</span>
+
+REQUIRED EXAMPLE (notice citation marker immediately after data):
+<p>Revenue: $391.04B <span class="citation">[Source: {company} 10-K FY2024, filed 2024-10-31, p.24]</span></p>
+<p>P/E Ratio: 28.5 <span class="citation">[Source: Yahoo Finance, as of 2024-11-01]</span></p>
+
+VERIFICATION CHECKLIST - Before submitting, ensure:
+✓ Every dollar amount has inline <span class="citation">
+✓ Every percentage has inline <span class="citation">
+✓ Every ratio has inline <span class="citation">
+✓ Every claim has inline <span class="citation">
+✓ Citation appears IMMEDIATELY after the data value (not end of paragraph)
 
 CRITICAL FORMATTING REQUIREMENTS:
 1. OUTPUT MUST BE HTML CONTENT ONLY - NO markdown syntax anywhere
@@ -437,9 +494,14 @@ Using the following REAL stock data, create a stock price comparison chart:
 
 {stock_data}
 
-Create a professional bar chart or line chart comparing the current stock prices and market caps.
-Use the EXACT values from the data above.
-Include proper labels, a legend, and a title.
+MANDATORY REQUIREMENTS:
+1. Create a professional bar chart or line chart comparing current stock prices and market caps
+2. Use the EXACT values from the data above - NO placeholder or estimated values
+3. Include data value annotations ON EACH BAR/POINT (show the actual numbers)
+4. Include proper labels, a legend, and a descriptive title
+5. Add citation below chart: <p style="font-size: 11px; color: #666; font-style: italic;">[Source: Yahoo Finance, as of {datetime.now().strftime('%Y-%m-%d')}]</p>
+
+VERIFICATION: Ensure chart includes numerical annotations and citation marker.
 """
 
         visualization_result = execute_with_retry(
@@ -480,6 +542,28 @@ Provide a detailed competitor analysis including:
 9. Competitive advantages/disadvantages
 
 {f"VISUALIZATION CREATED:{chr(10)}{visualization_result}" if visualization_result else ""}
+
+🚨 MANDATORY CITATION REQUIREMENT (v1.0.5 Enhancement) 🚨
+EVERY SINGLE data point, statistic, claim, or competitive intelligence MUST include an inline citation marker.
+This is NOT optional - failure to include citations will result in rejection.
+
+REQUIRED FORMAT (use HTML exactly as shown):
+- Stock data: <span class="citation">[Source: Yahoo Finance, as of {datetime.now().strftime('%Y-%m-%d')}]</span>
+- News developments: <span class="citation">[Source: NEWS_SOURCE, "ARTICLE_TITLE", DATE]</span>
+- Web research: <span class="citation">[Source: DOMAIN, "PAGE_TITLE", accessed DATE]</span>
+- Calculated comparisons: <span class="citation">[Calculated from: DATA_SOURCE]</span>
+
+REQUIRED EXAMPLE (notice citation marker immediately after data):
+<p>{competitors_str.split(',')[0] if competitors_str else 'Company'} has a P/E ratio of 28.5 <span class="citation">[Source: Yahoo Finance, as of {datetime.now().strftime('%Y-%m-%d')}]</span>, compared to industry average of 24.3 <span class="citation">[Calculated from: Yahoo Finance sector data]</span></p>
+
+For comparison tables, add citation below table:
+<p style="font-size: 11px; color: #666; font-style: italic; margin-top: 5px;">[Source: Yahoo Finance, as of {datetime.now().strftime('%Y-%m-%d')}]</p>
+
+VERIFICATION CHECKLIST - Before submitting, ensure:
+✓ Every numerical value has inline <span class="citation">
+✓ Every claim about competitor has inline <span class="citation">
+✓ Every comparison has inline <span class="citation">
+✓ Citation appears IMMEDIATELY after the data value (not end of paragraph)
 
 CRITICAL FORMATTING REQUIREMENTS:
 1. OUTPUT MUST BE HTML CONTENT ONLY - NO markdown syntax anywhere
@@ -590,13 +674,14 @@ Based on the following business analysis data, create an executive business inte
 
 Create a comprehensive dashboard with:
 1. Key Performance Indicators (KPIs) summary
-2. Market trends visualization
-3. Financial metrics at a glance
-4. Competitive positioning indicators
-5. Risk assessment matrix
-6. Growth opportunity indicators
-7. Strategic initiative progress
-8. Timeline and milestone tracking
+2. Financial metrics at a glance
+3. Competitive positioning indicators
+4. Risk assessment matrix
+5. Growth opportunity indicators
+6. Strategic initiative progress
+7. Timeline and milestone tracking
+
+IMPORTANT: Use ONLY data from the analysis provided above. DO NOT create placeholder or generic visualizations.
 
 CRITICAL FORMATTING REQUIREMENTS:
 1. OUTPUT MUST BE HTML CONTENT ONLY - NO markdown syntax anywhere
@@ -622,6 +707,283 @@ CRITICAL FORMATTING REQUIREMENTS:
             logger=self.logger,
             task_description="Business dashboard creation"
         )
+
+    # ========================================================================
+    # NEW METHODS - v1.0.5 Enhancements (Context-Aware Intelligence)
+    # ========================================================================
+
+    def create_peer_comparison_table(self) -> Optional[str]:
+        """
+        Create peer comparison table with financial metrics.
+
+        Only called when context indicates company analysis with competitors.
+        Uses existing fetch_stock_data_for_companies() but formats as HTML table.
+
+        Returns:
+            HTML table with peer comparison or None if not applicable
+        """
+        # Check if peer comparison is appropriate for this context
+        if not self.context.should_include_peer_comparison():
+            self.logger.info("Peer comparison not applicable for this analysis context")
+            return None
+
+        self.logger.info("Creating peer comparison table...")
+
+        # Use existing data fetching method
+        companies = [self.company] + self.competitors
+        stock_data = self.fetch_stock_data_for_companies(companies)
+
+        if not stock_data:
+            self.logger.warning("Failed to fetch stock data for peer comparison")
+            return None
+
+        # Create formatted comparison table with citations
+        prompt = f"""
+Using the following stock data:
+{stock_data}
+
+Create an HTML comparison table comparing these companies: {', '.join(companies)}
+
+Include these metrics in columns:
+- P/E Ratio
+- Market Cap ($ Billions)
+- Revenue TTM ($ Billions)
+- Net Margin (%)
+- ROE (%)
+- Debt/Equity Ratio
+
+Format as:
+<table>
+<tr>
+  <th>Metric</th>
+  <th>{companies[0]}</th>
+  {' '.join([f'<th>{c}</th>' for c in companies[1:]])}
+</tr>
+<tr>
+  <td>P/E Ratio</td>
+  <td>32.5</td>
+  ...
+</tr>
+</table>
+
+CRITICAL:
+1. Use EXACT values from the stock data above
+2. Add citation below table:
+   <p style="font-size: 11px; color: #666; font-style: italic; margin-top: 5px;">
+   [Source: Yahoo Finance, as of {datetime.now().strftime('%Y-%m-%d')}]
+   </p>
+3. Highlight the primary company ({companies[0]}) with bold text
+4. Use HTML only, no markdown
+"""
+
+        return execute_with_retry(
+            self.client,
+            prompt,
+            max_retries=self.max_retries,
+            temperature=0.2,  # Low temperature for factual comparison
+            max_tokens=2048,
+            logger=self.logger,
+            task_description="Peer comparison table creation"
+        )
+
+    def generate_investment_recommendation(self, financial_data: str) -> Optional[str]:
+        """
+        Generate investment recommendation (Buy/Hold/Sell) with reasoning.
+
+        Only called when context indicates public company analysis.
+        Provides scoring, reasoning, and disclaimers.
+
+        Args:
+            financial_data: Financial analysis data to base recommendation on
+
+        Returns:
+            HTML-formatted investment recommendation or None if not applicable
+        """
+        # Check if investment recommendation is appropriate for this context
+        if not self.context.should_include_investment_recommendation():
+            self.logger.info("Investment recommendation not applicable (not a public company)")
+            return None
+
+        self.logger.info("Generating investment recommendation...")
+
+        prompt = f"""
+Based on the following financial analysis for {self.company}:
+{financial_data}
+
+Generate a comprehensive investment recommendation with:
+
+1. **Rating**: BUY, HOLD, or SELL
+2. **Overall Score**: 0-100 (weighted composite)
+3. **Reasoning**: 2-3 sentences explaining the rating
+4. **Score Breakdown**:
+   - Valuation Score (0-100): Based on P/E, P/S, P/B ratios vs peers
+   - Growth Score (0-100): Based on revenue growth, EPS growth
+   - Profitability Score (0-100): Based on ROE, margins, returns
+   - Financial Health Score (0-100): Based on debt levels, cash flow, liquidity
+
+5. **Key Factors**: 3-5 bullet points of critical factors influencing the rating
+
+Format as HTML:
+<div class="recommendation-box" style="border-left: 5px solid #COLOR; padding: 20px; margin: 20px 0; background-color: #f8f9fa;">
+    <h3>Investment Recommendation: <strong>RATING</strong></h3>
+    <p><strong>Overall Score:</strong> XX/100</p>
+    <p><strong>Reasoning:</strong> [2-3 sentences]</p>
+
+    <h4>Score Breakdown:</h4>
+    <ul>
+        <li><strong>Valuation:</strong> XX/100 - [brief explanation]</li>
+        <li><strong>Growth:</strong> XX/100 - [brief explanation]</li>
+        <li><strong>Profitability:</strong> XX/100 - [brief explanation]</li>
+        <li><strong>Financial Health:</strong> XX/100 - [brief explanation]</li>
+    </ul>
+
+    <h4>Key Factors:</h4>
+    <ul>
+        <li>[Factor 1]</li>
+        <li>[Factor 2]</li>
+        <li>[Factor 3]</li>
+    </ul>
+
+    <p style="font-size: 11px; color: #666; font-style: italic; margin-top: 15px; padding: 10px; background-color: #fff3cd; border-left: 3px solid #ffc107;">
+    <strong>Disclaimer:</strong> This analysis is for informational purposes only and does not constitute financial advice.
+    Consult a qualified financial advisor before making investment decisions. Past performance does not guarantee future results.
+    Analysis based on data as of {datetime.now().strftime('%Y-%m-%d')}.
+    </p>
+</div>
+
+CRITICAL:
+1. Use #28a745 (green) for BUY, #ffc107 (yellow) for HOLD, #dc3545 (red) for SELL
+2. Base scores on ACTUAL data from the financial analysis above
+3. Be objective and balanced in reasoning
+4. HTML only, no markdown
+"""
+
+        return execute_with_retry(
+            self.client,
+            prompt,
+            max_retries=self.max_retries,
+            temperature=0.3,  # Low-medium for balanced analysis
+            max_tokens=2048,
+            logger=self.logger,
+            task_description="Investment recommendation generation"
+        )
+
+    def collect_data_sources(self, sections_data: Dict[str, str]) -> str:
+        """
+        Collect and format all data sources used in the report.
+
+        Scans all report sections for citations and compiles them into
+        a comprehensive data sources section.
+
+        Args:
+            sections_data: Dictionary of section names and content
+
+        Returns:
+            HTML-formatted data sources section
+        """
+        self.logger.info("Collecting data sources citations...")
+
+        # Combine all section content for analysis
+        combined_content = '\n\n'.join([
+            f"SECTION: {section_name}\n{content}"
+            for section_name, content in sections_data.items()
+            if content  # Only include non-empty sections
+        ])
+
+        prompt = f"""
+Analyze the following report sections and extract all data sources mentioned or implied:
+
+{combined_content[:10000]}  # Limit to avoid token overflow
+
+Create a comprehensive data sources section listing all sources used, organized by category:
+
+1. **Official Regulatory Filings** (if SEC filings were mentioned)
+   - List each filing with type, date, and link
+
+2. **News Sources** (if news articles were mentioned)
+   - List news sources with article titles and dates
+   - Limit to top 10 most significant
+
+3. **Academic Research** (if research papers were mentioned)
+   - List papers with authors, title, venue, year
+
+4. **Market Data Providers** (if stock/financial data was used)
+   - List providers like Yahoo Finance, Bloomberg, etc.
+
+5. **Web Sources** (if web research was conducted)
+   - List key websites referenced
+
+Format as HTML:
+<h2>📚 Data Sources & Citations</h2>
+<div class="data-sources">
+    <p>This report is based on data from the following verified sources:</p>
+
+    <h3>Official Regulatory Filings</h3>
+    <ul>
+        <li><a href="URL" target="_blank">Company Filing-Type</a> (Filed: DATE)</li>
+    </ul>
+
+    <h3>News Sources</h3>
+    <ul>
+        <li><a href="URL" target="_blank">Article Title</a> - Source Name, DATE</li>
+    </ul>
+
+    <h3>Market Data Providers</h3>
+    <ul>
+        <li>Yahoo Finance (as of {datetime.now().strftime('%Y-%m-%d')})</li>
+    </ul>
+
+    <p style="margin-top: 20px; font-style: italic; color: #666;">
+    Report generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+    </p>
+</div>
+
+CRITICAL:
+1. Only include source categories that were actually used
+2. Extract URLs and dates where available
+3. If no specific citations found, create generic attribution
+4. HTML only, no markdown
+"""
+
+        result = execute_with_retry(
+            self.client,
+            prompt,
+            max_retries=self.max_retries,
+            temperature=0.2,  # Low temperature for factual extraction
+            max_tokens=2048,
+            logger=self.logger,
+            task_description="Data sources collection"
+        )
+
+        return result or self._create_default_data_sources_section()
+
+    def _create_default_data_sources_section(self) -> str:
+        """
+        Create default data sources section when extraction fails.
+
+        Returns:
+            HTML-formatted default data sources section
+        """
+        primary_sources = self.context.get_primary_data_sources()
+
+        html = '<h2>📚 Data Sources & Citations</h2>\n'
+        html += '<div class="data-sources">\n'
+        html += '<p>This report is based on data from the following sources:</p>\n'
+        html += '<ul>\n'
+
+        for source in primary_sources:
+            html += f'<li>{source}</li>\n'
+
+        html += '</ul>\n'
+        html += f'<p style="margin-top: 20px; font-style: italic; color: #666;">'
+        html += f'Report generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>\n'
+        html += '</div>\n'
+
+        return html
+
+    # ========================================================================
+    # END NEW METHODS
+    # ========================================================================
 
     def run_strategic_analysis(self, send_email: bool = False) -> bool:
         """Run comprehensive business intelligence and strategic analysis."""
@@ -691,6 +1053,48 @@ CRITICAL FORMATTING REQUIREMENTS:
         else:
             strategy_recommendations = clean_html_response(strategy_recommendations)
 
+        # Step 6.5: Create peer comparison table (v1.0.5 enhancement - context-aware)
+        peer_comparison = None
+        if self.context.should_include_peer_comparison():
+            self.logger.info("💼 Step 6.5: Creating peer comparison table...")
+            peer_comparison = self.create_peer_comparison_table()
+            if peer_comparison:
+                peer_comparison = clean_html_response(peer_comparison)
+                self.logger.info("✅ Peer comparison table created")
+            else:
+                self.logger.warning("Failed to create peer comparison table")
+        else:
+            self.logger.info("⏭️  Step 6.5: Peer comparison not applicable for this context")
+
+        # Step 6.75: Generate investment recommendation (v1.0.5 enhancement - context-aware)
+        investment_rec = None
+        if self.context.should_include_investment_recommendation() and company_analysis:
+            self.logger.info("🎯 Step 6.75: Generating investment recommendation...")
+            investment_rec = self.generate_investment_recommendation(company_analysis)
+            if investment_rec:
+                investment_rec = clean_html_response(investment_rec)
+                self.logger.info("✅ Investment recommendation generated")
+            else:
+                self.logger.warning("Failed to generate investment recommendation")
+        else:
+            self.logger.info("⏭️  Step 6.75: Investment recommendation not applicable for this context")
+
+        # Step 7: Collect data sources (v1.0.5 enhancement - always included)
+        self.logger.info("📚 Step 7: Collecting data sources and citations...")
+        data_sources = self.collect_data_sources({
+            'market': market_research,
+            'company': company_analysis or '',
+            'document': document_analysis,
+            'competitor': competitor_analysis,
+            'peer_comparison': peer_comparison or ''
+        })
+        if data_sources:
+            data_sources = clean_html_response(data_sources)
+            self.logger.info("✅ Data sources section created")
+        else:
+            self.logger.warning("Failed to collect data sources")
+            data_sources = self._create_default_data_sources_section()
+
         # Combine all into comprehensive report
         report_content = f"""
 <div class="dashboard">
@@ -716,12 +1120,34 @@ CRITICAL FORMATTING REQUIREMENTS:
 
 <h2>🏆 Competitor Analysis</h2>
 {competitor_analysis}
+"""
 
+        # Add peer comparison if available (v1.0.5 enhancement)
+        if peer_comparison:
+            report_content += f"""
+<h2>📊 Peer Comparison</h2>
+{peer_comparison}
+"""
+
+        report_content += f"""
 <h2>🎯 Strategic Recommendations</h2>
 <div class="recommendation">
     {strategy_recommendations}
 </div>
+"""
 
+        # Add investment recommendation if available (v1.0.5 enhancement)
+        if investment_rec:
+            report_content += f"""
+{investment_rec}
+"""
+
+        # Add data sources section (v1.0.5 enhancement - always included)
+        report_content += f"""
+{data_sources}
+"""
+
+        report_content += f"""
 <div style="margin-top: 30px; padding: 15px; background-color: #e3f2fd; border-radius: 5px;">
     <h3>Intelligence Summary</h3>
     <ul>
