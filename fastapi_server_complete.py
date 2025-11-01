@@ -8831,19 +8831,23 @@ END OF CONTEXT
                 # Get think parameter from primary LLM configuration
                 # Disable think for meta-tasks (title generation, tagging, etc.)
                 primary_config = config_loader.get_llm_config('primary')
-                base_think_enabled = primary_config.get('config', {}).get('think', False)
+                config_options = primary_config.get('config', {})
+                
+                base_think_enabled = config_options.get('think', False)
                 think_enabled = False if is_meta_task else base_think_enabled
 
+                # Use configured values as defaults, with request values as overrides
                 stream_payload = {
                     "model": model,
                     "prompt": in_prompt,
                     "system": enhanced_system,
                     "options": {
-                        "temperature": data.get('temperature', 0.7),
-                        "top_k": data.get('top_k', 40),
-                        "top_p": data.get('top_p', 0.9),
-                        "num_ctx": data.get('num_ctx', 8192),
-                        "low_vram": data.get('low_vram', False)
+                        "temperature": data.get('temperature', config_options.get('temperature', 0.7)),
+                        "top_k": data.get('top_k', config_options.get('top_k', 40)),
+                        "top_p": data.get('top_p', config_options.get('top_p', 0.9)),
+                        "num_ctx": data.get('num_ctx', config_options.get('context_window_size', 8192)),
+                        "num_predict": data.get('max_tokens', config_options.get('max_tokens', 4096)),
+                        "low_vram": data.get('low_vram', config_options.get('low_vram', False))
                     },
                     "think": think_enabled,  # Add think parameter from configuration
                     "stream": True
