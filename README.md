@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.3.42
+# Agentic-RAG Server v1.0.3.43
 
-An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, vision capabilities, intelligent email management, and **extensible plugin system**.
+An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, vision capabilities, intelligent email management, **SEC regulatory filings**, **academic research integration**, and **extensible plugin system**.
 
-[![Version](https://img.shields.io/badge/version-1.0.3.42-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.42)
+[![Version](https://img.shields.io/badge/version-1.0.3.43-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.43)
 [![Python](https://img.shields.io/badge/python-3.13-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -95,6 +95,239 @@ cd Agentic-RAG-System
 pip install -r requirements.txt
 python fastapi_server_complete.py
 ```
+
+## ⭐ What's New in v1.0.3.43
+
+### 🚀 Enhanced Data Collection System - Option 2 Implementation
+
+**v1.0.3.43** introduces three major data collection enhancements providing institutional-quality data at zero cost:
+
+#### 🏛️ SEC EDGAR Integration - Official Regulatory Filings
+
+Access the official SEC database for comprehensive regulatory filings from all publicly traded companies:
+
+**Features:**
+- **Filing Types**: 10-K (annual), 10-Q (quarterly), 8-K (events), Form 4 (insider trading), 13-F (holdings)
+- **Free & Unlimited**: No API key required, 100% free access to SEC public data
+- **Smart Caching**: 7 days for company identifiers, 24 hours for filings (performance optimized)
+- **Rate Limit Compliant**: Automatic rate limiting (10 req/sec) per SEC guidelines
+- **CIK Lookup**: Automatic ticker → CIK mapping with fallback methods
+
+**Usage Examples:**
+```python
+# Get latest SEC filings for Tesla
+response = client.chat.completions.create(
+    model="Agentic-RAG-Model1",
+    messages=[{"role": "user", "content": "Get the latest SEC filings for Tesla (TSLA)"}]
+)
+
+# Analyze specific filing types
+response = client.chat.completions.create(
+    model="Agentic-RAG-Model1",
+    messages=[{"role": "user", "content": "Get the last 3 10-K and 8-K filings for Apple and summarize key events"}]
+)
+
+# Extract financial data from 10-Q
+response = client.chat.completions.create(
+    model="Agentic-RAG-Model1",
+    messages=[{"role": "user", "content": "Get NVIDIA's most recent 10-Q filing and extract revenue, earnings, and cash flow numbers"}]
+)
+```
+
+**Configuration:** Enable in `config/feature_flags.py`:
+```python
+ENABLE_SEC_EDGAR = True  # Default: Enabled
+```
+
+**Behind the Scenes:**
+- Files: `utils/sec_edgar_client.py`, `user_tools/sec_edgar_tool.py`, `config/edgar_config.py`
+- Caching: `.cache/sec_edgar/` directory (automatic TTL management)
+- Data Source: https://data.sec.gov (official SEC API)
+
+---
+
+#### 🎓 Academic Research Integration - Multi-API Paper Search
+
+Search across three major academic databases with intelligent auto-domain detection:
+
+**Features:**
+- **Semantic Scholar**: Citation-ranked papers with impact metrics (100 req/5 min free tier)
+- **arXiv**: CS/Math/Physics preprints, unlimited free access
+- **PubMed**: 35M+ biomedical research articles (3 req/sec free tier)
+- **Auto-Domain Detection**: AI/ML queries → arXiv+Semantic Scholar, Medical queries → PubMed
+- **Parallel Search**: Concurrent API calls for faster results
+- **Citation Ranking**: Papers sorted by citation count and impact
+- **Deduplication**: Title similarity matching to remove duplicates across sources
+
+**Usage Examples:**
+```python
+# AI/ML research (auto-selects arXiv + Semantic Scholar)
+response = client.chat.completions.create(
+    model="Agentic-RAG-Model1",
+    messages=[{"role": "user", "content": "Search for the latest academic papers on transformer models and summarize key findings"}]
+)
+
+# Medical research (auto-selects PubMed + Semantic Scholar)
+response = client.chat.completions.create(
+    model="Agentic-RAG-Model1",
+    messages=[{"role": "user", "content": "Find recent research papers on mRNA vaccine efficacy"}]
+)
+
+# Specific topic with limit
+response = client.chat.completions.create(
+    model="Agentic-RAG-Model1",
+    messages=[{"role": "user", "content": "Search for 10 most cited papers on quantum computing from the last 2 years"}]
+)
+```
+
+**Configuration:** Enable in `config/feature_flags.py`:
+```python
+ENABLE_ACADEMIC_RESEARCH = True  # Default: Enabled
+ACADEMIC_RESEARCH_SEMANTIC_SCHOLAR = True  # Individual source toggles
+ACADEMIC_RESEARCH_ARXIV = True
+ACADEMIC_RESEARCH_PUBMED = True
+```
+
+**Behind the Scenes:**
+- Files: `utils/academic_research_client.py`, `user_tools/research_paper_search.py`, `config/academic_config.py`
+- Caching: 1 hour TTL for research results
+- APIs: Semantic Scholar (JSON), arXiv (XML/Atom), PubMed E-utilities (XML)
+
+---
+
+#### 📰 Enhanced RSS Processing - Google News + Content Extraction
+
+Dramatically improved news collection with premium sources and full article extraction:
+
+**Features:**
+- **Google News Integration**: Free, unlimited news aggregation from Google News RSS
+- **Full Article Content**: newspaper3k + BeautifulSoup fallback extracts complete articles
+- **118 Premium Sources** (+38 new sources):
+  - **Breaking News Wire**: Reuters (8 categories), AP News
+  - **In-Depth Analysis**: Financial Times (7 feeds), Barron's, Wall Street Journal
+  - **Academic/Research**: Nature, Science Magazine, MIT Tech Review, Scientific American
+  - **Policy Analysis**: Brookings Institution, Foreign Policy, The Atlantic, VoxEU
+  - **Tech Industry**: The Verge, The Information, TechCrunch
+- **Smart Deduplication**: 3-level system (URL normalization, title similarity 80%, content hash)
+- **Sentiment Analysis**: Optional textblob/VADER sentiment scoring
+- **Context Engineering**: All outputs in SOURCE block format for perfect citations
+
+**Usage Examples:**
+```bash
+# Get latest news on specific topic
+curl -X POST http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "Get latest news on artificial intelligence"}]
+  }'
+
+# Financial news from premium sources
+curl -X POST http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Agentic-RAG-Model1",
+    "messages": [{"role": "user", "content": "Get latest financial market news from Reuters and Financial Times"}]
+  }'
+```
+
+**Customizing News Sources:**
+
+Edit `config/news_sources.yaml` to add/remove RSS feeds:
+
+```yaml
+news_sources:
+  finance:
+    - https://www.reuters.com/markets/rss  # Reuters markets wire
+    - https://www.ft.com/markets?format=rss  # Financial Times markets
+    - https://your-custom-feed.com/rss  # Add your own!
+
+  technology:
+    - https://www.reuters.com/technology/rss
+    - https://techcrunch.com/feed/
+    - https://your-tech-blog.com/feed  # Custom tech source
+
+  # Add new category
+  climate:
+    - https://www.carbonbrief.org/feed/
+    - https://insideclimatenews.org/feed/
+```
+
+**Changes take effect immediately** - no server restart required!
+
+**Configuration:** Enable in `config/feature_flags.py`:
+```python
+ENABLE_ENHANCED_RSS = True  # Default: Enabled
+ENHANCED_RSS_GOOGLE_NEWS = True  # Google News integration
+ENHANCED_RSS_CONTENT_EXTRACTION = True  # Full article extraction
+ENHANCED_RSS_SENTIMENT_ANALYSIS = True  # Sentiment scoring
+```
+
+**News Sources Configuration Guide:**
+
+1. **Edit config/news_sources.yaml**:
+   - Each category (world, business, finance, technology, etc.) has a list of RSS feed URLs
+   - Add new feeds by inserting new URLs with `- https://...` format
+   - Remove feeds by deleting or commenting out lines with `#`
+
+2. **Category Mapping** (optional):
+   - Edit `category_mapping` section to customize keyword detection
+   - Add `primary_terms`, `secondary_terms`, `compound_phrases` for your topics
+   - Adjust `weight` values (0.0 to 1.0) for category priority
+
+3. **Keyword Mappings** (optional):
+   - Edit `keyword_mappings` section for exact phrase → category mapping
+   - Example: `"machine learning": [technology, science]`
+
+4. **Test Your Changes**:
+   ```bash
+   # Test with a query
+   curl -X POST http://localhost:5000/v1/chat/completions \
+     -H "Content-Type: application/json" \
+     -d '{
+       "model": "Agentic-RAG-Model1",
+       "messages": [{"role": "user", "content": "Get latest news on [your topic]"}]
+     }'
+   ```
+
+**Behind the Scenes:**
+- Files: `utils/enhanced_rss_processor.py`, `config/rss_config.py`, `config/news_sources.yaml`
+- Caching: 6 hours for extracted article content
+- Rate Limiting: 150ms between content extraction requests
+
+---
+
+### 📊 Impact Summary v1.0.3.43
+
+**Zero Cost, Institutional Quality Data:**
+- ✅ SEC EDGAR: Official regulatory filings (was: unavailable)
+- ✅ Academic Research: 3 free APIs (was: web search only)
+- ✅ Enhanced News: 118 premium sources (was: 80, +48% increase)
+- ✅ Google News: Unlimited free aggregation
+- ✅ Full Article Content: newspaper3k extraction (was: headlines only)
+- ✅ Smart Deduplication: 3-level system (was: basic URL matching)
+- ✅ **Total Cost: $0/month** for 7 APIs and 118 news sources
+
+**Files Added:**
+- `utils/sec_edgar_client.py` (270 lines)
+- `utils/sec_filing_cache.py` (159 lines)
+- `utils/academic_research_client.py` (570 lines)
+- `utils/enhanced_rss_processor.py` (409 lines)
+- `user_tools/sec_edgar_tool.py` (220 lines)
+- `user_tools/research_paper_search.py` (185 lines)
+- `config/edgar_config.py` (67 lines)
+- `config/academic_config.py` (160 lines)
+- `config/rss_config.py` (150 lines)
+- Test files: `test_sec_edgar_integration.py`, `test_academic_research_integration.py`, `test_enhanced_rss_integration.py`
+
+**Configuration Files Modified:**
+- `config/feature_flags.py` - Added 3 new feature flags
+- `config/news_sources.yaml` - Added 38 premium sources across 12 categories
+
+**Dependencies:**
+- No new dependencies required - uses existing packages (feedparser, newspaper3k, beautifulsoup4)
+
+---
 
 ## ⭐ What's New in v1.0.3.21
 
@@ -300,7 +533,10 @@ The system automatically handles multi-model orchestration internally, using loc
 - **🖼️ Image Analysis**: Vision processing with OCR capabilities
 - **🔍 Search**: Web search and academic paper retrieval
 - **📊 Financial Tools**: Stock analysis and market data retrieval
-- **📰 News Analysis**: Real-time news gathering and summarization
+- **📰 News Analysis**: Real-time news gathering and summarization from 118 premium sources
+- **🏛️ SEC EDGAR**: 🆕 Official regulatory filings (10-K, 10-Q, 8-K, Form 4, 13-F) - Free, unlimited access
+- **🎓 Academic Research**: 🆕 Multi-API paper search (Semantic Scholar, arXiv, PubMed) with citation ranking
+- **📡 Enhanced RSS**: 🆕 Google News integration with full article content extraction
 
 ## 🏆 Competitive Advantages
 

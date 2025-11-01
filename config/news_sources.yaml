@@ -35,6 +35,9 @@ news_sources:
     - https://www.france24.com/en/rss
     - https://www.euronews.com/rss?level=vertical&name=news
     - https://www.scmp.com/rss/feed/
+    - https://www.reuters.com/world/rss  # ADDED: Reuters world wire (breaking news)
+    - https://www.ft.com/world?format=rss  # ADDED: Financial Times world coverage (analytical depth)
+    - https://foreignpolicy.com/feed/  # ADDED: Foreign Policy (geopolitical analysis)
 
   # National/US News
   national:
@@ -49,6 +52,8 @@ news_sources:
     - https://www.cbsnews.com/latest/rss/main
     - https://www.nbcnews.com/feeds/
     - https://abcnews.go.com/abcnews/topstories
+    - https://www.reuters.com/arc/outboundfeeds/news/category/domestic/rss/  # ADDED: Reuters US wire (breaking news)
+    - https://www.theatlantic.com/feed/all/  # ADDED: The Atlantic (long-form analysis)
 
   # Business News
   business:
@@ -58,6 +63,10 @@ news_sources:
     - https://www.zerohedge.com/fullrss2.xml
     - https://feeds.bloomberg.com/markets/news.rss
     - https://www.businessinsider.com/rss
+    - https://www.reuters.com/business/rss  # ADDED: Reuters business wire (breaking news)
+    - https://www.ft.com/companies?format=rss  # ADDED: Financial Times companies (analytical depth)
+    - https://hbr.org/feed  # ADDED: Harvard Business Review (strategic analysis)
+    - https://fortune.com/feed/  # ADDED: Fortune (executive perspective)
 
   # Finance/Markets
   finance:
@@ -75,6 +84,11 @@ news_sources:
     - https://www.zerohedge.com/fullrss2.xml
     - https://finance.yahoo.com/rss/topstories
     - https://www.reuters.com/business/finance/
+    - https://www.reuters.com/markets/rss  # ADDED: Reuters markets wire (real-time breaking)
+    - https://www.ft.com/markets?format=rss  # ADDED: Financial Times markets (expert analysis)
+    - https://www.barrons.com/articles/rss  # ADDED: Barron's (premium market analysis)
+    - https://www.wsj.com/xml/rss/3_7014.xml  # ADDED: WSJ Markets Main (institutional quality)
+    - https://www.ft.com/lex?format=rss  # ADDED: FT Lex column (sharp commentary)
 
   # Economy/Economic Policy
   economy:
@@ -85,6 +99,9 @@ news_sources:
     - https://www.bloomberg.com/economics
     - https://www.economist.com/finance-and-economics/rss.xml
     - https://www.wsj.com/xml/rss/3_7085.xml
+    - https://www.ft.com/global-economy?format=rss  # ADDED: FT global economy (expert analysis)
+    - https://www.brookings.edu/feed/  # ADDED: Brookings Institution (policy research)
+    - https://voxeu.org/index.php/vox-talks/rss.xml  # ADDED: VoxEU (economic policy research)
 
   # Technology
   technology:
@@ -95,6 +112,11 @@ news_sources:
     - https://www.theregister.com/headlines.atom
     - https://www.wired.com/feed/rss
     - https://www.zdnet.com/news/rss.xml
+    - https://www.reuters.com/technology/rss  # ADDED: Reuters tech wire (breaking news)
+    - https://www.ft.com/technology?format=rss  # ADDED: FT tech (enterprise perspective)
+    - https://www.technologyreview.com/feed/  # ADDED: MIT Technology Review (deep analysis)
+    - https://www.theverge.com/rss/index.xml  # ADDED: The Verge (consumer tech + analysis)
+    - https://www.theinformation.com/feed  # ADDED: The Information (insider scoops)
 
   # Cryptocurrency
   crypto:
@@ -102,6 +124,8 @@ news_sources:
     - https://decrypt.co/feed
     - https://www.theblock.co/rss.xml
     - https://cointelegraph.com/rss
+    - https://www.ft.com/cryptofinance?format=rss  # ADDED: FT crypto finance (institutional perspective)
+    - https://www.reuters.com/technology/crypto-currency/rss  # ADDED: Reuters crypto (breaking news)
 
   # Science
   science:
@@ -109,6 +133,11 @@ news_sources:
     - https://www.sciencenews.org/feed
     - https://www.npr.org/sections/science/
     - https://arstechnica.com/science/feed/
+    - https://www.nature.com/nature.rss  # ADDED: Nature (top-tier research journal)
+    - https://www.sciencemag.org/rss/news_current.xml  # ADDED: Science Magazine (prestigious research)
+    - https://www.scientificamerican.com/feed/  # ADDED: Scientific American (accessible analysis)
+    - https://www.newscientist.com/feed/home  # ADDED: New Scientist (breaking research)
+    - https://www.pnas.org/rss/current.xml  # ADDED: PNAS (peer-reviewed research)
 
   # Politics
   politics:
@@ -116,6 +145,9 @@ news_sources:
     - https://thehill.com/news/feed/
     - https://www.propublica.org/feeds/propublica/main
     - https://theintercept.com/feed/
+    - https://www.reuters.com/politics/rss  # ADDED: Reuters politics wire (breaking news)
+    - https://www.washingtonpost.com/politics/?outputType=rss  # ADDED: WaPo politics (investigative)
+    - https://www.realclearpolitics.com/index.xml  # ADDED: RCP (polling aggregation + analysis)
 
   # General News
   news:
@@ -124,6 +156,8 @@ news_sources:
     - https://www.npr.org/sections/news/
     - https://www.axios.com/feeds/articles.rss
     - https://www.propublica.org/feeds/propublica/main
+    - https://www.reuters.com/news/archive/topNews  # ADDED: Reuters top news (breaking wire)
+    - https://www.ft.com/?format=rss  # ADDED: FT homepage (global perspective)
 
   # Local/Regional News
   local:
@@ -133,12 +167,15 @@ news_sources:
     - https://www.nytimes.com/services/xml/rss/nyt/HomePage.xml
     - https://www.washingtonpost.com/rss/
     - https://www.dallasnews.com/feed/
+    - https://www.bostonglobe.com/rss/bigpicture  # ADDED: Boston Globe
+    - https://www.seattletimes.com/feed/  # ADDED: Seattle Times
 
   # Default (fallback sources)
   default:
     - https://apnews.com/hub/ap-top-news
     - https://feeds.bbci.co.uk/news/rss.xml
     - https://www.axios.com/feeds/articles.rss
+    - https://www.reuters.com/news/archive/topNews  # ADDED: Reuters top news (real-time)
 
 
 # ================================================================================

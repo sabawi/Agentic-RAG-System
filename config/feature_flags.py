@@ -52,6 +52,19 @@ class FeatureFlags:
     DETAILED_ANALYSIS_PROJECTIONS = True
 
     # ========================================================================
+    # ENHANCED DATA COLLECTION FEATURES (Option 2)
+    # ========================================================================
+
+    # SEC EDGAR Integration (from ENHANCED_DATA_COLLECTION_IMPLEMENTATION_PLAN.md)
+    ENABLE_SEC_EDGAR = True  # ✅ ENABLED for testing
+
+    # Academic Research APIs (from ENHANCED_DATA_COLLECTION_IMPLEMENTATION_PLAN.md)
+    ENABLE_ACADEMIC_RESEARCH = True  # ✅ ENABLED for testing
+
+    # Enhanced RSS Processing (from ENHANCED_DATA_COLLECTION_IMPLEMENTATION_PLAN.md)
+    ENABLE_ENHANCED_RSS = True  # ✅ ENABLED for testing
+
+    # ========================================================================
     # CONTROL METHODS
     # ========================================================================
 
@@ -70,6 +83,14 @@ class FeatureFlags:
         logger.warning("⚠️ All financial analysis features enabled")
 
     @classmethod
+    def enable_all_enhanced_data_collection(cls):
+        """Enable all enhanced data collection features (use with caution!)."""
+        cls.ENABLE_SEC_EDGAR = True
+        cls.ENABLE_ACADEMIC_RESEARCH = True
+        cls.ENABLE_ENHANCED_RSS = True
+        logger.warning("⚠️ All enhanced data collection features enabled")
+
+    @classmethod
     def enable_all(cls):
         """Enable ALL features (use with extreme caution!)."""
         cls.enable_all_data_collection()
@@ -79,9 +100,11 @@ class FeatureFlags:
     @classmethod
     def disable_all(cls):
         """Emergency rollback - disable all enhancements."""
+        # Data collection features
         cls.ENABLE_SEC_EDGAR = False
         cls.ENABLE_ACADEMIC_RESEARCH = False
         cls.ENABLE_ENHANCED_RSS = False
+        # Financial analysis features
         cls.ENABLE_DETAILED_ANALYSIS = False
         logger.critical("🚨 EMERGENCY ROLLBACK: All enhancements disabled")
 
@@ -100,6 +123,11 @@ class FeatureFlags:
                 'financial_ratios': cls.DETAILED_ANALYSIS_FINANCIAL_RATIOS,
                 'dcf_valuation': cls.DETAILED_ANALYSIS_DCF_VALUATION,
                 'projections': cls.DETAILED_ANALYSIS_PROJECTIONS,
+            },
+            'enhanced_data_collection': {
+                'sec_edgar': cls.ENABLE_SEC_EDGAR,
+                'academic_research': cls.ENABLE_ACADEMIC_RESEARCH,
+                'enhanced_rss': cls.ENABLE_ENHANCED_RSS,
             }
         }
 

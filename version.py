@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.42"  # 📝 DOCS: Improve tool description for detailed analysis parameter
+VERSION = "1.0.3.43"  # 🚀 FEATURE: Enhanced Data Collection (SEC EDGAR, Academic Research, Enhanced RSS, +38 news sources)
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE
