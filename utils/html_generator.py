@@ -249,13 +249,8 @@ li { margin-bottom: 6px; }
 
             # 🔧 FIX: Normalize special Unicode characters that cause encoding issues in email clients
             # Replace en-dash (U+2013) and em-dash (U+2014) with regular hyphen
-            # Replace smart quotes with regular quotes
             content = content.replace('\u2013', '-')  # en-dash → hyphen
             content = content.replace('\u2014', '-')  # em-dash → hyphen
-            content = content.replace('\u2018', "'")  # left single quote → apostrophe
-            content = content.replace('\u2019', "'")  # right single quote → apostrophe
-            content = content.replace('\u201c', '"')  # left double quote → quote
-            content = content.replace('\u201d', '"')  # right double quote → quote
             content = content.replace('\u2026', '...')  # ellipsis → three dots
 
             # 🔧 FIX: Detect and convert markdown to HTML
@@ -305,7 +300,7 @@ li { margin-bottom: 6px; }
             html_document = template.replace("{{TITLE}}", html_module.escape(title, quote=True))
             html_document = html_document.replace("{{HEADER_TITLE}}", html_module.escape(header_title, quote=True))
             html_document = html_document.replace("{{HEADER_SUBTITLE}}", html_module.escape(header_subtitle, quote=True))
-            html_document = html_document.replace("{{CONTENT}}", content)
+            html_document = html_document.replace("{{CONTENT}}", html_module.escape(content, quote=True))
             html_document = html_document.replace("{{DISCLAIMER}}", disclaimer)
             html_document = html_document.replace("{{TIMESTAMP}}", timestamp)
 

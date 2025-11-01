@@ -171,8 +171,8 @@ class ConfigLoader:
             llm_config['primary'] = {'type': 'ollama', 'config': {}}
         if 'tool_calling' not in llm_config:
             llm_config['tool_calling'] = {'type': 'ollama', 'config': {}}
-        if 'image_processing' not in llm_config:
-            llm_config['image_processing'] = {'type': 'ollama', 'config': {}}
+        # if 'image_processing' not in llm_config:
+        #     llm_config['image_processing'] = {'type': 'ollama', 'config': {}}
         
         return config
     

@@ -1605,21 +1605,7 @@ This is a secure sandboxed environment for code execution and system commands.
         is_creative_content = sum(creative_indicators) >= 2
 
         # FIRST: Handle HTML entities for creative vs technical content
-        if is_creative_content:
-            # Creative content: UNESCAPE any existing HTML entities, then only escape <>&
-            # This fixes cases where content already has &quot; or &#x27; from previous processing
-            body = html.unescape(content)  # Convert &quot; → " and &#x27; → '
-
-            # Now only escape the minimal set: <>&
-            # Do in correct order to avoid double-escaping
-            body = body.replace('<', '&lt;')
-            body = body.replace('>', '&gt;')
-            # Only escape & if not part of an entity (though there shouldn't be any after unescape)
-            import re
-            body = re.sub(r'&(?![a-zA-Z]+;|#[0-9]+;|#x[0-9a-fA-F]+;)', '&amp;', body)
-        else:
-            # Technical/data content: full HTML escaping
-            body = html.escape(content, quote=True)
+        body = html.escape(content, quote=True)
 
         # THEN: Convert markdown-like elements to HTML (now working on escaped content)
 
