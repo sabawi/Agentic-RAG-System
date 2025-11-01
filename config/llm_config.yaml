@@ -62,9 +62,8 @@ llm:
       timeout: 600
       temperature: 0.7
       max_tokens: 16384
-      stream: true
       context_window_size: 16384
-      think: false
+      stream: true
   tool_calling:
     type: openai
     config:

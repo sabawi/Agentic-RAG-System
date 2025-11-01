@@ -65,5 +65,18 @@
     "created_at": "2025-10-26T05:50:15.102081",
     "updated_at": "2025-10-26T05:50:15.102092",
     "api_key": "${GEMINI_API_KEY}"
+  },
+  "minimax-m2:cloud": {
+    "provider": "ollama",
+    "model": "minimax-m2:cloud",
+    "base_url": "http://127.0.0.1:11434",
+    "timeout": 600,
+    "temperature": 0.7,
+    "max_tokens": 32768,
+    "stream": true,
+    "created_at": "2025-10-29T20:46:17.002316",
+    "updated_at": "2025-10-29T20:58:25.685297",
+    "context_window_size": 32768,
+    "fallback_model": "deepseek_ollama_cloud"
   }
 }
