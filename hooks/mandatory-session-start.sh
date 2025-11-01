@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Claude Code Session Start Hook
-# Automatically triggers mandatory procedures for development sessions
+# Automatically displays mandatory project directive at session start
 # This hook NEVER FAILS and ensures proper project architecture understanding
 
 set -euo pipefail
@@ -16,86 +16,67 @@ touch "$LOG_FILE"
 # Function to log with timestamp
 log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
-    echo "$1" >&2  # Also output to stderr for visibility
-}
-
-# Function that never fails
-safe_execute() {
-    local description="$1"
-    shift
-    log_message "EXECUTING: $description"
-    
-    if "$@" 2>&1 | tee -a "$LOG_FILE"; then
-        log_message "SUCCESS: $description"
-        return 0
-    else
-        log_message "WARNING: $description failed, but continuing..."
-        return 0  # Always return success to never fail
-    fi
 }
 
 # Main execution
 main() {
-    log_message "========== MANDATORY SESSION START PROCEDURES =========="
+    log_message "========== SESSION START HOOK TRIGGERED =========="
     log_message "Project: $PROJECT_ROOT"
-    log_message "Hook triggered for session start"
-    
-    # Check if this is a development project
-    if [[ -f "fastapi_server_complete.py" || -d "user_tools" || -d "docs" ]]; then
-        log_message "DETECTED: Development project - triggering mandatory procedures"
-        
-        # Create context that will be injected into Claude
-        cat > "$PROJECT_ROOT/hooks/session-context.md" << 'EOF'
-# 🚨 MANDATORY SESSION START PROCEDURES TRIGGERED
 
-## Required Actions Before Any Code Changes:
+    # Check if this is the Agentic-RAG development project
+    if [[ -f "fastapi_server_complete.py" || -f "CLAUDE.md" || -d "docs" ]]; then
+        log_message "DETECTED: Agentic-RAG project - displaying mandatory directive"
 
-1. **LAUNCH project-architect-coder agent FIRST**
-   - Use: Task tool with subagent_type: "project-architect-coder" 
-   - Purpose: Understand current project architecture and design
-   - Required before ANY development work begins
+        # Output the mandatory directive message
+        cat << 'EOF'
 
-2. **READ Architecture Documentation**
-   - Read ALL files in /docs/ directory, especially:
-     - /docs/ARBITRATOR_ARCHITECTURE.md
-     - Any other .md files in docs/
-   - Understand system design before making changes
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    🚨 MANDATORY PROJECT DIRECTIVE 🚨                       ║
+╚════════════════════════════════════════════════════════════════════════════╝
 
-3. **ANALYZE Current System State**
-   - Review recent commits with git log
-   - Understand what was modified recently
-   - Check git status for current changes
+📋 READ, UNDERSTAND, AND ADHERE TO THE CURRENT PROJECT ARCHITECTURE,
+   RESTRICTIONS, REQUIREMENTS, DOCUMENTATIONS, RULES, AND DIRECTIVES IN:
 
-## Project Context:
-- FastAPI/Flask server with LLM integration
-- PDF generation and email functionality
-- Arbitrator system for tool validation
-- Complex multi-tool calling architecture
+   • ./docs/*/* (all documentation subdirectories)
+   • CLAUDE.md (project directives and rules)
 
-## Critical Reminder:
-**NEVER make code changes without first understanding the full system architecture through the project-architect-coder agent**
+⚠️  CRITICAL REQUIREMENTS BEFORE ANY CODE CHANGES:
 
-This ensures compliance with project directives and prevents architectural violations.
+   1. Read CLAUDE.md fully
+   2. Read ALL architecture and design documents in /docs/
+   3. Understand the system architecture BEFORE attempting changes
+   4. Follow all configuration rules (NO hardcoded values)
+   5. Increment version.py after ANY code change
+   6. Test end-to-end before claiming fix works
+   7. Never assume - investigate and verify first
 
----
-*Generated automatically by mandatory session-start hook*
+📁 KEY DOCUMENTATION LOCATIONS:
+   • /docs/DEVELOPER_TECHNICAL_IMPLEMENTATION_*.md
+   • /docs/LLM_CONFIGURATION_GUIDE.md
+   • /docs/PROJECT_CONFIGURATION_DIRECTIVE.md
+   • /docs/POST_LLM_EXECUTION_ARCHITECTURE.md
+   • /docs/HTML_EMAIL_CONVERSION_SYSTEM.md
+   • /docs/PLUGIN_SYSTEM_COMPLETE.md
+   • /docs/VERSION_MANAGEMENT.md
+   • CLAUDE.md (ROOT DIRECTORY)
+
+🔒 THIS MESSAGE IS AUTOMATICALLY ENFORCED AT EVERY SESSION START
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║           Failure to comply may result in architectural violations         ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
 EOF
-        
-        log_message "Generated session context file"
-        
-        # Output JSON with additional context for Claude
-        cat << EOF
-{
-  "additionalContext": "🚨 MANDATORY PROCEDURES ACTIVE: Session-start hook detected development project. Before making ANY code changes, you MUST: 1) Launch project-architect-coder agent to understand architecture, 2) Read /docs/ARBITRATOR_ARCHITECTURE.md and other docs, 3) Analyze current system state. See hooks/session-context.md for details. This is automatically enforced to prevent architectural violations.",
-  "success": true
-}
-EOF
-        
+
+        log_message "Mandatory directive displayed to user"
+
+        # Return success (no JSON needed, message is displayed directly)
+        echo ""
+
     else
-        log_message "Non-development project - skipping mandatory procedures"
-        echo '{"success": true}'
+        log_message "Non-Agentic-RAG project - skipping directive"
     fi
-    
+
     log_message "========== HOOK COMPLETED SUCCESSFULLY =========="
 }
 
