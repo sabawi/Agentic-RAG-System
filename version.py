@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.46"  # ♻️ REFACTOR: HTML generator consolidation - compatibility wrapper for report_utils
+VERSION = "1.0.3.47"  # 🐛 FIX: LLM-generated HTML formatting - removed justify, fixed spacing in system prompt
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE
