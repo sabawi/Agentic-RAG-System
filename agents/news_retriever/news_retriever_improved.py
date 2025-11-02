@@ -30,6 +30,10 @@ from typing import Optional
 import openai
 import schedule
 
+# Add project root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from utils.html_generator import HTMLReportGenerator
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +79,9 @@ class NewsRetrieverAgent:
             api_key="not-required"
         )
 
+        # Initialize HTML generator
+        self.html_generator = HTMLReportGenerator()
+
         logger.info(f"NewsRetrieverAgent initialized with server: {server_url}")
 
     def test_connection(self) -> bool:
@@ -110,12 +117,13 @@ class NewsRetrieverAgent:
                         "content": (
                             "Please provide a comprehensive news summary for today. "
                             "Use the get_news_summaries tool to fetch the latest news. "
-                            "Format the output as a well-structured HTML document with:\n"
-                            "1. A title with today's date\n"
-                            "2. Main headlines organized by category\n"
+                            "Format the output as a well-structured Markdown document with:\n"
+                            "1. A title with today's date (using ## for main heading)\n"
+                            "2. Main headlines organized by category (using ### for subheadings)\n"
                             "3. Brief summaries for each news item\n"
-                            "4. Source links where available\n"
-                            "5. Professional styling with proper HTML tags"
+                            "4. Source links where available (using [text](url) format)\n"
+                            "5. Use bullet points and formatting as appropriate\n\n"
+                            "IMPORTANT: Return ONLY Markdown format, NOT HTML."
                         )
                     }],
                     temperature=0.7,
@@ -143,10 +151,10 @@ class NewsRetrieverAgent:
 
     def save_to_file(self, content: str, filename: Optional[str] = None) -> Path:
         """
-        Save news content to HTML file.
+        Save news content to HTML file using central HTML generator.
 
         Args:
-            content: News content to save
+            content: News content (Markdown or plain text)
             filename: Optional custom filename (default: timestamped)
 
         Returns:
@@ -159,50 +167,14 @@ class NewsRetrieverAgent:
         filepath = self.output_dir / filename
 
         try:
-            # Ensure content is properly wrapped in HTML if not already
-            if not content.strip().startswith("<html"):
-                html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>News Summary - {datetime.now().strftime("%Y-%m-%d %H:%M")}</title>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-        }}
-        h1 {{
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
-        }}
-        h2 {{
-            color: #34495e;
-            margin-top: 30px;
-        }}
-        a {{
-            color: #3498db;
-            text-decoration: none;
-        }}
-        a:hover {{
-            text-decoration: underline;
-        }}
-        .timestamp {{
-            color: #7f8c8d;
-            font-style: italic;
-        }}
-    </style>
-</head>
-<body>
-    <p class="timestamp">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-    {content}
-</body>
-</html>"""
-            else:
-                html_content = content
+            # Use central HTML generator to convert Markdown to HTML
+            html_content = self.html_generator.generate_html_report(
+                content=content,
+                title=f"News Summary - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                header_title="📰 News Summary",
+                header_subtitle=f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                include_disclaimer=False
+            )
 
             filepath.write_text(html_content, encoding='utf-8')
             logger.info(f"✅ Saved news to: {filepath}")

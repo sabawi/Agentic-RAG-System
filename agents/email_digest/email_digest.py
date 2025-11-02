@@ -28,6 +28,10 @@ import json
 import openai
 import schedule
 
+# Import central HTML generator (NO WHEEL REINVENTING!)
+sys.path.append(str(Path(__file__).parent.parent.parent))
+from utils.html_generator import HTMLReportGenerator
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -79,6 +83,9 @@ class EmailDigestAgent:
             api_key="not-required"
         )
 
+        # Initialize central HTML generator
+        self.html_generator = HTMLReportGenerator()
+
         logger.info(f"EmailDigestAgent initialized for provider: {email_provider}, last {hours_back} hours")
 
     def test_connection(self) -> bool:
@@ -110,7 +117,7 @@ class EmailDigestAgent:
                 start_date = (datetime.now() - timedelta(hours=self.hours_back)).strftime("%Y-%m-%d")
                 
                 prompt = f"""
-Please retrieve recent emails from my {self.email_provider} account for the last {self.hours_back} hours.
+Please retrieve recent emails from my account for the last {self.hours_back} hours.
 
 Use the email_retriever tool to get emails. Then provide:
 
@@ -125,12 +132,12 @@ Use the email_retriever tool to get emails. Then provide:
 4. Highlight any recurring themes or patterns
 5. Flag any missed follow-ups from previous emails
 
-Format as a structured HTML report with:
-- Clear priority indicators
-- Color coding for urgency
-- Collapsible sections
-- Searchable content
-- Action items at the top
+Format as Markdown with:
+- Clear headings (## for sections, ### for subsections)
+- Priority indicators (🔴 High, 🟡 Medium, 🟢 Low)
+- Bullet lists for items
+- **Bold** for important information
+- Links where applicable
 """
 
                 response = self.client.chat.completions.create(
@@ -281,10 +288,10 @@ Format as a prioritized action item list with:
 
     def save_email_digest(self, content: str, digest_type: str) -> Path:
         """
-        Save email digest to HTML file.
+        Save email digest to HTML file using central HTML generator.
 
         Args:
-            content: Digest content to save
+            content: Digest content (Markdown or plain text)
             digest_type: Type of digest ('morning', 'daily', 'weekly')
 
         Returns:
@@ -295,97 +302,14 @@ Format as a prioritized action item list with:
         filepath = self.output_dir / filename
 
         try:
-            # Wrap in HTML if not already
-            if not content.strip().startswith("<html"):
-                html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Email {digest_type.title()} Digest - {datetime.now().strftime("%Y-%m-%d")}</title>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-            background-color: #f8f9fa;
-        }}
-        h1 {{
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
-        }}
-        h2 {{
-            color: #34495e;
-            margin-top: 30px;
-        }}
-        h3 {{
-            color: #2980b9;
-        }}
-        .critical {{ background-color: #ffebee; border-left: 5px solid #f44336; padding: 10px; margin: 10px 0; }}
-        .high {{ background-color: #fff3e0; border-left: 5px solid #ff9800; padding: 10px; margin: 10px 0; }}
-        .medium {{ background-color: #f3e5f5; border-left: 5px solid #9c27b0; padding: 10px; margin: 10px 0; }}
-        .low {{ background-color: #e8f5e8; border-left: 5px solid #4caf50; padding: 10px; margin: 10px 0; }}
-        .action-item {{
-            background-color: #fffde7;
-            border: 2px solid #ffeb3b;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 5px;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            background-color: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        th, td {{
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }}
-        th {{
-            background-color: #34495e;
-            color: white;
-        }}
-        a {{
-            color: #3498db;
-            text-decoration: none;
-        }}
-        a:hover {{
-            text-decoration: underline;
-        }}
-        .timestamp {{
-            color: #7f8c8d;
-            font-style: italic;
-            margin: 20px 0;
-        }}
-        .sender {{
-            font-weight: bold;
-            color: #2c3e50;
-        }}
-        .subject {{
-            font-style: italic;
-            color: #7f8c8d;
-        }}
-        .priority-high {{ color: #e74c3c; font-weight: bold; }}
-        .priority-medium {{ color: #f39c12; font-weight: bold; }}
-        .priority-low {{ color: #7f8c8d; }}
-    </style>
-</head>
-<body>
-    <div style="text-align: center; margin-bottom: 20px;">
-        <h1>Email {digest_type.title()} Digest</h1>
-        <p class="timestamp">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-        <p>Summary of emails from {self.email_provider} for the last {self.hours_back} hours</p>
-    </div>
-    {content}
-</body>
-</html>"""
-            else:
-                html_content = content
+            # Use central HTML generator to convert Markdown to HTML
+            html_content = self.html_generator.generate_html_report(
+                content=content,
+                title=f"Email {digest_type.title()} Digest - {datetime.now().strftime('%Y-%m-%d')}",
+                header_title=f"📧 Email {digest_type.title()} Digest",
+                header_subtitle=f"Summary from {self.email_provider} for the last {self.hours_back} hours",
+                include_disclaimer=False  # No disclaimer needed for email digest
+            )
 
             filepath.write_text(html_content, encoding='utf-8')
             logger.info(f"✅ Saved email digest to: {filepath}")
@@ -457,28 +381,33 @@ Format as a prioritized action item list with:
             logger.warning("Failed to analyze email sentiment")
             sentiment_analysis = "No sentiment analysis available."
 
-        # Combine into digest
+        # Combine into digest (Markdown format - HTML generator will convert)
         digest_content = f"""
-<div class="critical">
-    <h2>🔥 Critical Action Items</h2>
-    <p>These require immediate attention:</p>
-    {action_items}
-</div>
+## 🔥 Critical Action Items
 
-<h2>📧 Email Summary</h2>
+These require immediate attention:
+
+{action_items}
+
+---
+
+## 📧 Email Summary
+
 {email_content}
 
-<h2>🧠 Sentiment Analysis</h2>
+---
+
+## 🧠 Sentiment Analysis
+
 {sentiment_analysis}
 
-<div style="margin-top: 30px; padding: 15px; background-color: #e3f2fd; border-radius: 5px;">
-    <h3>Quick Stats</h3>
-    <ul>
-        <li><strong>Email Provider:</strong> {self.email_provider}</li>
-        <li><strong>Time Range:</strong> Last {self.hours_back} hours</li>
-        <li><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</li>
-    </ul>
-</div>
+---
+
+### Quick Stats
+
+- **Email Provider:** {self.email_provider}
+- **Time Range:** Last {self.hours_back} hours
+- **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
         filepath = self.save_email_digest(digest_content, "morning")
@@ -552,33 +481,40 @@ Format as a pattern analysis report.
                     logger.error("All trend analysis attempts failed")
                     trend_analysis = "No pattern analysis available."
 
-        # Combine into daily report
+        # Combine into daily report (Markdown format - HTML generator will convert)
         daily_content = f"""
-<h2>📊 Daily Email Report - {datetime.now().strftime('%Y-%m-%d')}</h2>
+## 📊 Daily Email Report - {datetime.now().strftime('%Y-%m-%d')}
 
-<div class="action-item">
-    <h3>📋 Top Priority Action Items</h3>
-    {action_items}
-</div>
+### 📋 Top Priority Action Items
 
-<h3>📧 Complete Email Summary</h3>
+{action_items}
+
+---
+
+### 📧 Complete Email Summary
+
 {email_content}
 
-<h3>📈 Communication Patterns</h3>
+---
+
+### 📈 Communication Patterns
+
 {trend_analysis}
 
-<h3>🧠 Sentiment Analysis</h3>
+---
+
+### 🧠 Sentiment Analysis
+
 {sentiment_analysis}
 
-<div style="margin-top: 30px; padding: 15px; background-color: #e8f5e8; border-radius: 5px;">
-    <h3>Today's Communication Summary</h3>
-    <ul>
-        <li><strong>Provider:</strong> {self.email_provider}</li>
-        <li><strong>Period:</strong> Last {self.hours_back} hours</li>
-        <li><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</li>
-        <li><strong>Next Review:</strong> Tomorrow morning</li>
-    </ul>
-</div>
+---
+
+### Today's Communication Summary
+
+- **Provider:** {self.email_provider}
+- **Period:** Last {self.hours_back} hours
+- **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+- **Next Review:** Tomorrow morning
 """
 
         filepath = self.save_email_digest(daily_content, "daily")

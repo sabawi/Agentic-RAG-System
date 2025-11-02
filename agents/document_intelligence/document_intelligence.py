@@ -29,6 +29,10 @@ import json
 import openai
 import schedule
 
+# Add project root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from utils.html_generator import HTMLReportGenerator
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -79,6 +83,9 @@ class DocumentIntelligenceAgent:
             base_url=server_url,
             api_key="not-required"
         )
+
+        # Initialize HTML generator
+        self.html_generator = HTMLReportGenerator()
 
         logger.info(f"DocumentIntelligenceAgent initialized for directories: {', '.join(self.document_dirs)}")
 
@@ -357,7 +364,7 @@ Create a relationship map showing how documents connect and relate to each other
 
     def save_document_report(self, content: str, report_type: str) -> Path:
         """
-        Save document intelligence report to HTML file.
+        Save document intelligence report to HTML file using central HTML generator.
 
         Args:
             content: Report content to save
@@ -371,106 +378,14 @@ Create a relationship map showing how documents connect and relate to each other
         filepath = self.output_dir / filename
 
         try:
-            # Wrap in HTML if not already
-            if not content.strip().startswith("<html"):
-                html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Document Intelligence {report_type.title()} Report - {datetime.now().strftime("%Y-%m-%d")}</title>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-            background-color: #f8f9fa;
-        }}
-        h1 {{
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
-            text-align: center;
-        }}
-        h2 {{
-            color: #34495e;
-            margin-top: 30px;
-        }}
-        h3 {{
-            color: #2980b9;
-        }}
-        .critical {{ background-color: #ffebee; border-left: 5px solid #f44336; padding: 10px; margin: 10px 0; }}
-        .high-priority {{ background-color: #fff3e0; border-left: 5px solid #ff9800; padding: 10px; margin: 10px 0; }}
-        .medium-priority {{ background-color: #f3e5f5; border-left: 5px solid #9c27b0; padding: 10px; margin: 10px 0; }}
-        .low-priority {{ background-color: #e8f5e8; border-left: 5px solid #4caf50; padding: 10px; margin: 10px 0; }}
-        .action-item {{
-            background-color: #fffde7;
-            border: 2px solid #ffeb3b;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 5px;
-        }}
-        .document-card {{
-            background-color: white;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 15px;
-            margin: 10px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            background-color: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        th, td {{
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }}
-        th {{
-            background-color: #34495e;
-            color: white;
-        }}
-        a {{
-            color: #3498db;
-            text-decoration: none;
-        }}
-        a:hover {{
-            text-decoration: underline;
-        }}
-        .timestamp {{
-            color: #7f8c8d;
-            font-style: italic;
-            margin: 20px 0;
-            text-align: center;
-        }}
-        .priority-high {{ color: #e74c3c; font-weight: bold; }}
-        .priority-medium {{ color: #f39c12; font-weight: bold; }}
-        .priority-low {{ color: #7f8c8d; }}
-        .confidential {{ background-color: #ffcdd2; padding: 5px; border-radius: 3px; display: inline-block; }}
-        .relationship-map {{
-            background-color: #f1f8e9;
-            border: 1px solid #9ccc65;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 5px;
-        }}
-    </style>
-</head>
-<body>
-    <div style="text-align: center; margin-bottom: 20px;">
-        <h1>📄 Document Intelligence {report_type.title()} Report</h1>
-        <p class="timestamp">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-    </div>
-    {content}
-</body>
-</html>"""
-            else:
-                html_content = content
+            # Use central HTML generator
+            html_content = self.html_generator.generate_html_report(
+                content=content,
+                title=f"Document Intelligence {report_type.title()} Report - {datetime.now().strftime('%Y-%m-%d')}",
+                header_title=f"📄 Document Intelligence {report_type.title()} Report",
+                header_subtitle=f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                include_disclaimer=False
+            )
 
             filepath.write_text(html_content, encoding='utf-8')
             logger.info(f"✅ Saved document report to: {filepath}")

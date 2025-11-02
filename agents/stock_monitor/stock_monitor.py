@@ -27,6 +27,10 @@ from typing import Optional, List
 import openai
 import schedule
 
+# Add project root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from utils.html_generator import HTMLReportGenerator
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -77,6 +81,9 @@ class StockMonitorAgent:
             base_url=server_url,
             api_key="not-required"
         )
+
+        # Initialize HTML generator
+        self.html_generator = HTMLReportGenerator()
 
         logger.info(f"StockMonitorAgent initialized for stocks: {', '.join(self.stocks)}")
 
@@ -158,14 +165,16 @@ Use the comprehensive_stock_analyzer and get_stock_and_company_data tools to gat
 4. Overall portfolio performance summary
 5. Market sentiment and trends
 
-Format as an HTML report with:
-- Professional styling and tables
-- Clear section headers
-- Color coding (green for gains, red for losses)
+Format as a Markdown report with:
+- Clear section headers (## for main sections, ### for subsections)
+- Tables for price data
+- Use `.gain` class for positive changes, `.loss` class for negative changes
 - Summary statistics at the top
 - News highlights section
+- Bullet points for key information
 
 Make it concise but informative for a daily morning briefing.
+IMPORTANT: Return ONLY Markdown format, NOT HTML.
 """
 
     def _build_weekly_report_prompt(self) -> str:
@@ -183,14 +192,16 @@ Use comprehensive_stock_analyzer and analytical_visualizer tools to create:
 5. Sector performance comparison
 6. Recommendations for next week
 
-Format as a detailed HTML report with:
-- Executive summary at top
+Format as a detailed Markdown report with:
+- Executive summary at top (## header)
 - Performance charts and visualizations
-- Detailed analysis per stock
+- Detailed analysis per stock (### subheaders)
 - Portfolio recommendations
 - Risk assessment
+- Tables and bullet points for data
 
 This is for weekend review and planning.
+IMPORTANT: Return ONLY Markdown format, NOT HTML.
 """
 
     def _build_alert_check_prompt(self) -> str:
@@ -212,57 +223,20 @@ If no stocks meet criteria, return "No significant movements today."
 """
 
     def save_report(self, content: str, report_type: str) -> Path:
-        """Save report to HTML file."""
+        """Save report to HTML file using central HTML generator."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"portfolio_{report_type}_{timestamp}.html"
         filepath = self.output_dir / filename
 
         try:
-            # Wrap in HTML if not already
-            if not content.strip().startswith("<html"):
-                html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Portfolio {report_type.title()} Report - {datetime.now().strftime("%Y-%m-%d")}</title>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-        }}
-        h1 {{
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
-        }}
-        .gain {{ color: #27ae60; font-weight: bold; }}
-        .loss {{ color: #e74c3c; font-weight: bold; }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }}
-        th, td {{
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }}
-        th {{
-            background-color: #34495e;
-            color: white;
-        }}
-    </style>
-</head>
-<body>
-    <p style="color: #7f8c8d; font-style: italic;">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-    {content}
-</body>
-</html>"""
-            else:
-                html_content = content
+            # Use central HTML generator to convert Markdown to HTML
+            html_content = self.html_generator.generate_html_report(
+                content=content,
+                title=f"Portfolio {report_type.title()} Report - {datetime.now().strftime('%Y-%m-%d')}",
+                header_title=f"📊 Portfolio {report_type.title()} Report",
+                header_subtitle=f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                include_disclaimer=False
+            )
 
             filepath.write_text(html_content, encoding='utf-8')
             logger.info(f"✅ Saved report to: {filepath}")

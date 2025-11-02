@@ -44,13 +44,15 @@ from common.agent_utils import (
     create_output_directory
 )
 from common.report_utils import (
-    create_html_report,
-    save_html_report,
     send_email_report
 )
 # Import context detection and citation formatting (v1.0.5 enhancements)
 from common.context_detector import AnalysisContext
 from common.citation_formatter import CitationFormatter
+
+# Import central HTML generator
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from utils.html_generator import HTMLReportGenerator
 
 
 def clean_html_response(content: str) -> str:
@@ -162,6 +164,9 @@ class BusinessIntelligenceAgent:
 
         # Initialize citation formatter (v1.0.5 enhancement)
         self.citation_formatter = CitationFormatter()
+
+        # Initialize HTML generator
+        self.html_generator = HTMLReportGenerator()
 
         # Combine all targets for monitoring
         all_targets = [self.company] if self.company else []
@@ -1162,18 +1167,21 @@ CRITICAL:
 </div>
 """
 
-        # Create and save HTML report
-        html_report = create_html_report(
-            f"Business Intelligence Report - {self.company or 'Strategic Analysis'}",
-            report_content,
-            subtitle=f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        # Create and save HTML report using central HTML generator
+        html_report = self.html_generator.generate_html_report(
+            content=report_content,
+            title=f"Business Intelligence Report - {self.company or 'Strategic Analysis'}",
+            header_title=f"💼 Business Intelligence Report",
+            header_subtitle=f"{self.company or 'Strategic Analysis'} - Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            include_disclaimer=False
         )
-        
-        html_filepath = save_html_report(
-            html_report,
-            self.output_dir,
-            logger=self.logger
-        )
+
+        # Save the report
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"report_{timestamp}.html"
+        html_filepath = self.output_dir / filename
+        html_filepath.write_text(html_report, encoding='utf-8')
+        self.logger.info(f"✅ Saved report to: {html_filepath}")
 
         # Send email if requested
         if send_email and self.recipient_email:

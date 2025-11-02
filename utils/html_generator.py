@@ -32,19 +32,20 @@ class HTMLReportGenerator:
         return self._template_cache
 
     def _get_fallback_template(self) -> str:
-        """Fallback template if external file fails"""
+        """Fallback template if external file fails - Enhanced with report_utils CSS"""
         return """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <title>{{TITLE}}</title>
 <style>
+/* Base Styles */
 body {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.6;
   color: #333;
-  background-color: #f4f6f8;
+  background-color: #f8f9fa;
   margin: 0;
   padding: 0;
   word-wrap: break-word;
@@ -52,7 +53,7 @@ body {
   white-space: normal;
 }
 .container {
-  max-width: 600px;
+  max-width: 1000px;
   margin: 20px auto;
   background: #fff;
   border: 1px solid #ddd;
@@ -76,23 +77,215 @@ body {
   font-size: 13px;
   line-height: 1.3;
 }
+
+/* Headings - Consistent vertical spacing */
+h1 {
+  color: #2c3e50;
+  border-bottom: 3px solid #3498db;
+  padding-bottom: 10px;
+  margin-top: 20px;
+  margin-bottom: 15px;
+}
 h2 {
+  color: #34495e;
   font-size: 16px;
-  margin-top: 24px;
-  margin-bottom: 8px;
+  margin-top: 30px;
+  margin-bottom: 12px;
   border-bottom: 2px solid #4a90e2;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
 }
 h3 {
+  color: #2980b9;
   font-size: 15px;
-  margin: 18px 0 6px;
+  margin-top: 20px;
+  margin-bottom: 8px;
 }
+
+/* Text Elements */
 p {
   margin: 8px 0;
-  text-align: justify;
 }
 ul { padding-left: 18px; margin: 8px 0; }
 li { margin-bottom: 6px; }
+a {
+  color: #3498db;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+a:hover {
+  color: #2980b9;
+  text-decoration: underline;
+}
+
+/* Images - constrain to container width */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 20px auto;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Citation styling - for inline and block citations */
+.citation {
+  font-size: 11px;
+  color: #666;
+  font-style: italic;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+.citation a {
+  color: #666;
+  text-decoration: none;
+  border-bottom: 1px dotted #999;
+}
+
+.citation a:hover {
+  color: #3498db;
+  border-bottom-color: #3498db;
+}
+
+/* Table citation styling */
+table + p.citation,
+table + .citation {
+  font-size: 11px;
+  color: #666;
+  font-style: italic;
+  margin-top: 5px;
+}
+
+/* Priority/Severity Classes - From report_utils */
+.critical {
+  background-color: #ffebee;
+  border-left: 5px solid #f44336;
+  padding: 10px;
+  margin: 10px 0;
+}
+.high {
+  background-color: #fff3e0;
+  border-left: 5px solid #ff9800;
+  padding: 10px;
+  margin: 10px 0;
+}
+.medium {
+  background-color: #f3e5f5;
+  border-left: 5px solid #9c27b0;
+  padding: 10px;
+  margin: 10px 0;
+}
+.low {
+  background-color: #e8f5e8;
+  border-left: 5px solid #4caf50;
+  padding: 10px;
+  margin: 10px 0;
+}
+.info {
+  background-color: #e3f2fd;
+  border-left: 5px solid #2196f3;
+  padding: 10px;
+  margin: 10px 0;
+}
+
+/* Action Items - From report_utils */
+.action-item {
+  background-color: #fffde7;
+  border: 2px solid #ffeb3b;
+  padding: 15px;
+  margin: 10px 0;
+  border-radius: 5px;
+}
+
+/* Priority Levels 1-5 - From report_utils */
+.priority-1 {
+  background-color: #ffebee;
+  border-left: 5px solid #f44336;
+  padding: 10px;
+}
+.priority-2 {
+  background-color: #fff3e0;
+  border-left: 5px solid #ff9800;
+  padding: 10px;
+}
+.priority-3 {
+  background-color: #f3e5f5;
+  border-left: 5px solid #9c27b0;
+  padding: 10px;
+}
+.priority-4 {
+  background-color: #e8f5e8;
+  border-left: 5px solid #4caf50;
+  padding: 10px;
+}
+.priority-5 {
+  background-color: #e3f2fd;
+  border-left: 5px solid #2196f3;
+  padding: 10px;
+}
+
+/* Email-Specific Classes - From report_utils */
+.sender {
+  font-weight: bold;
+  color: #2c3e50;
+}
+.subject {
+  font-style: italic;
+  color: #7f8c8d;
+}
+.priority-high {
+  color: #e74c3c;
+  font-weight: bold;
+}
+.priority-medium {
+  color: #f39c12;
+  font-weight: bold;
+}
+.priority-low {
+  color: #7f8c8d;
+}
+.relevance-high {
+  color: #e74c3c;
+  font-weight: bold;
+}
+.relevance-medium {
+  color: #f39c12;
+  font-weight: bold;
+}
+.relevance-low {
+  color: #7f8c8d;
+}
+
+/* Table Styling - Enhanced from report_utils */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+th, td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+th {
+  background-color: #34495e;
+  color: white;
+}
+tr:hover {
+  background-color: #f5f5f5;
+}
+
+/* Stats Box - From report_utils */
+.stats-box {
+  margin-top: 30px;
+  padding: 15px;
+  background-color: #e3f2fd;
+  border-radius: 5px;
+}
+
+/* Original Classes Preserved */
 .metric {
   background-color: #f1f3f5;
   border-left: 4px solid #4a90e2;
@@ -125,15 +318,17 @@ li { margin-bottom: 6px; }
   margin: 16px 0;
 }
 .timestamp {
-  background-color: #eee;
-  color: #666;
+  color: #7f8c8d;
+  font-style: italic;
   text-align: center;
   font-size: 12px;
-  font-style: italic;
   padding: 10px;
   margin-top: 20px;
   border-radius: 4px;
 }
+
+/* Custom CSS Placeholder */
+{{CUSTOM_CSS}}
 </style>
 </head>
 <body>
@@ -173,6 +368,29 @@ li { margin-bottom: 6px; }
         # BeautifulSoup handles entities correctly, no need to re-escape everything
 
         return str(soup)
+
+    def _convert_citations_to_html(self, content: str) -> str:
+        """
+        Convert plain text citations to clickable HTML.
+
+        Converts patterns like:
+          [Source: Yahoo Finance, as of 2025-11-01]
+          [Source: Rivian Newsroom, "Georgia Plant Kickoff Ceremony", October 30, 2025]
+
+        To:
+          <span class="citation">[Source: Yahoo Finance, as of 2025-11-01]</span>
+        """
+        import re
+
+        # Pattern to match citations in square brackets starting with "Source:"
+        # Matches: [Source: anything here]
+        pattern = r'\[Source:\s*([^\]]+)\]'
+
+        def citation_replacement(match):
+            citation_text = match.group(1).strip()
+            return f'<span class="citation">[Source: {citation_text}]</span>'
+
+        return re.sub(pattern, citation_replacement, content)
 
     def _convert_markdown_to_html(self, markdown_text: str) -> str:
         """Convert basic markdown syntax to HTML"""
@@ -241,9 +459,25 @@ li { margin-bottom: 6px; }
         header_title: str = "Analysis Report",
         header_subtitle: str = "",
         include_disclaimer: bool = True,
-        custom_timestamp: Optional[str] = None
+        custom_timestamp: Optional[str] = None,
+        custom_css: Optional[str] = None
     ) -> str:
-        """Generate clean HTML report using shared template"""
+        """
+        Generate clean HTML report using shared template.
+
+        Args:
+            content: Report content (Markdown, HTML, or plain text)
+            title: Page title (appears in browser tab)
+            header_title: Main heading in report header
+            header_subtitle: Subtitle/description in header
+            include_disclaimer: Whether to include financial disclaimer
+            custom_timestamp: Custom timestamp string (default: current time)
+            custom_css: Optional custom CSS to inject into template
+                       WARNING: Must be trusted input only - no user input sanitization
+
+        Returns:
+            Complete HTML document as string
+        """
         try:
             template = self._load_template()
 
@@ -278,6 +512,9 @@ li { margin-bottom: 6px; }
                         formatted_content += f"<p>{escaped_para}</p>\n"
                 content = formatted_content
 
+            # Convert plain text citations to styled HTML citations
+            content = self._convert_citations_to_html(content)
+
             # Clean content (only for HTML content)
             content = self._clean_html_content(content)
 
@@ -295,14 +532,20 @@ li { margin-bottom: 6px; }
             # Prepare timestamp
             timestamp = custom_timestamp or f"{datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}"
 
+            # Prepare custom CSS
+            custom_css_content = ""
+            if custom_css:
+                custom_css_content = f"\n{custom_css}\n"
+
             # Replace placeholders with properly escaped content
             import html as html_module
             html_document = template.replace("{{TITLE}}", html_module.escape(title, quote=True))
             html_document = html_document.replace("{{HEADER_TITLE}}", html_module.escape(header_title, quote=True))
             html_document = html_document.replace("{{HEADER_SUBTITLE}}", html_module.escape(header_subtitle, quote=True))
-            html_document = html_document.replace("{{CONTENT}}", html_module.escape(content, quote=True))
+            html_document = html_document.replace("{{CONTENT}}", content)
             html_document = html_document.replace("{{DISCLAIMER}}", disclaimer)
             html_document = html_document.replace("{{TIMESTAMP}}", timestamp)
+            html_document = html_document.replace("{{CUSTOM_CSS}}", custom_css_content)
 
             return html_document
 
@@ -334,14 +577,30 @@ def create_html_report(
     header_title: str = "Analysis Report",
     header_subtitle: str = "",
     include_disclaimer: bool = True,
-    custom_timestamp: Optional[str] = None
+    custom_timestamp: Optional[str] = None,
+    custom_css: Optional[str] = None
 ) -> str:
-    """Convenience wrapper for generating HTML reports"""
+    """
+    Convenience wrapper for generating HTML reports.
+
+    Args:
+        content: Report content (Markdown, HTML, or plain text)
+        title: Page title (appears in browser tab)
+        header_title: Main heading in report header
+        header_subtitle: Subtitle/description in header
+        include_disclaimer: Whether to include financial disclaimer
+        custom_timestamp: Custom timestamp string (default: current time)
+        custom_css: Optional custom CSS to inject into template
+
+    Returns:
+        Complete HTML document as string
+    """
     return html_generator.generate_html_report(
         content=content,
         title=title,
         header_title=header_title,
         header_subtitle=header_subtitle,
         include_disclaimer=include_disclaimer,
-        custom_timestamp=custom_timestamp
+        custom_timestamp=custom_timestamp,
+        custom_css=custom_css
     )
