@@ -2,170 +2,46 @@
 """
 Report generation and email utilities for agents.
 
+DEPRECATION NOTICE:
+-------------------
+This module is being phased out in favor of utils/html_generator.py.
+The HTML generation functions below now act as compatibility wrappers
+that redirect to the central HTML generator.
+
+Migration Guide:
+  OLD: from common.report_utils import create_html_report
+  NEW: from utils.html_generator import create_html_report
+
+All CSS classes from this module have been merged into the central
+template at templates/html_report_template.html.
+
 Author: Agentic-RAG Development Team
-Version: 1.0.0
+Version: 2.0.0 (Compatibility Wrapper)
 """
 
 import logging
+import sys
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 import openai
 
+# Import central HTML generator with absolute import
+# Add project root to path to ensure utils can be imported
+_project_root = Path(__file__).parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
-# Standard HTML styling for reports
+from utils.html_generator import create_html_report as central_create_html_report
+
+
+# DEPRECATED: HTML_STYLE is kept for reference but no longer used
+# All CSS has been merged into templates/html_report_template.html
 HTML_STYLE = """
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        max-width: 1000px;
-        margin: 0 auto;
-        padding: 20px;
-        line-height: 1.6;
-        background-color: #f8f9fa;
-    }
-    h1 {
-        color: #2c3e50;
-        border-bottom: 3px solid #3498db;
-        padding-bottom: 10px;
-    }
-    h2 {
-        color: #34495e;
-        margin-top: 30px;
-    }
-    h3 {
-        color: #2980b9;
-    }
-    .critical {
-        background-color: #ffebee;
-        border-left: 5px solid #f44336;
-        padding: 10px;
-        margin: 10px 0;
-    }
-    .high {
-        background-color: #fff3e0;
-        border-left: 5px solid #ff9800;
-        padding: 10px;
-        margin: 10px 0;
-    }
-    .medium {
-        background-color: #f3e5f5;
-        border-left: 5px solid #9c27b0;
-        padding: 10px;
-        margin: 10px 0;
-    }
-    .low {
-        background-color: #e8f5e8;
-        border-left: 5px solid #4caf50;
-        padding: 10px;
-        margin: 10px 0;
-    }
-    .info {
-        background-color: #e3f2fd;
-        border-left: 5px solid #2196f3;
-        padding: 10px;
-        margin: 10px 0;
-    }
-    .action-item {
-        background-color: #fffde7;
-        border: 2px solid #ffeb3b;
-        padding: 15px;
-        margin: 10px 0;
-        border-radius: 5px;
-    }
-    .priority-1 {
-        background-color: #ffebee;
-        border-left: 5px solid #f44336;
-        padding: 10px;
-    }
-    .priority-2 {
-        background-color: #fff3e0;
-        border-left: 5px solid #ff9800;
-        padding: 10px;
-    }
-    .priority-3 {
-        background-color: #f3e5f5;
-        border-left: 5px solid #9c27b0;
-        padding: 10px;
-    }
-    .priority-4 {
-        background-color: #e8f5e8;
-        border-left: 5px solid #4caf50;
-        padding: 10px;
-    }
-    .priority-5 {
-        background-color: #e3f2fd;
-        border-left: 5px solid #2196f3;
-        padding: 10px;
-    }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 20px 0;
-        background-color: white;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    th, td {
-        padding: 12px;
-        text-align: left;
-        border-bottom: 1px solid #ddd;
-    }
-    th {
-        background-color: #34495e;
-        color: white;
-    }
-    tr:hover {
-        background-color: #f5f5f5;
-    }
-    a {
-        color: #3498db;
-        text-decoration: none;
-    }
-    a:hover {
-        text-decoration: underline;
-    }
-    .timestamp {
-        color: #7f8c8d;
-        font-style: italic;
-        margin: 20px 0;
-    }
-    .sender {
-        font-weight: bold;
-        color: #2c3e50;
-    }
-    .subject {
-        font-style: italic;
-        color: #7f8c8d;
-    }
-    .priority-high {
-        color: #e74c3c;
-        font-weight: bold;
-    }
-    .priority-medium {
-        color: #f39c12;
-        font-weight: bold;
-    }
-    .priority-low {
-        color: #7f8c8d;
-    }
-    .relevance-high {
-        color: #e74c3c;
-        font-weight: bold;
-    }
-    .relevance-medium {
-        color: #f39c12;
-        font-weight: bold;
-    }
-    .relevance-low {
-        color: #7f8c8d;
-    }
-    .stats-box {
-        margin-top: 30px;
-        padding: 15px;
-        background-color: #e3f2fd;
-        border-radius: 5px;
-    }
-</style>
+DEPRECATED: This CSS is no longer used.
+All styling is now managed by templates/html_report_template.html
+See utils/html_generator.py for current implementation.
 """
 
 
@@ -178,6 +54,9 @@ def create_html_report(
     """
     Create a complete HTML report with standard styling.
 
+    DEPRECATION WARNING: This is a compatibility wrapper.
+    Please migrate to: from utils.html_generator import create_html_report
+
     Args:
         title: Main title of the report
         content: HTML content body
@@ -187,31 +66,27 @@ def create_html_report(
     Returns:
         Complete HTML document as string
     """
+    # Issue deprecation warning (only once per session)
+    warnings.warn(
+        "common.report_utils.create_html_report is deprecated. "
+        "Use utils.html_generator.create_html_report instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
+    # Generate subtitle if not provided
     if subtitle is None:
         subtitle = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
-    # Combine styles
-    style = HTML_STYLE
-    if additional_style:
-        style += f"\n{additional_style}"
-
-    html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>{title}</title>
-    {style}
-</head>
-<body>
-    <div style="text-align: center; margin-bottom: 20px;">
-        <h1>{title}</h1>
-        <p class="timestamp">{subtitle}</p>
-    </div>
-    {content}
-</body>
-</html>"""
-
-    return html_content
+    # Redirect to central HTML generator with mapped parameters
+    return central_create_html_report(
+        content=content,
+        title=title,
+        header_title=title,
+        header_subtitle=subtitle,
+        include_disclaimer=False,  # Old report_utils didn't include disclaimer
+        custom_css=additional_style
+    )
 
 
 def save_html_report(
