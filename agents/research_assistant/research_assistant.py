@@ -28,6 +28,10 @@ import json
 import openai
 import schedule
 
+# Add project root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from utils.html_generator import HTMLReportGenerator
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +79,9 @@ class ResearchAssistantAgent:
             base_url=server_url,
             api_key="not-required"
         )
+
+        # Initialize HTML report generator
+        self.html_generator = HTMLReportGenerator()
 
         logger.info(f"ResearchAssistantAgent initialized for topics: {', '.join(self.topics)}")
 
@@ -280,10 +287,10 @@ Format as an organized HTML document with:
 
     def save_research_report(self, content: str, report_type: str, topic: str = "") -> Path:
         """
-        Save research report to HTML file.
+        Save research report to HTML file using centralized HTML generator.
 
         Args:
-            content: Report content to save
+            content: Report content to save (markdown or HTML)
             report_type: Type of report ('daily', 'weekly', 'trend', 'reading_list')
             topic: Optional topic name for file naming
 
@@ -291,87 +298,24 @@ Format as an organized HTML document with:
             Path to saved file
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Build filename
         if topic:
             filename = f"research_{report_type}_{topic}_{timestamp}.html"
+            title = f"Research {report_type.title()} Report: {topic}"
         else:
             filename = f"research_{report_type}_{timestamp}.html"
-        
+            title = f"Research {report_type.title()} Report"
+
         filepath = self.output_dir / filename
 
         try:
-            # Wrap in HTML if not already
-            if not content.strip().startswith("<html"):
-                html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Research {report_type.title()} Report - {datetime.now().strftime("%Y-%m-%d")}</title>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-            background-color: #f8f9fa;
-        }}
-        h1 {{
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
-        }}
-        h2 {{
-            color: #34495e;
-            margin-top: 30px;
-        }}
-        .priority-1 {{ background-color: #ffebee; border-left: 5px solid #f44336; padding: 10px; }}
-        .priority-2 {{ background-color: #fff3e0; border-left: 5px solid #ff9800; padding: 10px; }}
-        .priority-3 {{ background-color: #f3e5f5; border-left: 5px solid #9c27b0; padding: 10px; }}
-        .priority-4 {{ background-color: #e8f5e8; border-left: 5px solid #4caf50; padding: 10px; }}
-        .priority-5 {{ background-color: #e3f2fd; border-left: 5px solid #2196f3; padding: 10px; }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            background-color: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        th, td {{
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }}
-        th {{
-            background-color: #34495e;
-            color: white;
-        }}
-        a {{
-            color: #3498db;
-            text-decoration: none;
-        }}
-        a:hover {{
-            text-decoration: underline;
-        }}
-        .timestamp {{
-            color: #7f8c8d;
-            font-style: italic;
-            margin: 20px 0;
-        }}
-        .relevance-high {{ color: #e74c3c; font-weight: bold; }}
-        .relevance-medium {{ color: #f39c12; font-weight: bold; }}
-        .relevance-low {{ color: #7f8c8d; }}
-    </style>
-</head>
-<body>
-    <div style="text-align: center; margin-bottom: 20px;">
-        <h1>Research {report_type.title()} Report</h1>
-        <p class="timestamp">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-    </div>
-    {content}
-</body>
-</html>"""
-            else:
-                html_content = content
+            # Use centralized HTML generator with automatic markdown conversion
+            html_content = self.html_generator.generate_html_report(
+                title=title,
+                content=content,
+                report_type=report_type
+            )
 
             filepath.write_text(html_content, encoding='utf-8')
             logger.info(f"✅ Saved research report to: {filepath}")

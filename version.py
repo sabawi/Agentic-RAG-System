@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.49"  # 🐛 FIX: Stronger agentic ownership - LLM explicitly claims tool execution results as its own actions
+VERSION = "1.0.3.50"  # 🐛 FIX: Agent HTML generation - migrated 3 agents to centralized HTMLReportGenerator with markdown conversion
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE

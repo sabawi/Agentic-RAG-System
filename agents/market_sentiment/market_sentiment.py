@@ -28,6 +28,9 @@ import json
 import openai
 import schedule
 
+# Import centralized HTML generator
+from utils.html_generator import HTMLReportGenerator
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -78,6 +81,9 @@ class MarketSentimentAgent:
             base_url=server_url,
             api_key="not-required"
         )
+
+        # Initialize HTML report generator
+        self.html_generator = HTMLReportGenerator()
 
         logger.info(f"MarketSentimentAgent initialized for symbols: {', '.join(self.symbols)}, sectors: {', '.join(self.sectors)}")
 
@@ -297,10 +303,10 @@ Present in a dashboard format with:
 
     def save_sentiment_report(self, content: str, report_type: str) -> Path:
         """
-        Save sentiment report to HTML file.
+        Save sentiment report to HTML file using centralized HTML generator.
 
         Args:
-            content: Report content to save
+            content: Report content to save (markdown or HTML)
             report_type: Type of report ('daily', 'weekly', 'summary')
 
         Returns:
@@ -308,137 +314,16 @@ Present in a dashboard format with:
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"sentiment_{report_type}_report_{timestamp}.html"
+        title = f"Market Sentiment {report_type.title()} Report"
         filepath = self.output_dir / filename
 
         try:
-            # Wrap in HTML if not already
-            if not content.strip().startswith("<html"):
-                html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Market Sentiment {report_type.title()} Report - {datetime.now().strftime("%Y-%m-%d")}</title>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-            background-color: #f8f9fa;
-        }}
-        h1 {{
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
-            text-align: center;
-        }}
-        h2 {{
-            color: #34495e;
-            margin-top: 30px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 5px;
-        }}
-        h3 {{
-            color: #2980b9;
-        }}
-        .bullish {{ background-color: #e8f5e8; border-left: 5px solid #4caf50; padding: 10px; margin: 10px 0; }}
-        .bearish {{ background-color: #ffebee; border-left: 5px solid #f44336; padding: 10px; margin: 10px 0; }}
-        .neutral {{ background-color: #fff3e0; border-left: 5px solid #ff9800; padding: 10px; margin: 10px 0; }}
-        .high-confidence {{ background-color: #e8f5e8; border: 2px solid #4caf50; padding: 15px; margin: 10px 0; }}
-        .medium-confidence {{ background-color: #fff3e0; border: 2px solid #ff9800; padding: 15px; margin: 10px 0; }}
-        .low-confidence {{ background-color: #ffebee; border: 2px solid #f44336; padding: 15px; margin: 10px 0; }}
-        .dashboard {{
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin: 20px 0;
-        }}
-        .metric {{
-            display: inline-block;
-            width: 22%;
-            text-align: center;
-            padding: 15px;
-            margin: 1%;
-            background-color: #f8f9fa;
-            border-radius: 5px;
-            border: 1px solid #eee;
-        }}
-        .metric-value {{
-            font-size: 2em;
-            font-weight: bold;
-            color: #2c3e50;
-        }}
-        .metric-label {{
-            color: #7f8c8d;
-            font-size: 0.9em;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            background-color: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        th, td {{
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }}
-        th {{
-            background-color: #34495e;
-            color: white;
-        }}
-        a {{
-            color: #3498db;
-            text-decoration: none;
-        }}
-        a:hover {{
-            text-decoration: underline;
-        }}
-        .timestamp {{
-            color: #7f8c8d;
-            font-style: italic;
-            margin: 20px 0;
-            text-align: center;
-        }}
-        .sentiment-high {{ color: #4caf50; font-weight: bold; }}
-        .sentiment-medium {{ color: #ff9800; font-weight: bold; }}
-        .sentiment-low {{ color: #f44336; font-weight: bold; }}
-    </style>
-</head>
-<body>
-    <div style="text-align: center; margin-bottom: 20px;">
-        <h1>📊 Market Sentiment {report_type.title()} Report</h1>
-        <p class="timestamp">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-    </div>
-    
-    <div class="dashboard">
-        <h2>📊 Market Dashboard</h2>
-        <div class="metric">
-            <div class="metric-value">72</div>
-            <div class="metric-label">Sentiment Index</div>
-        </div>
-        <div class="metric">
-            <div class="metric-value">++</div>
-            <div class="metric-label">Trend Direction</div>
-        </div>
-        <div class="metric">
-            <div class="metric-value">18.5</div>
-            <div class="metric-label">Volatility Index</div>
-        </div>
-        <div class="metric">
-            <div class="metric-value">87%</div>
-            <div class="metric-label">Confidence Level</div>
-        </div>
-    </div>
-    
-    {content}
-</body>
-</html>"""
-            else:
-                html_content = content
+            # Use centralized HTML generator with automatic markdown conversion
+            html_content = self.html_generator.generate_html_report(
+                title=title,
+                content=content,
+                report_type=report_type
+            )
 
             filepath.write_text(html_content, encoding='utf-8')
             logger.info(f"✅ Saved sentiment report to: {filepath}")
