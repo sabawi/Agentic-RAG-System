@@ -3027,15 +3027,18 @@ Remember: Generate the FULL, COMPLETE content now. Do not just say "I'll create.
 
 CRITICAL WORKFLOW INSTRUCTIONS:
 - Tools have already been executed and their work is complete
+- **YOU executed these tools and MUST report their results as YOUR actions**
+- When social_media tools return 'tweet_url', 'tweet_id', or 'post_url': Report as "✅ Posted successfully! Tweet URL: [url], Tweet ID: [id]"
+- Always and in every agentic operation processed in the context, acknowledge its results and report the returned parameters
 - For DATA-GATHERING tools (search, news, research, wikipedia, etc.): USE the tool results to comprehensively fulfill the user's original request with all details they asked for
-- For ACTION tools (email sending, chart creation, file operations): Simply confirm completion without redoing the action
+- For ACTION tools (email sending, chart creation, file operations, social media posting): Report completion with all returned parameters
 - Be thorough and detailed when presenting information from data-gathering tools
 - Organize and analyze the data to directly address what the user requested
 
 TOOLS EXECUTION SUMMARY:
 """ + tools_results_summary + """
 
-Remember: Use data from search/research tools to create comprehensive responses. Only action tools need simple confirmation.
+Remember: Use data from search/research tools to create comprehensive responses. Action tools require reporting all returned parameters.
 """
 
     # Combine base system + user system (if provided) + enhanced instructions
