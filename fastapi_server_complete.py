@@ -3416,7 +3416,10 @@ async def llama_prompt(request: OllamaPromptRequest):
                     
                     return StreamingResponse(
                         stream_generator(),
-                        media_type="application/x-ndjson"
+                        media_type="application/x-ndjson",
+                        headers={
+                            "X-Accel-Buffering": "no"  # Critical: Prevent proxy buffering
+                        }
                     )
                 else:
                     # Return JSON response
@@ -9439,7 +9442,10 @@ END OF CONTEXT
     logger.info("--- EXITING OLLAMA_STREAM ---")
     return StreamingResponse(
         generate_stream(),
-        media_type="application/x-ndjson"
+        media_type="application/x-ndjson",
+        headers={
+            "X-Accel-Buffering": "no"  # Critical: Prevent proxy buffering
+        }
     )
 
 # ==============================================================================
@@ -10258,15 +10264,9 @@ async def openai_direct_stream(native_request_data: dict, model: str):
                 
                 # Check if this is HTML content (direct HTML injection)
                 if raw_content.startswith('<!DOCTYPE html>') or raw_content.startswith('<html'):
-                    logger.debug("🔧 Detected HTML content, wrapping in OpenAI format")
-                    content_chunk = {
-                        "id": f"chatcmpl-{int(time.time())}",
-                        "object": "chat.completion.chunk", 
-                        "created": int(time.time()),
-                        "model": model,
-                        "choices": [{"index": 0, "delta": {"content": raw_content}, "finish_reason": None}]
-                    }
-                    yield f"data: {json.dumps(content_chunk)}\n\n"
+                    logger.debug("🔧 Detected HTML content, skipping (not suitable for OpenAI streaming)")
+                    # Don't send HTML content through OpenAI endpoint - causes JSON parse errors
+                    # The file was already created by POST-LLM, just skip streaming the HTML
                     continue
                 
                 # Try to parse as JSON (regular Ollama response format)
@@ -10290,7 +10290,7 @@ async def openai_direct_stream(native_request_data: dict, model: str):
                                     "choices": [{"index": 0, "delta": {"content": native_json["response"]}, "finish_reason": None}]
                                 }
                                 yield f"data: {json.dumps(content_chunk)}\n\n"
-                            
+
                             # Send completion signal - but don't include metadata like context, created_at etc
                             final_chunk = {
                                 "id": f"chatcmpl-{int(time.time())}",
@@ -10302,11 +10302,11 @@ async def openai_direct_stream(native_request_data: dict, model: str):
                             yield f"data: {json.dumps(final_chunk)}\n\n"
                             yield "data: [DONE]\n\n"
 
-                            # 🔧 CRITICAL FIX: Don't return here! Continue consuming stream for POST-LLM execution
-                            # POST-LLM auto-execution is handled by llama_stream internally
-                            # The stream will continue with POST-LLM results (file creation, email sending, etc.)
-                            logger.info("🔄 PRIMARY LLM done, continuing stream for POST-LLM execution...")
-                            continue
+                            # 🔧 CRITICAL FIX: Return immediately after [DONE] to close HTTP connection
+                            # Open-WebUI expects connection to close after [DONE] termination signal
+                            # POST-LLM tasks will complete in background asynchronously
+                            logger.info("🔄 PRIMARY LLM done, closing stream (POST-LLM continues in background)")
+                            return
                         
                         # Extract and send content
                         if isinstance(native_json, dict) and "response" in native_json and native_json["response"]:
@@ -10357,7 +10357,7 @@ async def openai_direct_stream(native_request_data: dict, model: str):
                             
                             content_chunk = {
                                 "id": f"chatcmpl-{int(time.time())}",
-                                "object": "chat.completion.chunk", 
+                                "object": "chat.completion.chunk",
                                 "created": int(time.time()),
                                 "model": model,
                                 "choices": [{"index": 0, "delta": {"content": raw_content}, "finish_reason": None}]
@@ -10497,7 +10497,7 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
         logger.info(f"🔒 OpenAI Streaming Response requested")
         
         async def stream_generator():
-            # Send initial chunk
+            # Send initial chunk (OpenAI format: SSE)
             chunk = {
                 "id": f"chatcmpl-{int(time.time())}",
                 "object": "chat.completion.chunk",
@@ -10558,7 +10558,7 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
                 # Fallback to error for now
                 error_chunk = {
                     "id": f"chatcmpl-{int(time.time())}",
-                    "object": "chat.completion.chunk", 
+                    "object": "chat.completion.chunk",
                     "created": int(time.time()),
                     "model": model,
                     "choices": [{"index": 0, "delta": {"content": "HTTP option temporarily disabled. Use USE_DIRECT_FUNCTION_CALLS=true"}, "finish_reason": None}]
@@ -10570,11 +10570,12 @@ async def openai_streaming_response(user_prompt: str, model: str, conversation_i
         
         return StreamingResponse(
             stream_generator(),
-            media_type="text/plain",
+            media_type="text/plain",  # SSE format (NOT NDJSON)
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
-                "Content-Type": "text/event-stream"
+                "Content-Type": "text/event-stream",  # Critical: Enables SSE streaming
+                "X-Accel-Buffering": "no"  # Critical: Prevent proxy buffering
             }
         )
         

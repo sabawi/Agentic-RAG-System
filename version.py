@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.50"  # 🐛 FIX: Agent HTML generation - migrated 3 agents to centralized HTMLReportGenerator with markdown conversion
+VERSION = "1.0.3.84"  # ♻️ CHECKPOINT: Git repository recovery + restored working files (v1.0.3.51-83) - Communication Hub & HTML centralization need testing
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE
