@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.84"  # ♻️ CHECKPOINT: Git repository recovery + restored working files (v1.0.3.51-83) - Communication Hub & HTML centralization need testing
+VERSION = "1.0.3.102"  # 🐛 CRITICAL FIX: Markdown table corruption - re-insert blank lines after tables (Python-Markdown requirement) + cleanup debug logging
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE

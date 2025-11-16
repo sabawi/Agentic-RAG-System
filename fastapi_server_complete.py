@@ -5520,12 +5520,19 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
             "description": "Create file and email as attachment"
         },
         "document_creation_email": {
-            "triggers": ["write document and email", "create document file", "email me the document", "save document and send", 
-                        "craft", "write a", "include a pdf", "send the email", "with attachments", "cover letter", 
+            "triggers": ["write document and email", "create document file", "email me the document", "save document and send",
+                        "craft", "write a", "include a pdf", "send the email", "with attachments", "cover letter",
                         "pdf version", "email with attachments", "pdf formatted"],
             "required_tools": ["sandboxed_executor", "secure_email_sender"],
             "required_sequence": True,
             "description": "Write document, save file, email as attachment"
+        },
+        "research_html_report_email": {
+            "triggers": ["search for", "research", "create html report", "create a professional html", "html report",
+                        "create report", "generate report", "create a report"],
+            "required_tools": ["sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Research data, create HTML report with primary LLM content, email as attachment"
         },
         "pure_email_request": {
             "triggers": ["send an email", "send email", "email to", "mail to", "send to", "email with subject",
@@ -5733,21 +5740,64 @@ def _generate_dynamic_title(user_prompt: str, tools_results: str) -> str:
         logger.error(f"❌ Error generating dynamic title: {e}")
         return "Analysis Report"
 
+def _extract_subject_from_prompt(user_prompt: str) -> str:
+    """
+    Extract email subject from user prompt.
+
+    Looks for patterns like:
+    - subject 'My Subject'
+    - subject "My Subject"
+    - subject: 'My Subject'
+    - with subject 'My Subject'
+
+    Returns extracted subject or None if not found.
+    """
+    import re
+
+    # Pattern matches: subject followed by optional colon, then quoted text
+    patterns = [
+        r'(?:with\s+)?subject[:\s]+["\']([^"\']+)["\']',  # subject 'text' or subject: 'text'
+        r'(?:with\s+)?subject[:\s]+"([^"]+)"',  # subject "text"
+        r'(?:with\s+)?subject[:\s]+\'([^\']+)\'',  # subject 'text'
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, user_prompt, re.IGNORECASE)
+        if match:
+            subject = match.group(1).strip()
+            logger.info(f"📧 EXTRACTED SUBJECT: '{subject}' from prompt")
+            return subject
+
+    return None
+
+
 def _generate_dynamic_filename(user_prompt: str, tools_results: str, timestamp: str, file_extension: str = "html") -> str:
     """Generate dynamic filename based on content type and topic"""
     try:
         user_prompt_lower = user_prompt.lower()
         tools_results_lower = tools_results.lower()
-        
+
+        # 🔧 FIX: Check for explicit subject in user prompt first
+        # If user specifies a subject for email, use it for filename too
+        subject = _extract_subject_from_prompt(user_prompt)
+        if subject:
+            # Convert subject to safe filename format
+            import re
+            safe_filename = re.sub(r'[^a-zA-Z0-9_\s-]', '', subject)  # Remove special chars
+            safe_filename = re.sub(r'\s+', '_', safe_filename)  # Replace spaces with underscores
+            safe_filename = safe_filename.lower()[:50]  # Limit length and lowercase
+            logger.info(f"📄 FILENAME FROM SUBJECT: {safe_filename}_{timestamp}.{file_extension}")
+            return f"{safe_filename}_{timestamp}.{file_extension}"
+
         # Check for news content
         if "Tool: get_news_summaries" in tools_results:
             # Extract topic from user prompt
             news_keywords = {
                 "middle east": "middle_east_news",
-                "technology": "technology_news", 
+                "technology": "technology_news",
                 "tech": "technology_news",
                 "sports": "sports_news",
-                "politics": "political_news", 
+                "politics": "political_news",
                 "political": "political_news",
                 "business": "business_news",
                 "health": "health_news",
@@ -5766,29 +5816,29 @@ def _generate_dynamic_filename(user_prompt: str, tools_results: str, timestamp: 
                 "european": "european_news",
                 "europe": "europe_news"
             }
-            
+
             # Find the most specific topic match
             for topic, filename_prefix in news_keywords.items():
                 if topic in user_prompt_lower or topic in tools_results_lower:
                     return f"{filename_prefix}_analysis_{timestamp}.{file_extension}"
-            
+
             # Default news filename if no specific topic found
             return f"news_analysis_{timestamp}.{file_extension}"
-        
+
         # Check for financial/stock content
-        elif ("Tool: stock_analyzer" in tools_results or 
+        elif ("Tool: stock_analyzer" in tools_results or
               any(keyword in user_prompt_lower for keyword in ["stock", "financial", "market", "trading", "investment"])):
             return f"financial_analysis_{timestamp}.{file_extension}"
-        
+
         # Check for other specific content types
         elif any(keyword in user_prompt_lower for keyword in ["calendar", "appointment", "schedule"]):
             return f"calendar_report_{timestamp}.{file_extension}"
-        elif any(keyword in user_prompt_lower for keyword in ["email", "message", "letter"]):
-            return f"email_report_{timestamp}.{file_extension}"
+        # 🔧 FIX: Don't use generic "email_report" - this was causing the issue!
+        # Removed the "email" keyword check since it's too broad
         else:
             # General analysis report
             return f"analysis_report_{timestamp}.{file_extension}"
-            
+
     except Exception as e:
         logger.error(f"❌ Error generating dynamic filename: {e}")
         return f"analysis_report_{timestamp}.{file_extension}"
@@ -6542,24 +6592,26 @@ async def _generate_complete_html_email(complete_llm_response: str, html_email_r
         content = content.replace('\u201d', '"')  # right double quote → quote
         content = content.replace('\u2026', '...')  # ellipsis → three dots
 
-        # Apply custom styles by injecting CSS
+        # Prepare custom CSS (if provided)
+        custom_css_content = None
         if custom_styles:
             style_css = "body { "
             for css_key, css_value in custom_styles.items():
                 style_css += f"{css_key}: {css_value}; "
             style_css += "}"
-
-            # Inject custom styles into content
-            content = f"<style>{style_css}</style>\n{content}"
+            custom_css_content = style_css
 
         # Generate HTML using our proven template system
+        # 🐛 FIX: Pass custom CSS via parameter instead of prepending to content
+        # This allows markdown detection to work properly for ALL markdown content
         html_content = html_generator.generate_html_report(
-            content=content,
+            content=content,  # Pure markdown content - no HTML tags prepended
             title=title,
             header_title=title,
             header_subtitle=f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             include_disclaimer=False,  # Skip disclaimer for email reports
-            custom_timestamp=None
+            custom_timestamp=None,
+            custom_css=custom_css_content  # Pass CSS separately
         )
         
         # Save HTML file to sandbox workspace
@@ -6640,21 +6692,16 @@ async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager
                 
                 # Use complete LLM response as content (this is the key fix!)
                 raw_content = complete_llm_response.strip()
-                # 🔍 DEBUG v1.0.3.10: Check content being used for file creation
-                logger.info(f"🔍 POST-LLM FILE CONTENT preview (first 500 chars): {raw_content[:500]}")
 
                 # 🧹 CLEAN CONTENT: Remove raw LLM tokens and parameters
                 report_content = _clean_llm_response_content(raw_content)
-                
+
                 # 🔧 FIX: Replace template placeholders with actual data from user prompt and tools results
                 report_content = _fill_template_placeholders(report_content, user_prompt, tools_results)
-                
-                # 🔧 FIX: Clean up literal HTML tags (convert <br><br> to proper line breaks)
-                report_content = report_content.replace('<br><br>', '\n\n')
-                report_content = report_content.replace('<br>', '\n')
-                # Clean up any other literal HTML tags that might appear
-                import re
-                report_content = re.sub(r'</?[a-zA-Z][^>]*>', '', report_content)  # Remove any remaining HTML-like tags
+
+                # ✅ NOTE: HTML handling is now delegated to html_generator.py
+                # html_generator.generate_html_report() will detect if content is already HTML
+                # and return it as-is, or convert markdown/plain text to HTML as needed
                 
                 # Add proper headers if content doesn't have them
                 if not report_content.startswith("#") and not report_content.startswith("<"):
@@ -6999,16 +7046,20 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         cc_emails_str = ",".join(cc_emails) if cc_emails else ""
                         
                         # 🚀 SMART EMAIL COMPOSITION based on user request and file types
-                        
-                        # Determine email subject based on content
-                        subject = "Requested Documents"
-                        if len(files_to_attach) > 1:
-                            subject = f"Multiple Documents ({len(files_to_attach)} files)"
-                        elif any("pdf" in f.lower() for f in files_to_attach):
-                            subject = "PDF Document"
-                        
-                        # Add timestamp
-                        subject += f" - {datetime.now().strftime('%Y-%m-%d')}"
+
+                        # 🔧 FIX: Extract subject from user prompt instead of using generic subject
+                        subject = _extract_subject_from_prompt(user_prompt)
+
+                        if not subject:
+                            # Fallback: Determine email subject based on content if no explicit subject
+                            subject = "Requested Documents"
+                            if len(files_to_attach) > 1:
+                                subject = f"Multiple Documents ({len(files_to_attach)} files)"
+                            elif any("pdf" in f.lower() for f in files_to_attach):
+                                subject = "PDF Document"
+
+                            # Add timestamp for generic subjects only
+                            subject += f" - {datetime.now().strftime('%Y-%m-%d')}"
                         
                         # Create detailed file list for email body
                         file_list = ""
@@ -10302,10 +10353,56 @@ async def openai_direct_stream(native_request_data: dict, model: str):
                             yield f"data: {json.dumps(final_chunk)}\n\n"
                             yield "data: [DONE]\n\n"
 
-                            # 🔧 CRITICAL FIX: Return immediately after [DONE] to close HTTP connection
-                            # Open-WebUI expects connection to close after [DONE] termination signal
-                            # POST-LLM tasks will complete in background asynchronously
-                            logger.info("🔄 PRIMARY LLM done, closing stream (POST-LLM continues in background)")
+                            # ✅ FIX: Client stream closed, but continue consuming for POST-LLM execution
+                            # Open-WebUI receives [DONE] and connection closes from client perspective
+                            # But we continue consuming generator to allow POST-LLM code to execute
+                            logger.info("🔄 PRIMARY LLM done, client received [DONE], consuming POST-LLM chunks...")
+
+                            post_llm_chunk_count = 0
+                            post_llm_logs = []
+
+                            try:
+                                # Continue consuming remaining chunks from llama_stream
+                                # These chunks won't be sent to client (stream already terminated with [DONE])
+                                # But consuming them allows the generator to complete execution
+                                async for remaining_chunk in internal_response.body_iterator:
+                                    post_llm_chunk_count += 1
+
+                                    # Decode chunk for logging
+                                    if isinstance(remaining_chunk, bytes):
+                                        chunk_text = remaining_chunk.decode('utf-8', errors='ignore')
+                                    else:
+                                        chunk_text = str(remaining_chunk)
+
+                                    # Log POST-LLM activity (truncate for readability)
+                                    chunk_preview = chunk_text[:200] if len(chunk_text) > 200 else chunk_text
+                                    logger.debug(f"📦 POST-LLM chunk {post_llm_chunk_count}: {chunk_preview}")
+                                    post_llm_logs.append(chunk_preview)
+
+                                    # Try to parse for informative logging
+                                    try:
+                                        if chunk_text.strip():
+                                            chunk_json = json.loads(chunk_text.strip())
+                                            # Log if this is a POST-LLM result chunk
+                                            if isinstance(chunk_json, dict):
+                                                if 'post_processing' in chunk_json:
+                                                    logger.info(f"✅ POST-LLM: {chunk_json.get('post_processing')}")
+                                                elif 'message' in chunk_json and 'POST-PROCESSING' in str(chunk_json.get('message', {})):
+                                                    logger.info(f"✅ POST-LLM: Execution completed")
+                                    except json.JSONDecodeError:
+                                        pass  # Not JSON, just data chunk
+
+                                logger.info(f"✅ Generator fully consumed: {post_llm_chunk_count} POST-LLM chunks processed")
+                                if post_llm_chunk_count > 0:
+                                    logger.info(f"📊 POST-LLM Summary: Processed background tasks successfully")
+                                else:
+                                    logger.warning(f"⚠️ No POST-LLM chunks received (this may be normal if no POST-LLM tasks)")
+
+                            except Exception as e:
+                                logger.error(f"❌ Error consuming POST-LLM chunks: {e}")
+                                logger.error(f"❌ Traceback: {traceback.format_exc()}")
+
+                            logger.info("🚪 openai_direct_stream: Returning after full generator consumption")
                             return
                         
                         # Extract and send content

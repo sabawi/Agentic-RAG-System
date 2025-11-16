@@ -32,299 +32,43 @@ class HTMLReportGenerator:
         return self._template_cache
 
     def _get_fallback_template(self) -> str:
-        """Fallback template if external file fails - Enhanced with report_utils CSS"""
+        """Clean, simple template matching user-preferred style"""
         return """<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{TITLE}}</title>
 <style>
-/* Base Styles */
+/* Clean, Minimal Styling for Professional Reports */
 body {
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 14px;
-  line-height: 1.6;
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f4;
   color: #333;
-  background-color: #f8f9fa;
-  margin: 0;
-  padding: 0;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  white-space: normal;
-}
-.container {
-  max-width: 1000px;
-  margin: 20px auto;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  line-height: 1.6;
+  margin: 20px;
   padding: 20px;
 }
-.header {
-  background-color: #4a90e2;
-  color: #fff;
-  text-align: center;
-  padding: 16px;
-  border-radius: 4px;
-}
-.header h1 {
-  font-size: 20px;
-  margin: 0;
-  line-height: 1.2;
-}
-.header p {
-  margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 1.3;
-}
 
-/* Headings - Consistent vertical spacing */
-h1 {
-  color: #2c3e50;
-  border-bottom: 3px solid #3498db;
-  padding-bottom: 10px;
-  margin-top: 20px;
-  margin-bottom: 15px;
-}
-h2 {
-  color: #34495e;
-  font-size: 16px;
-  margin-top: 30px;
-  margin-bottom: 12px;
-  border-bottom: 2px solid #4a90e2;
-  padding-bottom: 6px;
-}
-h3 {
-  color: #2980b9;
-  font-size: 15px;
-  margin-top: 20px;
-  margin-bottom: 8px;
-}
-
-/* Text Elements */
-p {
-  margin: 8px 0;
-}
-ul { padding-left: 18px; margin: 8px 0; }
-li { margin-bottom: 6px; }
-a {
-  color: #3498db;
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-a:hover {
-  color: #2980b9;
-  text-decoration: underline;
-}
-
-/* Images - constrain to container width */
-img {
-  max-width: 100%;
-  height: auto;
-  display: block;
-  margin: 20px auto;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-/* Citation styling - for inline and block citations */
-.citation {
-  font-size: 11px;
-  color: #666;
-  font-style: italic;
-  margin-left: 4px;
-  white-space: nowrap;
-}
-
-.citation a {
-  color: #666;
-  text-decoration: none;
-  border-bottom: 1px dotted #999;
-}
-
-.citation a:hover {
-  color: #3498db;
-  border-bottom-color: #3498db;
-}
-
-/* Table citation styling */
-table + p.citation,
-table + .citation {
-  font-size: 11px;
-  color: #666;
-  font-style: italic;
-  margin-top: 5px;
-}
-
-/* Priority/Severity Classes - From report_utils */
-.critical {
-  background-color: #ffebee;
-  border-left: 5px solid #f44336;
-  padding: 10px;
-  margin: 10px 0;
-}
-.high {
-  background-color: #fff3e0;
-  border-left: 5px solid #ff9800;
-  padding: 10px;
-  margin: 10px 0;
-}
-.medium {
-  background-color: #f3e5f5;
-  border-left: 5px solid #9c27b0;
-  padding: 10px;
-  margin: 10px 0;
-}
-.low {
-  background-color: #e8f5e8;
-  border-left: 5px solid #4caf50;
-  padding: 10px;
-  margin: 10px 0;
-}
-.info {
-  background-color: #e3f2fd;
-  border-left: 5px solid #2196f3;
-  padding: 10px;
-  margin: 10px 0;
-}
-
-/* Action Items - From report_utils */
-.action-item {
-  background-color: #fffde7;
-  border: 2px solid #ffeb3b;
-  padding: 15px;
-  margin: 10px 0;
-  border-radius: 5px;
-}
-
-/* Priority Levels 1-5 - From report_utils */
-.priority-1 {
-  background-color: #ffebee;
-  border-left: 5px solid #f44336;
-  padding: 10px;
-}
-.priority-2 {
-  background-color: #fff3e0;
-  border-left: 5px solid #ff9800;
-  padding: 10px;
-}
-.priority-3 {
-  background-color: #f3e5f5;
-  border-left: 5px solid #9c27b0;
-  padding: 10px;
-}
-.priority-4 {
-  background-color: #e8f5e8;
-  border-left: 5px solid #4caf50;
-  padding: 10px;
-}
-.priority-5 {
-  background-color: #e3f2fd;
-  border-left: 5px solid #2196f3;
-  padding: 10px;
-}
-
-/* Email-Specific Classes - From report_utils */
-.sender {
-  font-weight: bold;
+h1, h2, h3 {
   color: #2c3e50;
 }
-.subject {
-  font-style: italic;
-  color: #7f8c8d;
-}
-.priority-high {
-  color: #e74c3c;
-  font-weight: bold;
-}
-.priority-medium {
-  color: #f39c12;
-  font-weight: bold;
-}
-.priority-low {
-  color: #7f8c8d;
-}
-.relevance-high {
-  color: #e74c3c;
-  font-weight: bold;
-}
-.relevance-medium {
-  color: #f39c12;
-  font-weight: bold;
-}
-.relevance-low {
-  color: #7f8c8d;
-}
 
-/* Table Styling - Enhanced from report_utils */
 table {
   width: 100%;
   border-collapse: collapse;
   margin: 20px 0;
-  background-color: white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
+
 th, td {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 1px solid #ddd;
-}
-th {
-  background-color: #34495e;
-  color: white;
-}
-tr:hover {
-  background-color: #f5f5f5;
-}
-
-/* Stats Box - From report_utils */
-.stats-box {
-  margin-top: 30px;
-  padding: 15px;
-  background-color: #e3f2fd;
-  border-radius: 5px;
-}
-
-/* Original Classes Preserved */
-.metric {
-  background-color: #f1f3f5;
-  border-left: 4px solid #4a90e2;
-  padding: 8px 12px;
-  border-radius: 4px;
-  margin: 6px 0;
-}
-.news-item {
-  background-color: #fafafa;
-  border: 1px solid #ddd;
-  padding: 12px;
-  border-radius: 4px;
-  margin: 12px 0;
-}
-.recommendation {
-  background-color: #28a745;
-  color: white;
-  padding: 14px;
-  border-radius: 5px;
-  text-align: center;
-  font-weight: bold;
-  margin: 20px 0;
-}
-.warning {
-  background-color: #fff3cd;
-  border: 1px solid #ffeeba;
-  color: #856404;
-  padding: 12px;
-  border-radius: 4px;
-  margin: 16px 0;
-}
-.timestamp {
-  color: #7f8c8d;
-  font-style: italic;
-  text-align: center;
-  font-size: 12px;
   padding: 10px;
-  margin-top: 20px;
-  border-radius: 4px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+th {
+  background-color: #3498db;
+  color: white;
 }
 
 /* Custom CSS Placeholder */
@@ -332,17 +76,7 @@ tr:hover {
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="header">
-    <h1>{{HEADER_TITLE}}</h1>
-    <p>{{HEADER_SUBTITLE}}</p>
-  </div>
-  <div class="content">
-    {{CONTENT}}
-    {{DISCLAIMER}}
-    <div class="timestamp">{{TIMESTAMP}}</div>
-  </div>
-</div>
+{{CONTENT}}
 </body>
 </html>"""
 
@@ -359,7 +93,7 @@ tr:hover {
             code.unwrap()
 
         # Remove <p> wrapping block elements like <h1>-<h3>
-        for tag in soup.find_all(['h1', 'h2', 'h3', 'ul', 'ol']):
+        for tag in soup.find_all(['h1', 'h2', 'h3', 'ul', 'ol', 'table']):
             parent = tag.parent
             if parent.name == 'p':
                 parent.unwrap()
@@ -392,8 +126,11 @@ tr:hover {
 
         return re.sub(pattern, citation_replacement, content)
 
-    def _convert_markdown_to_html(self, markdown_text: str) -> str:
-        """Convert basic markdown syntax to HTML"""
+    def _custom_markdown_converter(self, markdown_text: str) -> str:
+        """
+        Fallback: Basic markdown converter using regex.
+        Used only if the markdown library is not available.
+        """
         import re
 
         html = markdown_text
@@ -443,14 +180,137 @@ tr:hover {
             para = para.strip()
             if para:
                 # Check if it's already a block element
-                if para.startswith(('<h1>', '<h2>', '<h3>', '<ul>', '<ol>', '<div>')):
+                if para.startswith(('<h1>', '<h2>', '<h3>', '<ul>', '<ol>', '<div>', '<table>')):
                     formatted_paras.append(para)
                 else:
-                    # Regular paragraph - wrap in <p> and convert single newlines to <br>
-                    para = para.replace('\n', '<br>')
+                    # Regular paragraph - wrap in <p> but let single newlines flow naturally
+                    # DO NOT convert single newlines to <br> - let HTML handle whitespace naturally
+                    para = para.replace('\n', ' ')  # Single newlines become spaces (normal HTML behavior)
                     formatted_paras.append(f'<p>{para}</p>')
 
         return '\n'.join(formatted_paras)
+
+    def _convert_markdown_to_html(self, markdown_text: str) -> str:
+        """
+        Convert markdown to HTML using professional markdown library.
+        Supports tables, code blocks, syntax highlighting, and more.
+        Falls back to custom converter if library unavailable.
+        """
+        try:
+            import markdown
+            import re
+
+            # 🐛 FIX: Pre-process malformed markdown tables to ensure correct parsing.
+
+            # 0. Remove extra separator rows from table bodies
+            # LLMs sometimes generate separator rows BETWEEN data rows, which markdown
+            # library renders as data cells containing "---". Remove all but the first separator.
+            # Pattern: After a separator row, remove any subsequent separator rows until non-separator
+            lines = markdown_text.split('\n')
+            cleaned_lines = []
+            separator_seen = False
+            for line in lines:
+                # Check if this is a separator row (contains only |, -, :, and whitespace)
+                is_separator = bool(re.match(r'^\s*\|[\s\-:|]+\|\s*$', line))
+
+                if is_separator:
+                    if not separator_seen:
+                        # First separator - keep it
+                        cleaned_lines.append(line)
+                        separator_seen = True
+                    # else: skip additional separators
+                else:
+                    # Not a separator - reset flag if we've moved to a new section
+                    if line.strip() == '' or not line.strip().startswith('|'):
+                        separator_seen = False
+                    cleaned_lines.append(line)
+
+            markdown_text = '\n'.join(cleaned_lines)
+
+            # 0.5. FIX CRITICAL BUG: Re-insert blank lines after tables
+            # _clean_llm_response_content() removes blank lines, but tables REQUIRE blank lines
+            # after them to properly close before: headings, horizontal rules, code blocks, etc.
+            # Insert blank line after any table row that's followed by non-table content
+            markdown_text = re.sub(
+                r'(\|\s*[^\n]+\|\s*)\n(?!\s*\|)',  # table row + newline + NOT another table row
+                r'\1\n\n',  # add double blank line
+                markdown_text
+            )
+
+            # 1. Split rows that have been concatenated onto a single line.
+            # e.g., | A | B | | C | D | -> | A | B |\n| C | D |
+            # ONLY split when there are consecutive pipes (empty cell or concatenated rows)
+            markdown_text = re.sub(r'\|\s*\|', '|\n|', markdown_text)
+
+            # 2. Ensure tables are preceded by a blank line - FIXED VERSION
+            # 🐛 CRITICAL FIX v1.0.3.97: Original regex matched EVERY table row, injecting
+            # blank lines MID-TABLE, breaking table structure. New version only matches
+            # table HEADERS by looking ahead for separator row pattern.
+            # Match: non-blank-line + header-row + separator-row
+            markdown_text = re.sub(
+                r'(?<!\n)\n(\s*\|[^\n]+\|\s*\n)(\s*\|[\s\-:|]+\|\s*\n)',
+                r'\n\n\1\2',
+                markdown_text
+            )
+
+            # 3. REMOVED: Separator injection - was causing more harm than good
+            # 🐛 CRITICAL FIX v1.0.3.97: The hardcoded 10-column separator was being injected
+            # into tables with different column counts, causing markdown library to treat ALL
+            # content after the table as malformed table rows. LLMs generate proper separators,
+            # so this preprocessing is unnecessary and destructive.
+
+
+            # 🔧 DEBUG: Log first 500 chars of input markdown
+            print(f"\n{'='*80}")
+            print(f"📥 MARKDOWN INPUT (first 500 chars):")
+            print(f"{markdown_text[:500]}")
+            print(f"{'='*80}\n")
+
+            # Professional markdown extensions
+            # 🐛 FIX: Removed 'nl2br' extension - it breaks table parsing by inserting <br> tags
+            # Tables need consecutive lines without <br> to be recognized properly
+            extensions = [
+                'extra',          # Tables, fenced_code, footnotes, attr_list, def_list, abbr
+                'codehilite',     # Syntax highlighting with Pygments
+                'sane_lists',     # Better list handling
+            ]
+
+            # Configure extensions
+            extension_configs = {
+                'codehilite': {
+                    'guess_lang': True,         # Auto-detect code language
+                    'css_class': 'highlight',   # CSS class for code blocks
+                    'pygments_style': 'github', # Use GitHub-style syntax highlighting
+                    'noclasses': False,         # Use CSS classes (not inline styles)
+                }
+            }
+
+            # Create markdown converter
+            md = markdown.Markdown(
+                extensions=extensions,
+                extension_configs=extension_configs
+            )
+
+            # Convert markdown to HTML
+            html_content = md.convert(markdown_text)
+
+            # 🔧 DEBUG: Log first 500 chars of output HTML
+            print(f"\n{'='*80}")
+            print(f"📤 HTML OUTPUT (first 500 chars):")
+            print(f"{html_content[:500]}")
+            print(f"{'='*80}\n")
+
+            print(f"✅ Markdown converted using professional library (markdown v{markdown.__version__})")
+            return html_content
+
+        except ImportError:
+            # Fallback to custom converter
+            print("⚠️ markdown library not available, using fallback custom converter")
+            return self._custom_markdown_converter(markdown_text)
+        except Exception as e:
+            # On any error, fallback to custom converter
+            print(f"⚠️ Error in markdown library: {e}, using fallback custom converter")
+            return self._custom_markdown_converter(markdown_text)
 
     def generate_html_report(
         self,
@@ -479,6 +339,11 @@ tr:hover {
             Complete HTML document as string
         """
         try:
+            # 🔧 FIX: If content is already complete HTML, return it as-is
+            if self.is_already_html(content):
+                print(f"✅ HTML GENERATOR: Content is already complete HTML - returning as-is (no wrapping)")
+                return content
+
             template = self._load_template()
 
             # 🔧 FIX: Normalize special Unicode characters that cause encoding issues in email clients
@@ -488,17 +353,22 @@ tr:hover {
             content = content.replace('\u2026', '...')  # ellipsis → three dots
 
             # 🔧 FIX: Detect and convert markdown to HTML
-            # Check if content looks like markdown (has ## headers, [](links), etc.)
+            # Check if content looks like markdown (has ## headers, [](links), tables, etc.)
             has_markdown_headers = '##' in content or '###' in content
             has_markdown_links = '](' in content
             has_markdown_formatting = '**' in content or content.count('*') > 2
             has_markdown_lists = '\n- ' in content or '\n* ' in content
+            has_markdown_tables = '|' in content and ('---' in content or '|-' in content)  # Table syntax: | col | and |---|
 
-            is_markdown = has_markdown_headers or has_markdown_links or has_markdown_formatting or has_markdown_lists
+            is_markdown = has_markdown_headers or has_markdown_links or has_markdown_formatting or has_markdown_lists or has_markdown_tables
+
+            if is_markdown:
+                print(f"📝 Markdown detected - headers:{has_markdown_headers}, links:{has_markdown_links}, formatting:{has_markdown_formatting}, lists:{has_markdown_lists}, tables:{has_markdown_tables}")
 
             if is_markdown:
                 # Convert markdown to HTML
                 content = self._convert_markdown_to_html(content)
+
             elif not ('<' in content and '>' in content):
                 # Plain text - convert newlines to paragraphs
                 import html as html_module
@@ -540,11 +410,7 @@ tr:hover {
             # Replace placeholders with properly escaped content
             import html as html_module
             html_document = template.replace("{{TITLE}}", html_module.escape(title, quote=True))
-            html_document = html_document.replace("{{HEADER_TITLE}}", html_module.escape(header_title, quote=True))
-            html_document = html_document.replace("{{HEADER_SUBTITLE}}", html_module.escape(header_subtitle, quote=True))
             html_document = html_document.replace("{{CONTENT}}", content)
-            html_document = html_document.replace("{{DISCLAIMER}}", disclaimer)
-            html_document = html_document.replace("{{TIMESTAMP}}", timestamp)
             html_document = html_document.replace("{{CUSTOM_CSS}}", custom_css_content)
 
             return html_document
@@ -562,9 +428,36 @@ tr:hover {
 </html>"""
 
     def is_already_html(self, content: str) -> bool:
-        """Check if content is already complete HTML"""
+        """
+        Check if content is already complete HTML document.
+
+        Returns True if content appears to be a full HTML document with structure.
+        """
+        import re
         content_lower = content.strip().lower()
-        return content_lower.startswith('<!doctype html') or content_lower.startswith('<html>')
+
+        # Check for DOCTYPE declaration
+        if content_lower.startswith('<!doctype html'):
+            return True
+
+        # Check for <html> tag at the start
+        if content_lower.startswith('<html'):
+            return True
+
+        # Check for presence of both <html> and <body> tags (complete HTML structure)
+        has_html_tag = bool(re.search(r'<html[>\s]', content_lower))
+        has_body_tag = bool(re.search(r'<body[>\s]', content_lower))
+        has_head_tag = bool(re.search(r'<head[>\s]', content_lower))
+
+        # If it has both html and body tags, it's a complete HTML document
+        if has_html_tag and has_body_tag:
+            return True
+
+        # If it has html and head tags, it's a complete HTML document
+        if has_html_tag and has_head_tag:
+            return True
+
+        return False
 
 
 # Singleton instance for global use
