@@ -132,6 +132,9 @@ weasyprint>=62.0
 markdown-pdf>=0.1.0
 reportlab>=4.0.0
 
+# Markdown to HTML Conversion (added 2025-11-16)
+markdown>=3.6
+
 # Google Calendar API Dependencies (added 2025-09-16)
 google-auth>=2.30.0
 google-auth-oauthlib>=1.2.0
