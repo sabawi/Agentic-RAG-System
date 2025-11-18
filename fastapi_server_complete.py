@@ -4952,8 +4952,70 @@ Analyze each tool result and identify specific error patterns. Respond with this
 
 STATUS VALUES:
 - GOOD: Task succeeded, data is valid
-- BAD: Task failed but retryable 
+- BAD: Task failed but retryable
 - UNACHIEVABLE: Task impossible to complete
+
+🎯 TASK COMPLETENESS VALIDATION - CRITICAL REQUIREMENT:
+
+**MANDATORY CHECK**: Compare user request against tools that were executed to detect MISSING actions.
+
+Distribution/Publishing Keywords in User Request:
+- "publish", "post", "upload", "share" → Requires publishing tool (social_media_wordpress, social_media_twitter, etc.)
+- "email", "send", "deliver", "forward" → Requires secure_email_sender
+- "wordpress", "blog", "article" → Requires social_media_wordpress
+- "twitter", "tweet" → Requires social_media_twitter
+- "medium", "substack" → Requires social_media_medium/social_media_substack
+
+Available Publishing/Distribution Tools:
+- social_media_wordpress (WordPress posts)
+- social_media_twitter (Twitter/X posts)
+- social_media_medium (Medium articles)
+- social_media_substack (Substack posts)
+- secure_email_sender (Email delivery)
+
+Completeness Validation Logic:
+1. Parse user request for distribution keywords
+2. Check if corresponding tool was executed
+3. If keyword found but tool missing → Mark overall as "BAD" with specific feedback
+4. Add missing tool to "missing_tools" array in response
+
+Example Scenarios:
+
+❌ INCOMPLETE EXECUTION:
+User Request: "Research Nvidia stock and publish to my wordpress account"
+Tools Executed: [get_the_secret_tool, comprehensive_stock_analyzer]
+Tools Missing: social_media_wordpress
+→ STATUS: BAD with feedback "User requested WordPress publishing but social_media_wordpress tool was NOT called"
+
+❌ INCOMPLETE MULTI-TASK:
+User Request: "Analyze META, GOOGL, AMZN stocks and post results to WordPress"
+Tools Executed: [comprehensive_stock_analyzer x3]
+Tools Missing: social_media_wordpress
+→ STATUS: BAD with feedback "Research completed but WordPress publishing tool missing - user explicitly requested posting results"
+
+✅ COMPLETE EXECUTION:
+User Request: "Research Obama's accomplishments and publish essay to WordPress"
+Tools Executed: [get_the_secret_tool, wikipedia_query, search_web, social_media_wordpress]
+Tools Missing: []
+→ STATUS: GOOD - All requirements satisfied including WordPress publishing
+
+Enhanced JSON Response Format with missing_tools:
+{
+  "tasks": [...],
+  "overall_assessment": "Brief assessment",
+  "patterns_detected": [],
+  "missing_tools": [
+    {
+      "tool_name": "social_media_wordpress",
+      "reason": "User requested 'publish to wordpress' but tool was not called",
+      "required_parameters": {
+        "title": "Generate from research context",
+        "content": "{{PRIMARY_LLM_OUTPUT}}",
+        "status": "draft"
+      }
+    }
+  ]
+}
 
 🚨 MANDATORY FAILURE DETECTION - NO EXCEPTIONS:
 
@@ -5293,12 +5355,33 @@ Please validate each task result and respond with JSON analysis."""
                     }
                     logger.info(f"🧠 Using fallback validation result for {len(arbitrator_tasks)} tasks")
             logger.info(f"🧠 Arbitrator validation parsed successfully")
-            
+
+            # 🎯 TASK COMPLETENESS CHECK: Handle missing_tools from arbitrator
+            missing_tools_from_arbitrator = validation_result.get("missing_tools", [])
+            if missing_tools_from_arbitrator:
+                logger.warning(f"🚨 ARBITRATOR DETECTED MISSING TOOLS: {[tool.get('tool_name') for tool in missing_tools_from_arbitrator]}")
+                for missing_tool_info in missing_tools_from_arbitrator:
+                    tool_name = missing_tool_info.get("tool_name", "unknown")
+                    reason = missing_tool_info.get("reason", "Tool was required but not called")
+                    logger.warning(f"   ❌ Missing: {tool_name} - {reason}")
+
+                    # Mark this as a task failure to trigger retry with missing tool
+                    # The retry system will regenerate tool calls including the missing tool
+                    validation_result.setdefault("tasks", []).append({
+                        "task_id": len(validation_result.get("tasks", [])) + 1,
+                        "status": "BAD",
+                        "error_pattern": "missing_required_tool",
+                        "error_category": "task_completeness",
+                        "feedback": f"User requested '{tool_name}' but tool was not called. {reason}",
+                        "retry_strategy": "regenerate_tool_calls_with_missing_tool",
+                        "corrected_parameters": missing_tool_info.get("required_parameters", {})
+                    })
+
             # Process validation results with enhanced error pattern detection (Sprint 2.2)
             all_good = True
             detected_patterns = []
             error_analysis = {}
-            
+
             # Process overall patterns detected
             patterns_detected = validation_result.get("patterns_detected", [])
             if patterns_detected:
@@ -5452,12 +5535,40 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
     Enhanced with comprehensive email detection and strict validation
     """
     user_prompt_lower = user_prompt.lower()
-    
-    # 🚨 CRITICAL META-TASK DETECTION - HIGHEST PRIORITY 🚨
-    # This MUST come first to prevent meta-tasks from triggering file creation
+
+    # 🎯 DEFINE POST-GENERATION KEYWORDS FIRST - Used by multiple patterns below
+    # This is extensible - add new categories when new post-LLM tools are added
+    explicit_post_generation_requests = {
+        # Email/messaging tools
+        "email": ["email me", "send me", "email the", "send the", "email it to", "send it to",
+                 "email with", "send with", "mail", "attachment", "send an email"],
+
+        # File creation/storage tools
+        "file_creation": ["create file", "save to file", "save output to", "create a pdf",
+                         "create pdf", "pdf version", "html file", "save and send", "craft",
+                         "pdf report", "html report", "generate pdf", "make pdf",
+                         "pdf formatted", "pdf attachment", "with attachments", "include a pdf"],
+
+        # Publishing/distribution tools (WordPress, social media, etc.)
+        "publishing": ["publish", "post", "wordpress", "blog", "article", "share", "upload",
+                      "publish to", "post to", "publish the", "post the", "publish it", "post it",
+                      "publish results", "post results", "wordpress account", "blog post",
+                      "twitter", "tweet", "medium", "substack", "social media"],
+
+        # Document generation tools
+        "document_creation": ["cover letter", "create report", "report and email",
+                             "save and send the files", "send the files as pdf"]
+    }
+
+    # Flatten all post-generation keywords for quick checking
+    all_post_generation_keywords = [keyword for category_keywords in explicit_post_generation_requests.values()
+                                   for keyword in category_keywords]
+
+    # 🚨 CRITICAL META-TASK DETECTION - BUT WITH PUBLISHING OVERRIDE 🚨
+    # If user has publishing keywords, this is NOT a meta-task even if it matches patterns
     meta_task_indicators = [
         "generate 1-3 broad tags categorizing the main themes",
-        "generate a concise title with emoji", 
+        "generate a concise title with emoji",
         "generate a concise, 3-5 word title with an emoji",
         "generate tags",
         "categorizing the main themes of the chat history",
@@ -5467,8 +5578,15 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
         "concise title with an emoji"
     ]
 
+    # Check if user has publishing/email/file creation keywords - these override meta-task detection
+    has_post_generation_request = any(keyword in user_prompt_lower for keyword in all_post_generation_keywords)
+
     if any(meta_indicator in user_prompt_lower for meta_indicator in meta_task_indicators):
-        return {"complete": True, "pattern": "meta_task"}
+        # If publishing keywords present, this is a REAL user request, not a meta-task
+        if has_post_generation_request:
+            logger.info(f"🎯 META-TASK PATTERN DETECTED but PUBLISHING KEYWORDS PRESENT - treating as real user request")
+        else:
+            return {"complete": True, "pattern": "meta_task"}
     
     
     # 🚨 BULLETPROOF EMAIL DETECTION
@@ -5540,6 +5658,24 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
             "required_tools": ["secure_email_sender"],
             "required_sequence": False,
             "description": "Send email with or without attachments"
+        },
+        # 🎯 GENERALIZED CONTENT PUBLISHING - Detects ALL publishing/distribution requests
+        # This pattern is EXTENSIBLE - automatically works with any social_media_* tool
+        "content_publishing": {
+            "triggers": explicit_post_generation_requests["publishing"],  # Reuse publishing keywords
+            "required_tools": [],  # Dynamically determined based on keywords
+            "required_sequence": False,
+            "description": "Publish/post content to social media or blogging platforms",
+            "dynamic_tool_mapping": {
+                # Map keywords to their corresponding tool names
+                "wordpress": "social_media_wordpress",
+                "blog": "social_media_wordpress",
+                "twitter": "social_media_twitter",
+                "tweet": "social_media_twitter",
+                "medium": "social_media_medium",
+                "substack": "social_media_substack"
+                # 🔧 EXTENSIBLE: Add new platforms here as tools are developed
+            }
         }
     }
     
@@ -5552,34 +5688,46 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
     ]
     
     if any(exclusion in user_prompt_lower for exclusion in exclusion_patterns):
-        # Check if they also explicitly ask for file/email
-        explicit_file_email_requests = [
-            "email me", "send me", "create file", "save to file", "attachment",
-            "email the", "send the", "file and email", "save and email", "craft",
-            "cover letter", "pdf version", "with attachments", "include a pdf",
-            "pdf formatted", "send the email", "save and send the files", "pdf attachment",
-            "send the files as pdf", "save and send", "create a pdf", "create pdf", 
-            "pdf report", "html report", "report and email", "create report",
-            "generate pdf", "make pdf", "email it to", "send it to"
-        ]
-        
-        if not any(explicit_request in user_prompt_lower for explicit_request in explicit_file_email_requests):
-            logger.info(f"🚫 EXCLUSION: User is asking for information only, not file creation/email")
+        # 🎯 GENERALIZED POST-LLM TOOL DETECTION
+        # Check if user has post-generation keywords (already defined at top of function)
+        if not any(explicit_request in user_prompt_lower for explicit_request in all_post_generation_keywords):
+            logger.info(f"🚫 EXCLUSION: User is asking for information only, not file creation/email/publishing")
             return {
                 "complete": True,  # Task is complete - they just want information
-                "reason": "Information request only - no file creation or email needed",
+                "reason": "Information request only - no post-generation actions needed",
                 "missing_tools": [],
                 "pattern": "information_request"
             }
     
-    # Check if any pattern matches
+    # 🎯 CHECK ALL PATTERNS - Collect missing tools from ALL matching patterns
+    # This ensures we catch ALL requirements, not just the first match
+    all_missing_tools = []
+    all_matched_patterns = []
+    pattern_descriptions = []
+
     for pattern_name, pattern in task_patterns.items():
         if any(trigger in user_prompt_lower for trigger in pattern["triggers"]):
+            logger.info(f"🎯 PATTERN MATCH: '{pattern_name}' matched user prompt")
+            all_matched_patterns.append(pattern_name)
+
+            # 🎯 DYNAMIC TOOL DETECTION - For extensible publishing patterns
+            # CRITICAL: Make a COPY of the list to avoid modifying the original pattern dictionary
+            required_tools_to_check = pattern["required_tools"].copy()
+
+            # Check if this pattern uses dynamic tool mapping (e.g., content_publishing)
+            if "dynamic_tool_mapping" in pattern and not required_tools_to_check:
+                # Scan user prompt for platform-specific keywords and map to tools
+                dynamic_mapping = pattern["dynamic_tool_mapping"]
+                for keyword, tool_name in dynamic_mapping.items():
+                    if keyword in user_prompt_lower:
+                        required_tools_to_check.append(tool_name)
+                        logger.info(f"🎯 DYNAMIC DETECTION: Found '{keyword}' → requires {tool_name}")
+
             # Check if all required tools were called
-            missing_tools = []
-            for required_tool in pattern["required_tools"]:
+            pattern_missing_tools = []
+            for required_tool in required_tools_to_check:
                 if required_tool not in tools_called:
-                    missing_tools.append(required_tool)
+                    pattern_missing_tools.append(required_tool)
                 # 🔧 CRITICAL: Check if THIS SPECIFIC tool was deferred
                 elif f"Tool: {required_tool}" in tools_results:
                     # Extract this tool's result section
@@ -5593,25 +5741,36 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
                     # Check if THIS tool's result contains "deferred"
                     if "deferred" in tool_result.lower():
                         logger.info(f"🔧 VERIFIER: {required_tool} was deferred - adding to missing_tools")
-                        missing_tools.append(required_tool)
+                        pattern_missing_tools.append(required_tool)
 
-            if missing_tools:
-                return {
-                    "complete": False,
-                    "reason": f"Missing required tools for {pattern['description']}",
-                    "missing_tools": missing_tools,
-                    "pattern": pattern_name
-                }
-            
+            # Add this pattern's missing tools to the aggregate list (with deduplication)
+            if pattern_missing_tools:
+                pattern_descriptions.append(pattern['description'])
+                for tool in pattern_missing_tools:
+                    if tool not in all_missing_tools:
+                        all_missing_tools.append(tool)
+                        logger.info(f"📋 COLLECTED MISSING TOOL: {tool} (from pattern '{pattern_name}')")
+
             # For email tasks, verify file was created if attachment expected
             if "secure_email_sender" in tools_called and "sandboxed_executor" in tools_called:
                 if "attachments" in tools_results and "file not found" in tools_results.lower():
-                    return {
-                        "complete": False,
-                        "reason": "File attachment referenced but file was not created",
-                        "missing_tools": ["sandboxed_executor"],  # Re-run to create the file
-                        "pattern": pattern_name
-                    }
+                    if "sandboxed_executor" not in all_missing_tools:
+                        all_missing_tools.append("sandboxed_executor")
+                        pattern_descriptions.append("File attachment creation")
+                        logger.info(f"📋 COLLECTED MISSING TOOL: sandboxed_executor (file attachment issue)")
+
+    # If we collected missing tools from any patterns, return them ALL
+    if all_missing_tools:
+        combined_reason = f"Missing required tools for: {', '.join(pattern_descriptions)}"
+        combined_patterns = " + ".join(all_matched_patterns)
+        logger.warning(f"🚨 VERIFIER FOUND MISSING TOOLS: {all_missing_tools}")
+        logger.warning(f"🚨 MATCHED PATTERNS: {combined_patterns}")
+        return {
+            "complete": False,
+            "reason": combined_reason,
+            "missing_tools": all_missing_tools,
+            "pattern": combined_patterns
+        }
     
     # HTML email processing removed - using original tool-calling approach
     
@@ -6635,7 +6794,155 @@ async def _generate_complete_html_email(complete_llm_response: str, html_email_r
         logger.error(f"❌ HTML email generation failed: {e}")
         return None
 
-async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager, tools_results: str, complete_llm_response: str, user_prompt: str) -> str:
+async def _generate_intelligent_tool_parameters(
+    tool_name: str,
+    user_prompt: str,
+    complete_llm_response: str,
+    tools_results: str,
+    tool_manager,
+    llm_manager
+) -> dict:
+    """
+    🤖 ARBITRATOR-BASED PARAMETER GENERATOR v1.0.3.111
+
+    Universal parameter generation using Arbitrator LLM to intelligently create
+    tool parameters when tools are auto-executed without initial parameters.
+
+    This function analyzes user intent and LLM output to generate:
+    - Contextually appropriate titles (NOT generic "Analysis Report")
+    - Clean, publication-ready content (NO conversational disclaimers)
+    - Intelligent defaults for missing parameters
+
+    Args:
+        tool_name: Name of tool being executed (e.g., "social_media_wordpress")
+        user_prompt: Original user request
+        complete_llm_response: Full Primary LLM output
+        tools_results: Results from previously executed tools
+        tool_manager: Tool manager instance for schema access
+        llm_manager: LLM manager instance for Arbitrator calls
+
+    Returns:
+        dict: Intelligent parameters for tool execution
+
+    Example Returns:
+        {
+            "title": "A Father's Love Poem to His Teenage Children",
+            "content": "<poem content only, no disclaimers>",
+            "status": "draft",
+            "tags": ["poetry", "family", "parenting"]
+        }
+    """
+    import json as json_lib
+    import time
+
+    logger.info(f"🤖 ARBITRATOR PARAM GEN: Generating intelligent parameters for {tool_name}")
+    start_time = time.time()
+
+    try:
+        # Truncate tools_results for Arbitrator prompt (limit context size)
+        tools_results_summary = tools_results[:500] + "..." if len(tools_results) > 500 else tools_results
+
+        # Build Arbitrator prompt based on architecture document
+        arbitrator_prompt = f"""You are a specialized parameter generator for tool execution. Your task is to analyze
+user requests and LLM responses to generate optimal, publication-ready parameters.
+
+## Context
+
+**User Request:**
+{user_prompt}
+
+**Primary LLM Response:**
+{complete_llm_response}
+
+**Tool Results (if any):**
+{tools_results_summary}
+
+**Target Tool:**
+{tool_name}
+
+## Your Tasks
+
+1. **Extract/Generate Values:** Analyze the context to determine appropriate parameter values
+2. **Clean Content:** Remove conversational elements:
+   - Disclaimers ("I cannot post...", "Since I don't have access...", "Unfortunately...")
+   - Questions ("Would you like me to...")
+   - Apologies ("I apologize...")
+   - Meta-commentary about tool capabilities
+3. **Structure Content:** Ensure content is publication-ready
+4. **Generate Missing Values:** Create intelligent defaults for parameters not explicitly provided
+
+## Tool-Specific Guidelines
+
+### Publishing Tools (WordPress, Medium, Substack):
+- **title:** Generate concise, descriptive title from content theme (5-10 words)
+  - Extract from user request or analyze content to determine topic
+  - NEVER use generic titles like "Analysis Report" or "Report"
+- **content:** Extract main content ONLY, remove all conversational elements
+  - If LLM generated a poem, extract ONLY the poem
+  - If LLM generated an essay, extract ONLY the essay
+  - Remove ALL disclaimers about tool capabilities
+- **status:** Default to "draft" unless user explicitly requests "publish"
+- **tags:** Generate 3-5 relevant tags from content analysis
+
+## Output Format
+
+Return ONLY valid JSON matching this structure. No explanations, no markdown code blocks, no extra text.
+
+{{
+    "title": "Generated Title Here",
+    "content": "Cleaned content here...",
+    "status": "draft",
+    "tags": ["tag1", "tag2", "tag3"]
+}}
+
+Generate parameters now:"""
+
+        arbitrator_system_prompt = "You are a specialized parameter generator for publishing tools. Analyze user intent and LLM output to generate intelligent, publication-ready parameters. Return ONLY valid JSON, no additional text."
+
+        # Call Arbitrator LLM
+        logger.info(f"🤖 Calling Arbitrator LLM for parameter generation...")
+        arbitrator_response = await llm_manager.call_arbitrator(
+            arbitrator_prompt,
+            arbitrator_system_prompt
+        )
+
+        arbitrator_time = time.time() - start_time
+        logger.info(f"🤖 Arbitrator response received in {arbitrator_time:.2f}s: {len(arbitrator_response)} chars")
+
+        # Parse JSON response
+        clean_response = arbitrator_response.strip()
+
+        # Remove markdown code blocks if present
+        if clean_response.startswith("```json"):
+            clean_response = clean_response[7:]
+        if clean_response.startswith("```"):
+            clean_response = clean_response[3:]
+        if clean_response.endswith("```"):
+            clean_response = clean_response[:-3]
+
+        clean_response = clean_response.strip()
+
+        # Parse JSON
+        params = json_lib.loads(clean_response)
+
+        logger.info(f"✅ ARBITRATOR GENERATED PARAMS:")
+        logger.info(f"   Title: {params.get('title', 'N/A')}")
+        logger.info(f"   Content length: {len(params.get('content', ''))} chars")
+        logger.info(f"   Status: {params.get('status', 'N/A')}")
+        logger.info(f"   Tags: {params.get('tags', [])}")
+
+        return params
+
+    except json_lib.JSONDecodeError as e:
+        logger.error(f"❌ ARBITRATOR PARAM GEN: Invalid JSON response: {e}")
+        logger.error(f"   Response: {clean_response[:200]}")
+        raise
+
+    except Exception as e:
+        logger.error(f"❌ ARBITRATOR PARAM GEN: Failed: {e}")
+        raise
+
+async def _execute_missing_tools_post_llm(missing_tools: List[str], tool_manager, tools_results: str, complete_llm_response: str, user_prompt: str, llm_manager) -> str:
     logger.info("--- ENTERING _execute_missing_tools_post_llm ---")
     """
     🎯 POST-LLM AUTO-EXECUTOR for missing tools
@@ -7151,7 +7458,108 @@ AI Document Generation System"""
                 except Exception as e:
                     logger.error(f"❌ POST-LLM news summaries failed: {e}")
                     additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {str(e)}\n\n"
-            
+
+            # 🔌 HANDLE DEFERRED PLUGIN TOOLS (social_media_*, publishing_*, etc.)
+            elif (tool_name.startswith("social_media_") or
+                  tool_name.startswith("email_") or
+                  tool_name.startswith("publishing_") or
+                  tool_name.endswith("_publish") or
+                  tool_name.endswith("_post")):
+
+                logger.info(f"🔌 POST-LLM PLUGIN: Executing deferred plugin {tool_name}")
+
+                # Extract deferred parameters from tools_results
+                params_marker = f"__DEFERRED_PARAMS__:"
+                if params_marker in tools_results:
+                    # Find the params for this specific tool
+                    tool_section_start = tools_results.find(f"Tool: {tool_name}")
+                    if tool_section_start != -1:
+                        params_start = tools_results.find(params_marker, tool_section_start)
+                        if params_start != -1:
+                            params_start += len(params_marker)
+                            params_end = tools_results.find("\n", params_start)
+                            if params_end == -1:
+                                params_end = len(tools_results)
+
+                            params_json = tools_results[params_start:params_end].strip()
+                            try:
+                                import json as json_lib
+                                plugin_params = json_lib.loads(params_json)
+
+                                # Fill {{PRIMARY_LLM_OUTPUT}} placeholder with actual generated content
+                                filled_params = {}
+                                for key, value in plugin_params.items():
+                                    if isinstance(value, str) and "{{PRIMARY_LLM_OUTPUT}}" in value:
+                                        # Use cleaned LLM response content
+                                        filled_value = value.replace("{{PRIMARY_LLM_OUTPUT}}", complete_llm_response.strip())
+                                        filled_params[key] = filled_value
+                                        logger.info(f"🔌 POST-LLM: Filled {key} with generated content ({len(filled_value)} chars)")
+                                    else:
+                                        filled_params[key] = value
+
+                                # Execute the plugin with filled parameters
+                                logger.info(f"🔌 POST-LLM: Executing {tool_name} with filled parameters")
+                                result = await tool_manager.safe_function_call(tool_name, filled_params)
+
+                                additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: {result}\n\n"
+                                logger.info(f"🔌 POST-LLM PLUGIN: {tool_name} completed successfully")
+
+                            except Exception as e:
+                                logger.error(f"❌ POST-LLM PLUGIN: Failed to parse parameters for {tool_name}: {e}")
+                                additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error parsing parameters: {str(e)}\n\n"
+                        else:
+                            logger.error(f"❌ POST-LLM PLUGIN: No deferred parameters found for {tool_name}")
+                            additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: No deferred parameters found\n\n"
+                else:
+                    # 🤖 FIX v1.0.3.111: ARBITRATOR-BASED PARAMETER GENERATION
+                    # When verifier detects missing WordPress/publishing tool and triggers auto-execution,
+                    # there are no deferred params because tool-calling LLM never called it.
+                    # Use Arbitrator LLM to intelligently generate parameters from Primary LLM output.
+                    logger.info(f"🤖 POST-LLM ARBITRATOR PARAM GEN: No deferred params for {tool_name}, using Arbitrator")
+
+                    try:
+                        # Call Arbitrator to generate intelligent parameters
+                        params = await _generate_intelligent_tool_parameters(
+                            tool_name=tool_name,
+                            user_prompt=user_prompt,
+                            complete_llm_response=complete_llm_response,
+                            tools_results=tools_results,
+                            tool_manager=tool_manager,
+                            llm_manager=llm_manager
+                        )
+
+                        # Execute the plugin with Arbitrator-generated parameters
+                        result = await tool_manager.safe_function_call(tool_name, params)
+
+                        additional_results += f"Tool: {tool_name} (post-LLM execution with Arbitrator-generated params)\nResult: {result}\n\n"
+                        logger.info(f"✅ POST-LLM ARBITRATOR: {tool_name} completed successfully")
+
+                    except Exception as e:
+                        logger.error(f"❌ POST-LLM ARBITRATOR: Failed for {tool_name}: {e}")
+                        logger.error(f"⏱️ Falling back to simple parameter generation...")
+
+                        # FALLBACK: Use simple defaults if Arbitrator fails
+                        try:
+                            import json as json_lib
+
+                            default_params = {
+                                "title": _generate_dynamic_title(user_prompt, tools_results),
+                                "content": complete_llm_response.strip(),
+                                "status": "draft"
+                            }
+
+                            logger.info(f"⚠️ SIMPLE FALLBACK: Generated params for {tool_name}")
+                            logger.info(f"   Title: {default_params['title']}")
+                            logger.info(f"   Content length: {len(default_params['content'])} chars")
+
+                            result = await tool_manager.safe_function_call(tool_name, default_params)
+                            additional_results += f"Tool: {tool_name} (post-LLM execution with simple fallback params)\nResult: {result}\n\n"
+                            logger.info(f"✅ SIMPLE FALLBACK: {tool_name} completed")
+
+                        except Exception as fallback_error:
+                            logger.error(f"❌ SIMPLE FALLBACK: Also failed: {fallback_error}")
+                            additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: Arbitrator and fallback both failed\n\n"
+
             elif tool_name == "get_the_secret_tool":
                 result = await tool_manager.get_the_secret_tool()
                 additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: {result}\n\n"
@@ -8065,6 +8473,39 @@ The above image analysis was automatically performed on newly uploaded images. T
                                                     logger.info(f"📄 TOOL DEFERRED: {function_name} create_file - Will use primary LLM response as content")
                                                     result = "File creation scheduled for post-LLM processing with formatted content"
                                                     return (function_name, result, start_time, False, None)
+
+                                            # 🔌 INTERCEPT PLUGIN TOOLS WITH {{PRIMARY_LLM_OUTPUT}} - Defer until after primary LLM generates content
+                                            # Check if tool is a plugin (social_media_*, email_*, publishing_*)
+                                            is_publishing_plugin = (
+                                                function_name.startswith("social_media_") or
+                                                function_name.startswith("email_") or
+                                                function_name.startswith("publishing_") or
+                                                function_name.endswith("_publish") or
+                                                function_name.endswith("_post")
+                                            )
+
+                                            if is_publishing_plugin:
+                                                # Parse args to check for {{PRIMARY_LLM_OUTPUT}} placeholder
+                                                parsed_args = function_args if isinstance(function_args, dict) else {}
+                                                if isinstance(function_args, str):
+                                                    try:
+                                                        parsed_args = json.loads(function_args)
+                                                    except json.JSONDecodeError:
+                                                        parsed_args = {}
+
+                                                # Check if any parameter contains the placeholder
+                                                has_placeholder = any(
+                                                    "{{PRIMARY_LLM_OUTPUT}}" in str(v)
+                                                    for v in parsed_args.values()
+                                                )
+
+                                                if has_placeholder:
+                                                    logger.info(f"🔌 PLUGIN DEFERRED: {function_name} - Contains {{PRIMARY_LLM_OUTPUT}} placeholder, will execute after Primary LLM")
+                                                    # Store parameters in result for POST-LLM retrieval
+                                                    import json as json_lib
+                                                    params_json = json_lib.dumps(parsed_args)
+                                                    result = f"Publishing deferred - {function_name} will execute with generated content\n__DEFERRED_PARAMS__:{params_json}"
+                                                    return (function_name, result, start_time, False, parsed_args.copy())
 
                                             # Execute non-deferred tools normally
                                             result = await tool_manager.safe_function_call(function_name, function_args)
@@ -9425,10 +9866,80 @@ END OF CONTEXT
                                 logger.info(f"🚪 EXIT: Post-processing failed with exception")
                     else:
                         logger.info(f"🔍 POST-PROCESSING SKIPPED: email_intercepted=False")
-                        
+
+                    # 🔌 DEFERRED PLUGIN POST-PROCESSING: Execute deferred publishing plugins with generated content
+                    has_deferred_plugins = "__DEFERRED_PARAMS__:" in tools_results
+                    logger.info(f"🔍 DEFERRED PLUGIN CHECK: has_deferred_plugins={has_deferred_plugins}")
+
+                    if has_deferred_plugins:
+                        logger.info(f"🔌 POST-LLM PLUGIN PROCESSING: Detected deferred plugins in tools_results")
+                        logger.info(f"🔌 Complete LLM response length: {len(complete_llm_response)} characters")
+
+                        # Extract deferred plugin calls from tools_results
+                        deferred_plugins = []
+                        for line in tools_results.split("\n"):
+                            if line.startswith("Tool: ") and ("social_media_" in line or "publishing_" in line or "_publish" in line or "_post" in line):
+                                tool_name = line.replace("Tool: ", "").strip()
+                                deferred_plugins.append(tool_name)
+
+                        logger.info(f"🔌 Found {len(deferred_plugins)} deferred plugins: {deferred_plugins}")
+
+                        # Execute each deferred plugin
+                        for tool_name in deferred_plugins:
+                            logger.info(f"🔌 POST-LLM PLUGIN: Executing deferred plugin {tool_name}")
+
+                            # Extract deferred parameters from tools_results
+                            params_marker = f"__DEFERRED_PARAMS__:"
+                            tool_section_start = tools_results.find(f"Tool: {tool_name}")
+                            if tool_section_start != -1:
+                                params_start = tools_results.find(params_marker, tool_section_start)
+                                if params_start != -1:
+                                    params_start += len(params_marker)
+                                    params_end = tools_results.find("\n", params_start)
+                                    if params_end == -1:
+                                        params_end = len(tools_results)
+
+                                    params_json = tools_results[params_start:params_end].strip()
+                                    try:
+                                        import json as json_lib
+                                        plugin_params = json_lib.loads(params_json)
+
+                                        # Fill {{PRIMARY_LLM_OUTPUT}} placeholder with actual generated content
+                                        filled_params = {}
+                                        for key, value in plugin_params.items():
+                                            if isinstance(value, str) and "{{PRIMARY_LLM_OUTPUT}}" in value:
+                                                # Use cleaned LLM response content
+                                                filled_value = value.replace("{{PRIMARY_LLM_OUTPUT}}", complete_llm_response.strip())
+                                                filled_params[key] = filled_value
+                                                logger.info(f"🔌 POST-LLM: Filled {key} with generated content ({len(filled_value)} chars)")
+                                            else:
+                                                filled_params[key] = value
+
+                                        # Execute the plugin with filled parameters
+                                        logger.info(f"🔌 POST-LLM: Executing {tool_name} with filled parameters: {list(filled_params.keys())}")
+                                        result = await tool_manager.safe_function_call(tool_name, filled_params)
+
+                                        logger.info(f"🔌 POST-LLM PLUGIN: {tool_name} completed - Result: {result[:200] if result else 'None'}...")
+
+                                        # Add to stream response
+                                        yield f'data: {{"post_processing": "plugin_executed", "tool": "{tool_name}", "result": "completed"}}\n\n'
+
+                                    except Exception as e:
+                                        logger.error(f"❌ POST-LLM PLUGIN ERROR ({tool_name}): {e}")
+                                        logger.error(f"❌ Exception traceback: {traceback.format_exc()}")
+
+                        logger.info(f"✅ POST-LLM PLUGIN PROCESSING COMPLETED: {len(deferred_plugins)} plugins executed")
+                    else:
+                        logger.info(f"🔍 DEFERRED PLUGIN PROCESSING SKIPPED: No deferred plugins detected")
+
                     # 🎯 POST-LLM AUTO-EXECUTION: Execute missing tools with complete content (legacy)
-                    logger.info(f"🔍 DEBUG: pending_auto_execution={pending_auto_execution}, verification_result={verification_result}")
-                    if pending_auto_execution and verification_result:
+                    logger.info(f"🔍 DEBUG: pending_auto_execution={pending_auto_execution}, verification_result={verification_result}, is_meta_task={is_meta_task}")
+
+                    # 🔧 FIX v1.0.3.110: Block meta tasks from executing publishing tools
+                    if is_meta_task and pending_auto_execution and verification_result:
+                        logger.info(f"🚫 META-TASK BLOCKED: Preventing meta task from executing publishing tools: {verification_result.get('missing_tools', [])}")
+
+                    if pending_auto_execution and verification_result and not is_meta_task:
                         logger.info(f"🎯 POST-LLM AUTO-EXECUTION: Primary LLM completed, executing missing tools")
                         logger.info(f"🎯 Complete LLM response length: {len(complete_llm_response)} characters")
                             
@@ -9438,12 +9949,14 @@ END OF CONTEXT
                             logger.info(f"🔍 BEFORE POST-LLM CALL: actual_user_prompt = {repr(actual_user_prompt[:200] if actual_user_prompt else 'EMPTY!')}")
                             logger.info(f"🔍 BEFORE POST-LLM CALL: user_prompt = {repr(user_prompt[:200] if user_prompt else 'EMPTY!')}")
                             # Execute missing tools with complete LLM response as content
+                            # 🤖 v1.0.3.111: Pass llm_manager for Arbitrator-based parameter generation
                             additional_results = await _execute_missing_tools_post_llm(
                                 verification_result['missing_tools'],
                                 tool_manager,
                                 tools_results,
                                 complete_llm_response,
-                                actual_user_prompt
+                                actual_user_prompt,
+                                llm_manager
                             )
                             logger.info(f"✅ POST-LLM AUTO-EXECUTION COMPLETED: {additional_results}")
 

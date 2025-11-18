@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.102"  # 🐛 CRITICAL FIX: Markdown table corruption - re-insert blank lines after tables (Python-Markdown requirement) + cleanup debug logging
+VERSION = "1.0.3.111"  # 🤖 FEATURE: Universal Arbitrator-based parameter generator - Intelligent title generation, content filtering, and parameter creation for all publishing tools (WordPress, Medium, Substack). Fixes generic titles, conversational text pollution, and LLM hallucinations in published content
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE

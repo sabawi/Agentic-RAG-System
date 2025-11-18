@@ -1,8 +1,8 @@
-# Agentic-RAG Server v1.0.3.50
+# Agentic-RAG Server v1.0.3.111
 
 An advanced AI-powered server with multi-LLM orchestration, tool calling, document processing, vision capabilities, intelligent email management, **SEC regulatory filings**, **academic research integration**, and **extensible plugin system**.
 
-[![Version](https://img.shields.io/badge/version-1.0.3.50-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.50)
+[![Version](https://img.shields.io/badge/version-1.0.3.111-blue)](https://github.com/sabawi/Agentic-RAG-System/releases/tag/v1.0.3.111)
 [![Python](https://img.shields.io/badge/python-3.13-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Installation](https://img.shields.io/badge/installation-automated-brightgreen)](install.sh)
@@ -96,7 +96,34 @@ pip install -r requirements.txt
 python fastapi_server_complete.py
 ```
 
-## ⭐ What's New in v1.0.3.43
+## ⭐ What's New in v1.0.3.111
+
+### 🤖 Universal Arbitrator-Based Parameter Generator
+**Intelligent Content Publishing Across All Platforms**
+
+This release introduces a revolutionary approach to content publishing that eliminates common quality issues:
+
+**Problems Solved:**
+- ✅ **Generic Titles Fixed**: No more "Analysis Report" - titles are now contextually generated from actual content
+- ✅ **Content Pollution Eliminated**: Published posts are clean, professional content without conversational disclaimers
+- ✅ **LLM Hallucinations Removed**: No more "I cannot post to WordPress" appearing in published content
+
+**How It Works:**
+When publishing tools (WordPress, Medium, Substack, Email, Twitter) are auto-executed, the system now:
+1. Calls the Arbitrator LLM to analyze user intent and content
+2. Generates intelligent, publication-ready parameters (titles, tags, filtered content)
+3. Removes all conversational elements (disclaimers, questions, apologies)
+4. Creates contextually appropriate titles from the actual content theme
+
+**Example:**
+- **Before v1.0.3.111**: Title: "Analysis Report", Content: "I cannot post to WordPress. However, here's a poem..."
+- **After v1.0.3.111**: Title: "A Father's Love Poem to His Teen Children", Content: [Clean poem only]
+
+**See:** [CHANGELOG_v1.0.3.111.md](docs/housekeeping/status-tracking/CHANGELOG_v1.0.3.111.md) for complete details
+
+---
+
+## ⭐ Previous Release: v1.0.3.43
 
 ### 🚀 Enhanced Data Collection System - Option 2 Implementation
 
