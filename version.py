@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.111"  # 🤖 FEATURE: Universal Arbitrator-based parameter generator - Intelligent title generation, content filtering, and parameter creation for all publishing tools (WordPress, Medium, Substack). Fixes generic titles, conversational text pollution, and LLM hallucinations in published content
+VERSION = "1.0.3.115"  # 🎯 UX: Primary LLM POST-LLM awareness - Inform Primary LLM that POST-LLM execution handles email/publishing tools, preventing confusing disclaimers like "I cannot send an email" when functionality actually works
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE
