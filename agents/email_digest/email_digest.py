@@ -60,7 +60,7 @@ class EmailDigestAgent:
     def __init__(
         self,
         server_url: str = "http://localhost:5000/v1",
-        email_provider: str = "gmail_primary",
+        email_provider: Optional[str] = None,
         hours_back: int = 24,
         recipient_email: Optional[str] = None,
         output_dir: str = "email_digests",
@@ -71,12 +71,31 @@ class EmailDigestAgent:
 
         Args:
             server_url: URL of the Agentic-RAG server
-            email_provider: Email provider to retrieve from (e.g., gmail_primary)
+            email_provider: Email provider to retrieve from (e.g., gmail_primary) - REQUIRED
             hours_back: Number of hours to look back for emails
             recipient_email: Email for digest reports
             output_dir: Directory to save digest reports
             max_retries: Maximum retry attempts on failure
         """
+        # Validate required parameters
+        if not email_provider:
+            error_msg = (
+                "❌ ERROR: Email provider is required!\n\n"
+                "Please specify a provider using the --provider option.\n\n"
+                "Common providers:\n"
+                "  - gmail_primary\n"
+                "  - gmail_work\n"
+                "  - outlook_personal\n"
+                "  - outlook_work\n\n"
+                "Example:\n"
+                "  ./email_digest.py --daily --provider gmail_primary --email user@example.com\n\n"
+                "Make sure the provider is configured in your .env file with credentials:\n"
+                "  GMAIL_PRIMARY_EMAIL=your-email@gmail.com\n"
+                "  GMAIL_PRIMARY_APP_PASSWORD=your-app-password"
+            )
+            logger.error(error_msg)
+            raise ValueError("Email provider is required. Use --provider to specify one.")
+
         self.server_url = server_url
         self.email_provider = email_provider
         self.hours_back = hours_back
@@ -563,7 +582,7 @@ Examples:
 
     # Configuration
     parser.add_argument('--server', default='http://localhost:5000/v1', help='Server URL')
-    parser.add_argument('--provider', default='gmail_primary', help='Email provider (default: gmail_primary)')
+    parser.add_argument('--provider', required=True, help='Email provider (e.g., gmail_primary, gmail_work, outlook_personal)')
     parser.add_argument('--hours', type=int, default=24, help='Hours back to retrieve emails (default: 24)')
     parser.add_argument('--email', help='Recipient email for reports')
     parser.add_argument('--output-dir', default='email_digests', help='Output directory')

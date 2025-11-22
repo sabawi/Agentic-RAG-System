@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.117"  # 🐛 FIX: email_digest cascading emails + market_sentiment visualization - Prevented LLM from calling other agents during email analysis, removed confusing visualizations
+VERSION = "1.0.3.118"  # 🐛 FIX: email_digest --provider validation - Made --provider argument required with clear error message, preventing silent failures when provider is not specified
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE

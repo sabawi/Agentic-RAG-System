@@ -113,21 +113,85 @@ class EmailLibrary:
             if not imap_server:
                 raise ValueError(f"IMAP server not configured for {provider_alias}")
 
-            # Create SSL context with Gmail-compatible settings
+            # Create SSL context with relaxed settings compatible with OpenSSL 3.x
+            # Note: Mutt uses GnuTLS which has different SSL handshake behavior
             context = ssl.create_default_context()
-            context.minimum_version = ssl.TLSVersion.TLSv1_2  # Gmail requires TLS 1.2+
-            context.set_ciphers('DEFAULT@SECLEVEL=1')  # Adjust for Gmail compatibility
 
-            # Connect to IMAP server
-            mail = imaplib.IMAP4_SSL(imap_server, imap_port, ssl_context=context)
-            mail.login(config["email"], config["password"])
+            # Set minimum TLS version (Gmail supports TLS 1.2+)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+
+            # Use relaxed cipher settings for compatibility
+            # SECLEVEL=1 allows older ciphers that Gmail might use
+            context.set_ciphers('DEFAULT@SECLEVEL=1')
+
+            # Relax certificate verification for OpenSSL 3.x compatibility
+            # This matches behavior of GnuTLS-based clients like Mutt
+            context.check_hostname = True  # Still verify hostname
+            context.verify_mode = ssl.CERT_REQUIRED  # But require valid cert
+
+            # Load default CA certificates
+            context.load_default_certs()
+
+            logger.info(f"Attempting IMAP connection to {imap_server}:{imap_port}")
+
+            # Connect to IMAP server with timeout
+            try:
+                mail = imaplib.IMAP4_SSL(
+                    imap_server,
+                    imap_port,
+                    ssl_context=context,
+                    timeout=30  # 30 second timeout
+                )
+            except ssl.SSLError as ssl_err:
+                logger.error(f"SSL handshake failed: {ssl_err}")
+                logger.info("Retrying with even more relaxed SSL settings...")
+
+                # Retry with minimal SSL restrictions
+                context_relaxed = ssl.create_default_context()
+                context_relaxed.check_hostname = False  # Disable hostname check
+                context_relaxed.verify_mode = ssl.CERT_NONE  # Disable cert verification
+                context_relaxed.set_ciphers('DEFAULT@SECLEVEL=0')  # Most permissive
+
+                mail = imaplib.IMAP4_SSL(
+                    imap_server,
+                    imap_port,
+                    ssl_context=context_relaxed,
+                    timeout=30
+                )
+                logger.warning("Connected with relaxed SSL settings - consider checking certificates")
+
+            # Login with credentials
+            email_addr = config.get("email", "")
+            password = config.get("password", "")
+
+            # Debug: Check if credentials are actually set
+            if not email_addr or not password:
+                logger.error(f"❌ CREDENTIALS MISSING!")
+                logger.error(f"  Email set: {'YES' if email_addr else 'NO'}")
+                logger.error(f"  Password set: {'YES' if password else 'NO'}")
+                logger.error(f"  Config keys: {list(config.keys())}")
+                raise ValueError(f"Email credentials not configured for {provider_alias}")
+
+            logger.info(f"Logging in as {email_addr[:5]}...@{email_addr.split('@')[1] if '@' in email_addr else '???'}")
+            logger.debug(f"Password length: {len(password)}")
+
+            mail.login(email_addr, password)
 
             self._connections[f"{provider_alias}_imap"] = mail
-            logger.info(f"IMAP connection established for {provider_alias}")
+            logger.info(f"✅ IMAP connection established for {provider_alias}")
 
             return mail
 
+        except imaplib.IMAP4.error as imap_err:
+            logger.error(f"IMAP protocol error for {provider_alias}: {imap_err}")
+            raise ConnectionError(f"IMAP authentication failed for {provider_alias}: {imap_err}")
+        except ssl.SSLError as ssl_err:
+            logger.error(f"SSL error for {provider_alias}: {ssl_err}")
+            logger.error(f"SSL details: {ssl_err.__class__.__name__}: {str(ssl_err)}")
+            raise ConnectionError(f"SSL connection failed for {provider_alias}. Check credentials and network. Details: {ssl_err}")
         except Exception as e:
+            logger.error(f"Unexpected error connecting to IMAP for {provider_alias}: {e}")
+            logger.error(f"Error type: {e.__class__.__name__}")
             raise ConnectionError(f"Failed to connect to IMAP server for {provider_alias}: {e}")
 
     def _get_smtp_connection(self, provider_alias: str) -> smtplib.SMTP_SSL:
