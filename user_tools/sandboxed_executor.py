@@ -258,10 +258,43 @@ class SandboxedExecutorTool(BaseUserTool):
             
             # Check if this is likely a report creation but NO content provided
             content_provided = kwargs.get("content", "")
-            has_content = bool(content_provided and content_provided.strip())
-            
-            print(f"🔍 DEBUG: filename='{filename}', action='{action}', has_content={has_content}, content_length={len(content_provided) if content_provided else 0}")
-            
+
+            # ✅ FIX: Detect placeholder/description content that GPT-4o-mini sometimes generates
+            placeholder_patterns = [
+                r'\[.*complete.*html.*formatted.*content.*\]',  # [Complete HTML formatted content...]
+                r'\[.*comprehensive.*report.*\]',  # [Comprehensive report...]
+                r'\[.*detailed.*analysis.*\]',  # [Detailed analysis...]
+                r'{{.*}}',  # {{PLACEHOLDER}} style
+                r'<.*placeholder.*>',  # <placeholder> style
+            ]
+
+            is_placeholder = False
+            if content_provided and content_provided.strip():
+                import re
+                content_lower = content_provided.lower()
+                for pattern in placeholder_patterns:
+                    if re.search(pattern, content_lower, re.IGNORECASE):
+                        print(f"🔍 PLACEHOLDER DETECTED: Content matches pattern '{pattern}' - treating as no content")
+                        is_placeholder = True
+                        break
+
+            # Treat placeholder content as "no content"
+            has_content = bool(content_provided and content_provided.strip() and not is_placeholder)
+
+            print(f"🔍 DEBUG: filename='{filename}', action='{action}', has_content={has_content}, is_placeholder={is_placeholder}, content_length={len(content_provided) if content_provided else 0}")
+
+            # ✅ FIX: If placeholder detected for HTML file, defer to POST-LLM
+            if is_placeholder and filename.endswith('.html'):
+                print(f"🔍 PLACEHOLDER HTML: Detected placeholder content for HTML file")
+                print(f"🔍 DEFERRING EXECUTION: HTML file '{filename}' will be created in POST-LLM with primary LLM's response")
+                # Return deferred result - verifier will detect this and trigger POST-LLM
+                return {
+                    "success": True,
+                    "result": f"HTML file creation deferred to POST-LLM phase. File '{filename}' will be generated with complete content from primary LLM response.",
+                    "deferred": True,
+                    "filename": filename
+                }
+
             if (action == "create_file" and not has_content) and any(report_indicators):
                 print(f"🧠 SMART DETECTION: Detected report creation scenario for '{filename}' (no content provided)")
                 
@@ -1559,19 +1592,22 @@ This is a secure sandboxed environment for code execution and system commands.
             import sys
             sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             from utils.html_generator import html_generator
-            
-            # Process content for HTML
-            formatted_content = self._format_content_for_template(content)
-            
-            # Use shared template
+
+            # 🐛 FIX v1.0.3.96: Pass raw content directly to HTML generator
+            # DO NOT pre-process content! The html_generator already has a professional
+            # markdown library that handles tables, links, headers, lists, etc.
+            # The old _format_content_for_template() was wrapping every line in <p> tags,
+            # which destroyed markdown table structure before the markdown library could parse it.
+
+            # Use shared template with RAW content (let markdown library do its job!)
             return html_generator.generate_html_report(
-                content=formatted_content,
+                content=content,  # Pass raw content - markdown library will handle conversion
                 title=title,
                 header_title=title,
                 header_subtitle="",
                 include_disclaimer=False  # Don't include financial disclaimer for general content
             )
-            
+
         except Exception as e:
             print(f"Warning: Shared HTML template failed, using fallback: {e}")
             # Fallback to original method if shared template fails

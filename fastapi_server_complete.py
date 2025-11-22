@@ -6881,6 +6881,8 @@ user requests and LLM responses to generate optimal, publication-ready parameter
   - If LLM generated a poem, extract ONLY the poem
   - If LLM generated an essay, extract ONLY the essay
   - Remove ALL disclaimers about tool capabilities
+  - **CRITICAL FOR LONG CONTENT**: If content exceeds 2000 words, use the FULL PRIMARY LLM RESPONSE as-is
+    (WordPress can handle large posts - don't summarize or truncate)
 - **status:** Default to "draft" unless user explicitly requests "publish"
 - **tags:** Generate 3-5 relevant tags from content analysis
 
@@ -6888,12 +6890,24 @@ user requests and LLM responses to generate optimal, publication-ready parameter
 
 Return ONLY valid JSON matching this structure. No explanations, no markdown code blocks, no extra text.
 
+**For SHORT content (< 2000 words):**
 {{
     "title": "Generated Title Here",
     "content": "Cleaned content here...",
     "status": "draft",
     "tags": ["tag1", "tag2", "tag3"]
 }}
+
+**For LONG content (> 2000 words, like comprehensive analyses):**
+{{
+    "title": "Generated Title Here",
+    "content": "{{{{PRIMARY_LLM_RESPONSE}}}}",
+    "status": "draft",
+    "tags": ["tag1", "tag2", "tag3"]
+}}
+
+Use the special placeholder {{{{PRIMARY_LLM_RESPONSE}}}} for the content field when dealing with very long content.
+This tells the system to use the complete Primary LLM response without truncation.
 
 Generate parameters now:"""
 
@@ -6924,6 +6938,11 @@ Generate parameters now:"""
 
         # Parse JSON
         params = json_lib.loads(clean_response)
+
+        # 🔧 FIX v1.0.3.112: Handle {{PRIMARY_LLM_RESPONSE}} placeholder for long content
+        if params.get('content') == '{{PRIMARY_LLM_RESPONSE}}':
+            logger.info(f"🔄 PLACEHOLDER DETECTED: Using full Primary LLM response for content")
+            params['content'] = complete_llm_response
 
         logger.info(f"✅ ARBITRATOR GENERATED PARAMS:")
         logger.info(f"   Title: {params.get('title', 'N/A')}")
@@ -7444,9 +7463,78 @@ AI Document Generation System"""
                     else:
                         logger.error(f"❌ POST-LLM: Could not find secure_email_sender tool instance")
                 else:
-                    logger.warning(f"⚠️ POST-LLM: No files found to attach, skipping email sending")
-                    logger.info(f"🔍 POST-LLM: Checked tools_results for files but found none")
-                    additional_results += f"Tool: {tool_name} (skipped - no files to attach)\nResult: No files were found for attachment\n\n"
+                    # 🔧 FIX v1.0.3.114: Send email with LLM response as body when no attachments
+                    logger.info(f"📧 POST-LLM: No attachments found - will send LLM response as email body")
+
+                    # Extract email address from user prompt
+                    import re
+                    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+                    email_matches = re.findall(email_pattern, user_prompt)
+
+                    if not email_matches:
+                        logger.warning(f"⚠️ POST-LLM EMAIL: No email address found in prompt - skipping")
+                        additional_results += f"Tool: {tool_name} (skipped)\nResult: No email address found in request\n\n"
+                    else:
+                        recipient_email = email_matches[0]
+                        cc_emails = email_matches[1:] if len(email_matches) > 1 else []
+                        cc_emails_str = ",".join(cc_emails) if cc_emails else ""
+
+                        logger.info(f"📧 POST-LLM: Sending email to {recipient_email} with LLM response as body")
+
+                        # Generate subject from user prompt
+                        subject = _extract_subject_from_prompt(user_prompt)
+                        if not subject:
+                            # Generate subject from content summary
+                            if "news" in user_prompt.lower():
+                                subject = f"News Summary - {datetime.now().strftime('%B %d, %Y')}"
+                            elif "summary" in user_prompt.lower():
+                                subject = f"Summary - {datetime.now().strftime('%B %d, %Y')}"
+                            else:
+                                subject = f"Requested Information - {datetime.now().strftime('%B %d, %Y')}"
+
+                        # Create email body from complete LLM response
+                        email_body = f"""{complete_llm_response}
+
+---
+This email was automatically generated in response to your request:
+"{user_prompt[:200]}{'...' if len(user_prompt) > 200 else ''}"
+
+Generated: {datetime.now().strftime('%B %d, %Y at %H:%M:%S')}"""
+
+                        logger.info(f"📧 POST-LLM EMAIL: Subject: {subject}")
+                        logger.info(f"📧 POST-LLM EMAIL: Recipients: {recipient_email}, CC: {cc_emails_str}")
+                        logger.info(f"📧 POST-LLM EMAIL: Body length: {len(email_body)} chars")
+
+                        # Send email without attachments
+                        try:
+                            email_params = {
+                                "to_email": recipient_email,
+                                "cc_emails": cc_emails_str if cc_emails_str else None,
+                                "subject": subject,
+                                "body": email_body,
+                                "attachments": None  # No attachments
+                            }
+                            email_result = await tool_manager.safe_function_call("secure_email_sender", email_params)
+
+                            logger.info(f"✅ POST-LLM EMAIL: Sent successfully without attachments")
+                            logger.info(f"🎯 POST-LLM: Email RESULT: {email_result}")
+
+                            # Handle result
+                            if isinstance(email_result, str):
+                                additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: {email_result}\n\n"
+                            elif isinstance(email_result, dict) and email_result.get('success'):
+                                result_msg = email_result.get('result', 'Email sent successfully')
+                                additional_results += f"Tool: {tool_name} (post-LLM execution)\nResult: {result_msg}\n\n"
+                            else:
+                                error_msg = email_result.get('error', 'Unknown error') if isinstance(email_result, dict) else str(email_result)
+                                logger.error(f"❌ POST-LLM email failed: {error_msg}")
+                                additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {error_msg}\n\n"
+
+                        except Exception as email_error:
+                            logger.error(f"❌ POST-LLM EMAIL: Exception during execution: {email_error}")
+                            import traceback
+                            logger.error(f"❌ POST-LLM EMAIL: Traceback: {traceback.format_exc()}")
+                            additional_results += f"Tool: {tool_name} (post-LLM execution failed)\nResult: Error: {str(email_error)}\n\n"
             
             elif tool_name == "get_news_summaries":
                 # Execute news summaries tool
@@ -7993,9 +8081,13 @@ The above image analysis was automatically performed on newly uploaded images. T
                     # 🔧 FIX: Only check the actual user prompt, NOT conversation context
                     # 🔧 v1.0.3.9: No longer need to reassign - actual_user_prompt preserved at function level
                     # actual_user_prompt = user_prompt  # Use the original user prompt, not the system message
+                    # 🔧 FIX v1.0.3.113: More specific meta-task detection to avoid false positives
+                    # Only match EXACT Open-WebUI meta-task patterns, not partial matches
                     is_meta_task = any(meta_pattern in actual_user_prompt.lower() for meta_pattern in [
-                        'generate a concise', 'title with emoji', 'generate 1-3 broad tags', 
-                        'summarizing the chat history', 'categorizing the main themes'
+                        'generate a concise',
+                        'title with emoji',
+                        'generate 1-3 broad tags categorizing the main themes',  # Full phrase, not just "tags"
+                        'categorizing the main themes of the chat history'       # Full phrase, not just "summarizing"
                     ])
                     
                     # 🎯 DEBUG: Log meta-task detection for troubleshooting

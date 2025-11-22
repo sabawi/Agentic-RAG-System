@@ -157,6 +157,48 @@ User: "Deep search for the latest top and crucial news from Gaza and the Middle 
 → sandboxed_executor(action="create_file", filename="[Generate descriptive filename: e.g., 'gaza_middle_east_critical_analysis_2025_10_12.html']", content="{{NEWS_DATA}}")
 → secure_email_sender(to_email="sabawi@gmail.com", subject="[Generate descriptive subject: e.g., 'Gaza & Middle East Critical Developments - October 12, 2025']", attachments="[same filename as created above]")
 
+🚨 SYMBOLIC REFERENCE RULE - PUBLISHING & SOCIAL MEDIA: When user requests RESEARCH + PUBLISHING (WordPress, Twitter, Medium, Substack), use the EXACT symbolic reference {{PRIMARY_LLM_OUTPUT}}
+This is NOT a placeholder - it's the exact string that the POST-LLM processing system will replace with the Primary LLM's generated analysis/content.
+
+**DEFERRED PUBLISHING PATTERN** (execute AFTER Primary LLM generates content):
+
+🚨 CRITICAL TITLE GENERATION RULE:
+- When calling get_the_secret_tool(), extract the actual date from its result
+- Use the ACTUAL DATE in publishing tool titles, NOT placeholders like "[Current Date]"
+- Generate descriptive titles based on the subject matter and actual date
+- Format dates clearly (e.g., "November 17, 2025" or "2025-11-17")
+
+User: "Do deep research on Nvidia stock and publish to WordPress"
+→ get_the_secret_tool()  # Returns: "Current date and time: 2025-11-17 21:30:00"
+→ comprehensive_stock_analyzer(symbol="NVDA")  # IMMEDIATE: Gather data
+→ search_web(query="Nvidia stock analysis latest news")  # IMMEDIATE: More context
+→ social_media_wordpress(title="Nvidia Stock Analysis - November 17, 2025", content="{{PRIMARY_LLM_OUTPUT}}", status="draft")  # Use actual date, not placeholder
+
+User: "Research Apple earnings and tweet about it"
+→ get_the_secret_tool()  # Get actual date
+→ get_stock_and_company_data(symbol="AAPL")  # IMMEDIATE
+→ get_news_summaries(filter="Apple earnings")  # IMMEDIATE
+→ social_media_twitter_test(text="{{PRIMARY_LLM_OUTPUT}}")  # DEFERRED
+
+User: "Research Obama's accomplishments in his last term and publish essay to WordPress"
+→ get_the_secret_tool()  # Returns: "Current date and time: 2025-11-17 21:30:00"
+→ wikipedia_query(question="Barack Obama")  # IMMEDIATE
+→ search_web(query="Obama last term accomplishments")  # IMMEDIATE
+→ social_media_wordpress(title="President Obama's Accomplishments in His Final Term", content="{{PRIMARY_LLM_OUTPUT}}", status="draft")  # Descriptive title based on subject
+
+**DEFERRED PUBLISHING TOOLS** (use {{PRIMARY_LLM_OUTPUT}} for content):
+- social_media_wordpress(title="...", content="{{PRIMARY_LLM_OUTPUT}}", status="draft")
+- social_media_twitter_test(text="{{PRIMARY_LLM_OUTPUT}}")
+- social_media_medium_test(title="...", content="{{PRIMARY_LLM_OUTPUT}}")
+- social_media_substack_test(title="...", content="{{PRIMARY_LLM_OUTPUT}}")
+
+❌ WRONG - Don't use empty content or try to generate analysis yourself:
+→ social_media_wordpress(title="Analysis", content="", status="draft")  # Empty!
+→ social_media_wordpress(content="Nvidia is a great stock...")  # Tool LLM shouldn't write analysis!
+
+✅ CORRECT - Use symbolic reference {{PRIMARY_LLM_OUTPUT}}:
+→ social_media_wordpress(content="{{PRIMARY_LLM_OUTPUT}}")  # System fills after Primary LLM generates
+
 D. Resume / Cover Letter Requests
 If the user provides resume data in the prompt:
 

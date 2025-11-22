@@ -222,7 +222,7 @@ async def publish_to_substack(
     try:
         # Import Substack library
         try:
-            from substack import SubstackApi
+            from substack import Api
         except ImportError:
             return {
                 "success": False,
@@ -232,7 +232,7 @@ async def publish_to_substack(
 
         # Authenticate
         try:
-            client = SubstackApi(email=email, password=password)
+            client = Api(email=email, password=password)
         except Exception as auth_error:
             error_msg = sanitize_credentials_in_error(str(auth_error), email, password)
             return {

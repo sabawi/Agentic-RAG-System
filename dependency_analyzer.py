@@ -185,8 +185,9 @@ class DependencyGraph:
 # =============================================================================
 
 # Map symbolic names to tool names
+# Some symbols support multiple tool sources (listed in priority order)
 SYMBOL_TO_TOOL = {
-    'WEBPAGE_CONTENT': 'lookup_website',
+    'WEBPAGE_CONTENT': ['lookup_website', 'search_web'],  # ✅ FIX: Accept either lookup_website OR search_web
     'SEARCH_RESULTS': 'document_search',
     'FILE_PATH': 'sandboxed_executor',
     'EMAIL_CONTENT': 'email_retriever',
@@ -223,10 +224,16 @@ def detect_symbolic_references(param_value: str) -> List[str]:
 
     dependencies = []
     for symbol in matches:
-        tool_name = SYMBOL_TO_TOOL.get(symbol)
-        if tool_name:
-            dependencies.append(tool_name)
-            logger.debug(f"🔍 Symbolic reference detected: {{{{{{symbol}}}}}} → {tool_name}")
+        tool_names = SYMBOL_TO_TOOL.get(symbol)
+        if tool_names:
+            # ✅ FIX: Handle both single tool name and list of tool names
+            if isinstance(tool_names, str):
+                tool_names = [tool_names]
+
+            # Add all possible tool sources as dependencies
+            for tool_name in tool_names:
+                dependencies.append(tool_name)
+                logger.debug(f"🔍 Symbolic reference detected: {{{{{{symbol}}}}}} → {tool_name}")
         else:
             logger.warning(f"⚠️ Unknown symbolic reference: {{{{{{symbol}}}}}}")
 
@@ -454,15 +461,24 @@ def resolve_dependencies(
 
             def replacer(match):
                 symbol = match.group(1)
-                tool_name = SYMBOL_TO_TOOL.get(symbol)
+                tool_names = SYMBOL_TO_TOOL.get(symbol)
 
-                if tool_name and tool_name in stage_outputs:
-                    output = stage_outputs[tool_name]
-                    logger.info(f"      ✅ Resolved {{{{{{symbol}}}}}} → {tool_name} output ({len(str(output))} chars)")
-                    return str(output)
-                else:
-                    logger.warning(f"      ⚠️ Cannot resolve {{{{{{symbol}}}}}} - tool '{tool_name}' not in stage_outputs: {list(stage_outputs.keys())}")
-                    return match.group(0)  # Keep original if cannot resolve
+                # ✅ FIX: Handle both single tool name and list of tool names
+                if isinstance(tool_names, str):
+                    tool_names = [tool_names]
+                elif not isinstance(tool_names, list):
+                    tool_names = []
+
+                # Try each tool in priority order
+                for tool_name in tool_names:
+                    if tool_name in stage_outputs:
+                        output = stage_outputs[tool_name]
+                        logger.info(f"      ✅ Resolved {{{{{{symbol}}}}}} → {tool_name} output ({len(str(output))} chars)")
+                        return str(output)
+
+                # None of the tools found
+                logger.warning(f"      ⚠️ Cannot resolve {{{{{{symbol}}}}}} - none of {tool_names} in stage_outputs: {list(stage_outputs.keys())}")
+                return match.group(0)  # Keep original if cannot resolve
 
             resolved[param_name] = re.sub(pattern, replacer, param_value)
 

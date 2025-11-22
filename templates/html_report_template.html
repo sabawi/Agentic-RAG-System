@@ -1,555 +1,87 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{TITLE}}</title>
 <style>
-/* ========================================================================
-   COMPREHENSIVE CSS - BEST OF ALL IMPLEMENTATIONS
-   Consolidated from: report_utils, BI agent, Market Sentiment,
-   Social Media, Document Intelligence, Stock Analyzer, News Retriever
-   ======================================================================== */
-
-/* Base Styles */
+/* Clean, Minimal Styling for Professional Reports */
 body {
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 14px;
-  line-height: 1.6;
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f4;
   color: #333;
-  background-color: #f8f9fa;
-  margin: 0;
-  padding: 0;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  white-space: normal;
-}
-
-.container {
-  max-width: 1000px;
-  margin: 20px auto;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  line-height: 1.6;
+  margin: 20px;
   padding: 20px;
 }
 
-.header {
-  background-color: #4a90e2;
-  color: #fff;
-  text-align: center;
-  padding: 16px;
-  border-radius: 4px;
+h1, h2, h3 {
+  color: #2c3e50;
 }
-
-.header h1 {
-  font-size: 20px;
-  margin: 0;
-  line-height: 1.2;
-}
-
-.header p {
-  margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 1.3;
-}
-
-/* ========================================================================
-   TYPOGRAPHY
-   ======================================================================== */
 
 h1 {
-  color: #2c3e50;
-  border-bottom: 3px solid #3498db;
-  padding-bottom: 10px;
   margin-top: 20px;
 }
 
 h2 {
-  color: #34495e;
-  font-size: 16px;
   margin-top: 30px;
-  margin-bottom: 8px;
-  border-bottom: 2px solid #4a90e2;
-  padding-bottom: 4px;
 }
 
 h3 {
-  color: #2980b9;
-  font-size: 15px;
-  margin: 18px 0 6px;
+  margin-top: 20px;
 }
 
 p {
-  margin: 8px 0;
-  /* Removed text-align: justify to prevent word spacing issues */
-}
-
-ul { padding-left: 18px; margin: 8px 0; }
-li { margin-bottom: 6px; }
-
-/* ========================================================================
-   LINKS & CITATIONS (CRITICAL - Used by BI Agent)
-   ======================================================================== */
-
-a {
-  color: #3498db;
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-a:hover {
-  color: #2980b9;
-  text-decoration: underline;
-}
-
-/* Citation styling - CRITICAL for BI agent inline citations */
-.citation {
-  font-size: 11px;
-  color: #666;
-  font-style: italic;
-  margin-left: 4px;
-  white-space: nowrap;
-}
-
-.citation a {
-  color: #666;
-  text-decoration: none;
-  border-bottom: 1px dotted #999;
-}
-
-.citation a:hover {
-  color: #3498db;
-  border-bottom-color: #3498db;
-}
-
-/* Images - constrain to container width and center */
-img {
-  max-width: 100%;
-  height: auto;
-  display: block;
-  margin: 20px auto;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-/* Table citation styling */
-table + p.citation,
-table + .citation {
-  font-size: 11px;
-  color: #666;
-  font-style: italic;
-  margin-top: 5px;
-}
-
-/* ========================================================================
-   PRIORITY/SEVERITY CLASSES (From report_utils)
-   ======================================================================== */
-
-.critical {
-  background-color: #ffebee;
-  border-left: 5px solid #f44336;
-  padding: 10px;
   margin: 10px 0;
-  border-radius: 4px;
 }
 
-.high {
-  background-color: #fff3e0;
-  border-left: 5px solid #ff9800;
-  padding: 10px;
+ul, ol {
   margin: 10px 0;
-  border-radius: 4px;
+  padding-left: 30px;
 }
 
-.medium {
-  background-color: #f3e5f5;
-  border-left: 5px solid #9c27b0;
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 4px;
+li {
+  margin: 5px 0;
 }
-
-.low {
-  background-color: #e8f5e8;
-  border-left: 5px solid #4caf50;
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 4px;
-}
-
-.info {
-  background-color: #e3f2fd;
-  border-left: 5px solid #2196f3;
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 4px;
-}
-
-/* ========================================================================
-   ACTION ITEMS
-   ======================================================================== */
-
-.action-item {
-  background-color: #fffde7;
-  border: 2px solid #ffeb3b;
-  padding: 15px;
-  margin: 10px 0;
-  border-radius: 5px;
-}
-
-/* ========================================================================
-   PRIORITY LEVELS 1-5 (From report_utils & Research Assistant)
-   ======================================================================== */
-
-.priority-1 {
-  background-color: #ffebee;
-  border-left: 5px solid #f44336;
-  padding: 10px;
-  border-radius: 4px;
-}
-
-.priority-2 {
-  background-color: #fff3e0;
-  border-left: 5px solid #ff9800;
-  padding: 10px;
-  border-radius: 4px;
-}
-
-.priority-3 {
-  background-color: #f3e5f5;
-  border-left: 5px solid #9c27b0;
-  padding: 10px;
-  border-radius: 4px;
-}
-
-.priority-4 {
-  background-color: #e8f5e8;
-  border-left: 5px solid #4caf50;
-  padding: 10px;
-  border-radius: 4px;
-}
-
-.priority-5 {
-  background-color: #e3f2fd;
-  border-left: 5px solid #2196f3;
-  padding: 10px;
-  border-radius: 4px;
-}
-
-/* ========================================================================
-   SENTIMENT CLASSES (Market Sentiment & Social Media)
-   ======================================================================== */
-
-.bullish, .positive {
-  background-color: #e8f5e8;
-  border-left: 5px solid #4caf50;
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 4px;
-}
-
-.bearish, .negative {
-  background-color: #ffebee;
-  border-left: 5px solid #f44336;
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 4px;
-}
-
-.neutral {
-  background-color: #fff3e0;
-  border-left: 5px solid #ff9800;
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 4px;
-}
-
-/* ========================================================================
-   CONFIDENCE LEVELS (Market Sentiment)
-   ======================================================================== */
-
-.high-confidence {
-  background-color: #e8f5e8;
-  border: 2px solid #4caf50;
-  padding: 15px;
-  margin: 10px 0;
-  border-radius: 4px;
-}
-
-.medium-confidence {
-  background-color: #fff3e0;
-  border: 2px solid #ff9800;
-  padding: 15px;
-  margin: 10px 0;
-  border-radius: 4px;
-}
-
-.low-confidence {
-  background-color: #ffebee;
-  border: 2px solid #f44336;
-  padding: 15px;
-  margin: 10px 0;
-  border-radius: 4px;
-}
-
-/* ========================================================================
-   TREND INDICATORS (Social Media & Stock Monitor)
-   ======================================================================== */
-
-.trend-up, .gain {
-  color: #4caf50;
-  font-weight: bold;
-}
-
-.trend-down, .loss {
-  color: #f44336;
-  font-weight: bold;
-}
-
-.trend-neutral {
-  color: #ff9800;
-  font-weight: bold;
-}
-
-/* ========================================================================
-   SENTIMENT TEXT COLORS
-   ======================================================================== */
-
-.sentiment-high, .relevance-high {
-  color: #e74c3c;
-  font-weight: bold;
-}
-
-.sentiment-medium, .relevance-medium {
-  color: #f39c12;
-  font-weight: bold;
-}
-
-.sentiment-low, .relevance-low {
-  color: #7f8c8d;
-}
-
-/* ========================================================================
-   EMAIL-SPECIFIC CLASSES (From report_utils)
-   ======================================================================== */
-
-.sender {
-  font-weight: bold;
-  color: #2c3e50;
-}
-
-.subject {
-  font-style: italic;
-  color: #7f8c8d;
-}
-
-.priority-high {
-  color: #e74c3c;
-  font-weight: bold;
-}
-
-.priority-medium {
-  color: #f39c12;
-  font-weight: bold;
-}
-
-.priority-low {
-  color: #7f8c8d;
-}
-
-/* ========================================================================
-   DASHBOARD & METRICS (Market Sentiment & Social Media)
-   ======================================================================== */
-
-.dashboard {
-  background-color: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  margin: 20px 0;
-}
-
-.metric {
-  display: inline-block;
-  width: 22%;
-  text-align: center;
-  padding: 15px;
-  margin: 1%;
-  background-color: #f8f9fa;
-  border-radius: 5px;
-  border: 1px solid #eee;
-  vertical-align: top;
-}
-
-.metric-value {
-  font-size: 2em;
-  font-weight: bold;
-  color: #2c3e50;
-  display: block;
-  margin-bottom: 5px;
-}
-
-.metric-label {
-  color: #7f8c8d;
-  font-size: 0.9em;
-  display: block;
-}
-
-/* ========================================================================
-   CARD COMPONENTS (Document Intelligence & Social Media)
-   ======================================================================== */
-
-.document-card, .brand-card, .company-card {
-  background-color: white;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  padding: 15px;
-  margin: 10px 0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.viral-content {
-  background-color: #fff8e1;
-  border: 2px solid #ffc107;
-  padding: 15px;
-  margin: 10px 0;
-  border-radius: 5px;
-}
-
-.relationship-map {
-  background-color: #f1f8e9;
-  border: 1px solid #9ccc65;
-  padding: 15px;
-  margin: 10px 0;
-  border-radius: 5px;
-}
-
-.confidential {
-  background-color: #ffcdd2;
-  padding: 5px 10px;
-  border-radius: 3px;
-  display: inline-block;
-  font-size: 11px;
-  font-weight: bold;
-  color: #c62828;
-}
-
-/* ========================================================================
-   TABLES (Enhanced from report_utils)
-   ======================================================================== */
 
 table {
   width: 100%;
   border-collapse: collapse;
   margin: 20px 0;
-  background-color: white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 th, td {
-  padding: 12px;
+  padding: 10px;
+  border: 1px solid #ddd;
   text-align: left;
-  border-bottom: 1px solid #ddd;
 }
 
 th {
-  background-color: #34495e;
+  background-color: #3498db;
   color: white;
-  font-weight: bold;
 }
 
 tr:hover {
-  background-color: #f5f5f5;
+  background-color: #f9f9f9;
 }
 
-/* Table citation styling */
-table + p.citation, table + .citation {
+a {
+  color: #3498db;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Citation styling */
+.citation {
   font-size: 11px;
   color: #666;
   font-style: italic;
-  margin-top: 5px;
 }
 
-/* ========================================================================
-   CODE BLOCKS (Stock Analyzer & General)
-   ======================================================================== */
-
-pre {
-  white-space: pre-wrap;
-  background-color: #f5f5f5;
-  padding: 15px;
-  border-radius: 5px;
-  border-left: 3px solid #3498db;
-  overflow-x: auto;
-  margin: 15px 0;
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-code {
-  background-color: #f5f5f5;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-}
-
-pre code {
-  background-color: transparent;
-  padding: 0;
-}
-
-/* ========================================================================
-   SPECIAL COMPONENTS
-   ======================================================================== */
-
-.stats-box {
-  margin-top: 30px;
-  padding: 15px;
-  background-color: #e3f2fd;
-  border-radius: 5px;
-}
-
-.news-item {
-  background-color: #fafafa;
-  border: 1px solid #ddd;
-  padding: 12px;
-  border-radius: 4px;
-  margin: 12px 0;
-}
-
-.recommendation {
-  background-color: #28a745;
-  color: white;
-  padding: 14px;
-  border-radius: 5px;
-  text-align: center;
-  font-weight: bold;
-  margin: 20px 0;
-}
-
-/* Investment recommendation boxes with color coding */
-.recommendation-box {
-  padding: 20px;
-  margin: 20px 0;
-  background-color: #f8f9fa;
-  border-radius: 5px;
-}
-
-.recommendation-box.buy {
-  border-left: 5px solid #28a745;
-}
-
-.recommendation-box.hold {
-  border-left: 5px solid #ffc107;
-}
-
-.recommendation-box.sell {
-  border-left: 5px solid #dc3545;
-}
-
+/* Warning/disclaimer boxes */
 .warning {
   background-color: #fff3cd;
   border: 1px solid #ffeeba;
@@ -559,104 +91,11 @@ pre code {
   margin: 16px 0;
 }
 
-.timestamp {
-  color: #7f8c8d;
-  font-style: italic;
-  text-align: center;
-  font-size: 12px;
-  padding: 10px;
-  margin-top: 20px;
-  border-radius: 4px;
-}
-
-/* ========================================================================
-   RESPONSIVE DESIGN
-   ======================================================================== */
-
-@media (max-width: 768px) {
-  .container {
-    max-width: 100%;
-    margin: 10px;
-    padding: 15px;
-  }
-
-  .metric {
-    width: 48%;
-  }
-
-  h1 {
-    font-size: 18px;
-  }
-
-  h2 {
-    font-size: 16px;
-  }
-}
-
-@media (max-width: 480px) {
-  .metric {
-    width: 100%;
-    margin: 5px 0;
-  }
-
-  table {
-    font-size: 12px;
-  }
-
-  th, td {
-    padding: 8px;
-  }
-}
-
-/* ========================================================================
-   PRINT STYLES
-   ======================================================================== */
-
-@media print {
-  body {
-    background-color: white;
-  }
-
-  .container {
-    box-shadow: none;
-    border: none;
-  }
-
-  .header {
-    background-color: #4a90e2 !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-
-  a {
-    color: #3498db;
-    text-decoration: underline;
-  }
-
-  .no-print {
-    display: none;
-  }
-}
-
-/* ========================================================================
-   CUSTOM CSS PLACEHOLDER
-   ======================================================================== */
-
+/* Custom CSS Placeholder */
 {{CUSTOM_CSS}}
-
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="header">
-    <h1>{{HEADER_TITLE}}</h1>
-    <p>{{HEADER_SUBTITLE}}</p>
-  </div>
-  <div class="content">
-    {{CONTENT}}
-    {{DISCLAIMER}}
-    <div class="timestamp">{{TIMESTAMP}}</div>
-  </div>
-</div>
+{{CONTENT}}
 </body>
 </html>

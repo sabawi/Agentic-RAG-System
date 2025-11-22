@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.118"  # 🐛 FIX: email_digest --provider validation - Made --provider argument required with clear error message, preventing silent failures when provider is not specified
+VERSION = "1.0.3.119"  # 🔧 CONSOLIDATION: Multiple bug fixes - WordPress long content, email without attachments, meta-task detection, dependency flexibility, placeholder detection, template simplification, Substack API fix
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE
