@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.116"  # 🐛 FIX: Agent email tool confusion - Fixed --email option processing in 5 agents to explicitly use secure_email_sender tool, preventing WordPress posting confusion
+VERSION = "1.0.3.117"  # 🐛 FIX: email_digest cascading emails + market_sentiment visualization - Prevented LLM from calling other agents during email analysis, removed confusing visualizations
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE

@@ -183,7 +183,6 @@ Use multiple tools to gather comprehensive market intelligence:
 1. Use get_news_summaries to find the latest financial news
 2. Use comprehensive_stock_analyzer for stock-specific data
 3. Use search_web to find additional market sentiment sources
-4. Use analytical_visualizer to create relevant charts if possible
 
 Provide a comprehensive market sentiment analysis including:
 
@@ -199,9 +198,9 @@ Provide a comprehensive market sentiment analysis including:
 Format as an HTML report fragment with:
 - Professional styling
 - Color-coded sentiment indicators
-- Clear charts and visualizations
 - Executive summary at top
 - Risk assessment section
+- Clear explanations and analysis (NO visualizations - text-based analysis only)
 
 CRITICAL FORMATTING REQUIREMENTS:
 1. OUTPUT MUST BE HTML CONTENT ONLY - NO markdown syntax anywhere

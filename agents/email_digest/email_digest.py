@@ -127,9 +127,11 @@ class EmailDigestAgent:
                 start_date = (datetime.now() - timedelta(hours=self.hours_back)).strftime("%Y-%m-%d")
                 
                 prompt = f"""
+IMPORTANT: This is an EMAIL DIGEST request. ONLY use the email_retriever tool. DO NOT call any other agents or tools (stock_monitor, news_retriever, business_intelligence, etc.) even if emails mention those topics.
+
 Please retrieve recent emails from my account for the last {self.hours_back} hours.
 
-Use the email_retriever tool to get emails. Then provide:
+Use ONLY the email_retriever tool to get emails. Then provide:
 
 1. List of all emails with:
    - Sender, subject, timestamp
@@ -148,6 +150,8 @@ Format as Markdown with:
 - Bullet lists for items
 - **Bold** for important information
 - Links where applicable
+
+DO NOT send any additional emails or call other analysis agents.
 """
 
                 response = self.client.chat.completions.create(
@@ -191,6 +195,8 @@ Format as Markdown with:
                 logger.info(f"Analyzing email sentiment (attempt {attempt}/{self.max_retries})...")
 
                 prompt = f"""
+IMPORTANT: This is ANALYSIS ONLY. DO NOT call any other agents or tools. DO NOT send any emails.
+
 Analyze the sentiment and tone of the following email content:
 
 {email_content}
@@ -204,6 +210,8 @@ Provide:
 6. Recommended response approach
 
 Format as a structured analysis report.
+
+DO NOT call other agents (stock_monitor, news_retriever, etc.) even if emails mention those topics. This is digest analysis only.
 """
 
                 response = self.client.chat.completions.create(
@@ -247,6 +255,8 @@ Format as a structured analysis report.
                 logger.info(f"Extracting action items (attempt {attempt}/{self.max_retries})...")
 
                 prompt = f"""
+IMPORTANT: This is ANALYSIS ONLY. DO NOT call any other agents or tools. DO NOT send any emails.
+
 Identify and extract all action items from the following email content:
 
 {email_content}
@@ -268,6 +278,8 @@ Format as a prioritized action item list with:
 - Clear checkboxes for tracking
 - Due date indicators
 - Context links to original emails
+
+DO NOT call other agents (stock_monitor, news_retriever, etc.) even if emails mention those topics. This is digest analysis only.
 """
 
                 response = self.client.chat.completions.create(
@@ -425,6 +437,8 @@ These require immediate attention:
 
         # Create trend analysis (patterns over time)
         trend_prompt = f"""
+IMPORTANT: This is ANALYSIS ONLY. DO NOT call any other agents or tools. DO NOT send any emails.
+
 Analyze the following email content for patterns and trends:
 
 {email_content}
@@ -438,6 +452,8 @@ Identify:
 6. Potential missed connections or responses
 
 Format as a pattern analysis report.
+
+DO NOT call other agents (stock_monitor, news_retriever, etc.) even if emails mention those topics. This is digest analysis only.
 """
 
         for attempt in range(1, self.max_retries + 1):
