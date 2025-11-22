@@ -348,7 +348,7 @@ Format as an organized HTML document with:
                 messages=[{
                     "role": "user",
                     "content": (
-                        f"Send an email to {self.recipient_email} with:\n"
+                        f"Use the secure_email_sender tool to send an email to {self.recipient_email} with:\n"
                         f"Subject: '{subject}'\n"
                         f"Body: 'Please find attached your personalized research digest with the latest papers and insights.'\n"
                         f"Attach: {filepath.absolute()}"

@@ -24,9 +24,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict
 import json
+import re
 
 import openai
 import schedule
+
+# Add project root to sys.path to allow importing utils
+project_root = Path(__file__).resolve().parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 # Import centralized HTML generator
 from utils.html_generator import HTMLReportGenerator
@@ -41,6 +47,54 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+
+def clean_html_response(content: str) -> str:
+    """
+    Clean up HTML responses by removing markdown code blocks and extracting content fragments.
+
+    Handles responses that may contain:
+    - Markdown code blocks (```html ... ```)
+    - Standalone HTML documents with <!DOCTYPE>, <html>, <head>, <body> tags
+
+    Returns clean HTML content fragments suitable for insertion into the report template.
+
+    Args:
+        content: Raw HTML content from LLM response
+
+    Returns:
+        Cleaned HTML content fragment
+    """
+    if not content:
+        return content
+
+    # Remove markdown code blocks
+    # Pattern: ```html ... ``` or ```... ```
+    content = re.sub(r'```html\s*', '', content, flags=re.IGNORECASE)
+    content = re.sub(r'```\s*', '', content)
+
+    # Extract content from standalone HTML documents
+    # If we find <!DOCTYPE> or <html>, extract just the body content
+    if '<!DOCTYPE' in content or '<html' in content:
+        # Try to extract body content
+        body_match = re.search(r'<body[^>]*>(.*)</body>', content, re.DOTALL | re.IGNORECASE)
+        if body_match:
+            content = body_match.group(1)
+        else:
+            # If no body tag, try to find where actual content starts (after </head>)
+            head_end = re.search(r'</head>', content, re.IGNORECASE)
+            if head_end:
+                # Skip past </head> and remove trailing </html>
+                content = content[head_end.end():]
+                content = re.sub(r'</html>\s*$', '', content, flags=re.IGNORECASE)
+
+    # Clean up any remaining HTML document tags at the start
+    content = re.sub(r'^.*?<body[^>]*>', '', content, flags=re.DOTALL | re.IGNORECASE)
+
+    # Clean up closing tags at the end
+    content = re.sub(r'</body>\s*</html>\s*$', '', content, flags=re.IGNORECASE)
+
+    return content.strip()
 
 
 class MarketSentimentAgent:
@@ -142,12 +196,26 @@ Provide a comprehensive market sentiment analysis including:
 7. Risk factors and opportunities
 8. Confidence levels for each assessment
 
-Format as an HTML report with:
+Format as an HTML report fragment with:
 - Professional styling
 - Color-coded sentiment indicators
 - Clear charts and visualizations
 - Executive summary at top
 - Risk assessment section
+
+CRITICAL FORMATTING REQUIREMENTS:
+1. OUTPUT MUST BE HTML CONTENT ONLY - NO markdown syntax anywhere
+2. DO NOT wrap output in code blocks (NO ```html or ``` markers)
+3. DO NOT include <!DOCTYPE>, <html>, <head>, or <body> tags
+4. Generate HTML CONTENT FRAGMENTS that will be inserted into an existing HTML document
+5. Use semantic HTML tags:
+   - <h2>, <h3>, <h4> for headings (NOT # ## ###)
+   - <p> for paragraphs
+   - <ul><li> and <ol><li> for lists (NOT - or *)
+   - <table><tr><th><td> for tables (NOT | pipes |)
+   - <strong> and <em> for emphasis (NOT ** or *)
+   - <div class="info">, <div class="high">, <div class="medium"> for styled sections
+6. Start directly with content (e.g., <h2>Market Overview</h2><p>Content here...</p>)
 """
 
                 response = self.client.chat.completions.create(
@@ -157,7 +225,7 @@ Format as an HTML report with:
                     max_tokens=4096
                 )
 
-                content = response.choices[0].message.content
+                content = clean_html_response(response.choices[0].message.content)
 
                 if not content or len(content) < 100:
                     raise ValueError("Sentiment analysis content is empty or too short")
@@ -211,6 +279,19 @@ Also provide:
 - Position sizing suggestions
 
 Format as a structured trading recommendations report.
+
+CRITICAL FORMATTING REQUIREMENTS:
+1. OUTPUT MUST BE HTML CONTENT ONLY - NO markdown syntax anywhere
+2. DO NOT wrap output in code blocks (NO ```html or ``` markers)
+3. DO NOT include <!DOCTYPE>, <html>, <head>, or <body> tags
+4. Generate HTML CONTENT FRAGMENTS that will be inserted into an existing HTML document
+5. Use semantic HTML tags:
+   - <h2>, <h3>, <h4> for headings (NOT # ## ###)
+   - <p> for paragraphs
+   - <ul><li> and <ol><li> for lists (NOT - or *)
+   - <table><tr><th><td> for tables (NOT | pipes |)
+   - <strong> and <em> for emphasis (NOT ** or *)
+6. Start directly with content (e.g., <h2>Trading Signals</h2><p>Content here...</p>)
 """
 
                 response = self.client.chat.completions.create(
@@ -220,7 +301,7 @@ Format as a structured trading recommendations report.
                     max_tokens=2048
                 )
 
-                content = response.choices[0].message.content
+                content = clean_html_response(response.choices[0].message.content)
 
                 if not content or len(content) < 100:
                     raise ValueError("Trading signals content is empty or too short")
@@ -270,9 +351,21 @@ Include:
 
 Present in a dashboard format with:
 - Key metrics at the top
-- Visual indicators
 - Color-coded risk levels
 - Quick insights section
+
+CRITICAL FORMATTING REQUIREMENTS:
+1. OUTPUT MUST BE HTML CONTENT ONLY - NO markdown syntax anywhere
+2. DO NOT wrap output in code blocks (NO ```html or ``` markers)
+3. DO NOT include <!DOCTYPE>, <html>, <head>, or <body> tags
+4. Generate HTML CONTENT FRAGMENTS that will be inserted into an existing HTML document
+5. Use semantic HTML tags:
+   - <h2>, <h3>, <h4> for headings (NOT # ## ###)
+   - <p> for paragraphs
+   - <ul><li> and <ol><li> for lists (NOT - or *)
+   - <table><tr><th><td> for tables (NOT | pipes |)
+   - <strong> and <em> for emphasis (NOT ** or *)
+6. Start directly with content (e.g., <h2>Market Summary</h2><p>Content here...</p>)
 """
 
                 response = self.client.chat.completions.create(
@@ -282,7 +375,7 @@ Present in a dashboard format with:
                     max_tokens=2048
                 )
 
-                content = response.choices[0].message.content
+                content = clean_html_response(response.choices[0].message.content)
 
                 if not content or len(content) < 100:
                     raise ValueError("Market summary content is empty or too short")
@@ -321,8 +414,7 @@ Present in a dashboard format with:
             # Use centralized HTML generator with automatic markdown conversion
             html_content = self.html_generator.generate_html_report(
                 title=title,
-                content=content,
-                report_type=report_type
+                content=content
             )
 
             filepath.write_text(html_content, encoding='utf-8')
@@ -356,7 +448,7 @@ Present in a dashboard format with:
                 messages=[{
                     "role": "user",
                     "content": (
-                        f"Send an email to {self.recipient_email} with:\n"
+                        f"Use the secure_email_sender tool to send an email to {self.recipient_email} with:\n"
                         f"Subject: '{subject}'\n"
                         f"Body: 'Please find attached your market sentiment analysis with trading insights and recommendations.'\n"
                         f"Attach: {filepath.absolute()}"
@@ -469,6 +561,19 @@ Provide:
 8. Next week outlook
 
 Format as a comprehensive trend analysis.
+
+CRITICAL FORMATTING REQUIREMENTS:
+1. OUTPUT MUST BE HTML CONTENT ONLY - NO markdown syntax anywhere
+2. DO NOT wrap output in code blocks (NO ```html or ``` markers)
+3. DO NOT include <!DOCTYPE>, <html>, <head>, or <body> tags
+4. Generate HTML CONTENT FRAGMENTS that will be inserted into an existing HTML document
+5. Use semantic HTML tags:
+   - <h2>, <h3>, <h4> for headings (NOT # ## ###)
+   - <p> for paragraphs
+   - <ul><li> and <ol><li> for lists (NOT - or *)
+   - <table><tr><th><td> for tables (NOT | pipes |)
+   - <strong> and <em> for emphasis (NOT ** or *)
+6. Start directly with content (e.g., <h2>Trend Analysis</h2><p>Content here...</p>)
 """
 
         for attempt in range(1, self.max_retries + 1):
@@ -482,7 +587,7 @@ Format as a comprehensive trend analysis.
                     max_tokens=2048
                 )
 
-                trend_analysis = response.choices[0].message.content
+                trend_analysis = clean_html_response(response.choices[0].message.content)
                 break
             except Exception as e:
                 logger.error(f"❌ Trend analysis attempt {attempt} failed: {e}")

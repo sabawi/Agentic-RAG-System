@@ -170,7 +170,7 @@ def send_email_report(
 
         # Build email prompt
         email_content = (
-            f"Send an email to {recipient_email} with:\n"
+            f"Use the secure_email_sender tool to send an email to {recipient_email} with:\n"
             f"Subject: '{subject}'\n"
             f"Body: '{body}'\n"
         )

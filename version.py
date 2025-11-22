@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.115"  # 🎯 UX: Primary LLM POST-LLM awareness - Inform Primary LLM that POST-LLM execution handles email/publishing tools, preventing confusing disclaimers like "I cannot send an email" when functionality actually works
+VERSION = "1.0.3.116"  # 🐛 FIX: Agent email tool confusion - Fixed --email option processing in 5 agents to explicitly use secure_email_sender tool, preventing WordPress posting confusion
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE

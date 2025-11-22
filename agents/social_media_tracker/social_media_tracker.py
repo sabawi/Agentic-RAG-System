@@ -419,7 +419,7 @@ Format as a comprehensive competitor analysis report with:
                 messages=[{
                     "role": "user",
                     "content": (
-                        f"Send an email to {self.recipient_email} with:\n"
+                        f"Use the secure_email_sender tool to send an email to {self.recipient_email} with:\n"
                         f"Subject: '{subject}'\n"
                         f"Body: 'Please find attached your social media trend analysis with brand monitoring and insights.'\n"
                         f"Attach: {filepath.absolute()}"

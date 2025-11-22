@@ -32,6 +32,16 @@ import schedule
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from utils.html_generator import HTMLReportGenerator
 
+# Import shared email utility
+# Add agents directory to path to allow importing from common
+agents_dir = Path(__file__).parent.parent
+if str(agents_dir) not in sys.path:
+    sys.path.insert(0, str(agents_dir))
+
+from common.report_utils import send_email_report
+
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -319,43 +329,6 @@ Format as a prioritized action item list with:
             logger.error(f"❌ Failed to save email digest: {e}")
             raise
 
-    def send_email_report(self, filepath: Path, subject: str) -> bool:
-        """
-        Send email digest via email.
-
-        Args:
-            filepath: Path to HTML digest file
-            subject: Email subject
-
-        Returns:
-            True if email was sent successfully
-        """
-        if not self.recipient_email:
-            logger.warning("No recipient email configured")
-            return False
-
-        try:
-            logger.info(f"Sending email digest to {self.recipient_email}...")
-
-            response = self.client.chat.completions.create(
-                model="Agentic-RAG-Model1",
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        f"Send an email to {self.recipient_email} with:\n"
-                        f"Subject: '{subject}'\n"
-                        f"Body: 'Please find attached your personalized email digest with summaries and action items.'\n"
-                        f"Attach: {filepath.absolute()}"
-                    )
-                }]
-            )
-
-            logger.info("✅ Email digest sent successfully")
-            return True
-
-        except Exception as e:
-            logger.error(f"❌ Failed to send email digest: {e}")
-            return False
 
     def run_morning_digest(self, send_email: bool = False) -> bool:
         """Generate morning email digest."""
@@ -414,7 +387,14 @@ These require immediate attention:
 
         if send_email:
             subject = f"🌅 Morning Email Digest - {datetime.now().strftime('%A, %B %d')}"
-            self.send_email_report(filepath, subject)
+            send_email_report(
+                client=self.client,
+                recipient_email=self.recipient_email,
+                subject=subject,
+                body="Please find attached your personalized email digest with summaries and action items.",
+                attachment_path=filepath,
+                logger=logger
+            )
 
         logger.info("✅ Morning email digest completed")
         return True
@@ -521,7 +501,14 @@ Format as a pattern analysis report.
 
         if send_email:
             subject = f"📊 Daily Email Digest - {datetime.now().strftime('%A, %B %d')}"
-            self.send_email_report(filepath, subject)
+            send_email_report(
+                client=self.client,
+                recipient_email=self.recipient_email,
+                subject=subject,
+                body="Please find attached your personalized email digest with summaries and action items.",
+                attachment_path=filepath,
+                logger=logger
+            )
 
         logger.info("✅ Daily email digest completed")
         return True

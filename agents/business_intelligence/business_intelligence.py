@@ -224,14 +224,14 @@ EVERY SINGLE data point, statistic, projection, or claim MUST include an inline 
 This is NOT optional - failure to include citations will result in rejection.
 
 REQUIRED FORMAT (use HTML exactly as shown):
-- News articles: <span class="citation">[Source: NEWS_SOURCE, "ARTICLE_TITLE", DATE]</span>
-- Research papers: <span class="citation">[Source: AUTHORS, "PAPER_TITLE", VENUE, YEAR]</span>
-- Web sources: <span class="citation">[Source: DOMAIN, "PAGE_TITLE", accessed DATE]</span>
-- Market data: <span class="citation">[Source: DATA_PROVIDER, as of DATE]</span>
+- News articles: <span class="citation">[Source: <a href="URL" target="_blank">NEWS_SOURCE</a>, "ARTICLE_TITLE", DATE]</span>
+- Research papers: <span class="citation">[Source: <a href="URL" target="_blank">AUTHORS</a>, "PAPER_TITLE", VENUE, YEAR]</span>
+- Web sources: <span class="citation">[Source: <a href="URL" target="_blank">DOMAIN</a>, "PAGE_TITLE", accessed DATE]</span>
+- Market data: <span class="citation">[Source: <a href="URL" target="_blank">DATA_PROVIDER</a>, as of DATE]</span>
 
 REQUIRED EXAMPLE (notice citation marker immediately after data):
-<p>The EV market is projected to grow at 23% CAGR <span class="citation">[Source: Bloomberg, "Electric Vehicle Market Outlook", 2024-10-15]</span></p>
-<p>Global smartphone sales reached 1.2B units <span class="citation">[Source: IDC, "Worldwide Quarterly Mobile Phone Tracker", Q3 2024]</span></p>
+<p>The EV market is projected to grow at 23% CAGR <span class="citation">[Source: <a href="https://bloomberg.com/..." target="_blank">Bloomberg</a>, "Electric Vehicle Market Outlook", 2024-10-15]</span></p>
+<p>Global smartphone sales reached 1.2B units <span class="citation">[Source: <a href="https://idc.com/..." target="_blank">IDC</a>, "Worldwide Quarterly Mobile Phone Tracker", Q3 2024]</span></p>
 
 VERIFICATION CHECKLIST - Before submitting, ensure:
 ✓ Every numerical value has inline <span class="citation">
@@ -295,13 +295,13 @@ EVERY SINGLE numerical data point, statistic, or factual claim MUST include an i
 This is NOT optional - failure to include citations will result in rejection.
 
 REQUIRED FORMAT (use HTML exactly as shown):
-- SEC filings: <span class="citation">[Source: {company} 10-K/10-Q filed DATE, p.XX]</span>
-- Market data: <span class="citation">[Source: Yahoo Finance, as of DATE]</span>
-- Calculated metrics: <span class="citation">[Calculated: FORMULA (Data from: SOURCE)]</span>
+- SEC filings: <span class="citation">[Source: <a href="URL" target="_blank">{company} 10-K/10-Q</a> filed DATE, p.XX]</span>
+- Market data: <span class="citation">[Source: <a href="URL" target="_blank">Yahoo Finance</a>, as of DATE]</span>
+- Calculated metrics: <span class="citation">[Calculated: FORMULA (Data from: <a href="URL" target="_blank">SOURCE</a>)]</span>
 
 REQUIRED EXAMPLE (notice citation marker immediately after data):
-<p>Revenue: $391.04B <span class="citation">[Source: {company} 10-K FY2024, filed 2024-10-31, p.24]</span></p>
-<p>P/E Ratio: 28.5 <span class="citation">[Source: Yahoo Finance, as of 2024-11-01]</span></p>
+<p>Revenue: $391.04B <span class="citation">[Source: <a href="https://sec.gov/..." target="_blank">{company} 10-K FY2024</a>, filed 2024-10-31, p.24]</span></p>
+<p>P/E Ratio: 28.5 <span class="citation">[Source: <a href="https://finance.yahoo.com/..." target="_blank">Yahoo Finance</a>, as of 2024-11-01]</span></p>
 
 VERIFICATION CHECKLIST - Before submitting, ensure:
 ✓ Every dollar amount has inline <span class="citation">
@@ -553,13 +553,13 @@ EVERY SINGLE data point, statistic, claim, or competitive intelligence MUST incl
 This is NOT optional - failure to include citations will result in rejection.
 
 REQUIRED FORMAT (use HTML exactly as shown):
-- Stock data: <span class="citation">[Source: Yahoo Finance, as of {datetime.now().strftime('%Y-%m-%d')}]</span>
-- News developments: <span class="citation">[Source: NEWS_SOURCE, "ARTICLE_TITLE", DATE]</span>
-- Web research: <span class="citation">[Source: DOMAIN, "PAGE_TITLE", accessed DATE]</span>
-- Calculated comparisons: <span class="citation">[Calculated from: DATA_SOURCE]</span>
+- Stock data: <span class="citation">[Source: <a href="URL" target="_blank">Yahoo Finance</a>, as of {datetime.now().strftime('%Y-%m-%d')}]</span>
+- News developments: <span class="citation">[Source: <a href="URL" target="_blank">NEWS_SOURCE</a>, "ARTICLE_TITLE", DATE]</span>
+- Web research: <span class="citation">[Source: <a href="URL" target="_blank">DOMAIN</a>, "PAGE_TITLE", accessed DATE]</span>
+- Calculated comparisons: <span class="citation">[Calculated from: <a href="URL" target="_blank">DATA_SOURCE</a>]</span>
 
 REQUIRED EXAMPLE (notice citation marker immediately after data):
-<p>{competitors_str.split(',')[0] if competitors_str else 'Company'} has a P/E ratio of 28.5 <span class="citation">[Source: Yahoo Finance, as of {datetime.now().strftime('%Y-%m-%d')}]</span>, compared to industry average of 24.3 <span class="citation">[Calculated from: Yahoo Finance sector data]</span></p>
+<p>{competitors_str.split(',')[0] if competitors_str else 'Company'} has a P/E ratio of 28.5 <span class="citation">[Source: <a href="https://finance.yahoo.com/..." target="_blank">Yahoo Finance</a>, as of {datetime.now().strftime('%Y-%m-%d')}]</span>, compared to industry average of 24.3 <span class="citation">[Calculated from: <a href="https://finance.yahoo.com/..." target="_blank">Yahoo Finance sector data</a>]</span></p>
 
 For comparison tables, add citation below table:
 <p style="font-size: 11px; color: #666; font-style: italic; margin-top: 5px;">[Source: Yahoo Finance, as of {datetime.now().strftime('%Y-%m-%d')}]</p>
@@ -896,27 +896,33 @@ CRITICAL:
         ])
 
         prompt = f"""
-Analyze the following report sections and extract all data sources mentioned or implied:
+Analyze the following report sections and extract all data sources mentioned.
+Focus on extracting URLs from the <a> tags in the content.
 
 {combined_content[:10000]}  # Limit to avoid token overflow
 
-Create a comprehensive data sources section listing all sources used, organized by category:
+Create a comprehensive data sources section listing all sources used, organized by category.
+IMPORTANT: You MUST preserve the exact URLs found in the content.
 
 1. **Official Regulatory Filings** (if SEC filings were mentioned)
    - List each filing with type, date, and link
+   - Format: <li><a href="URL" target="_blank">Company Filing-Type</a> (Filed: DATE)</li>
 
 2. **News Sources** (if news articles were mentioned)
    - List news sources with article titles and dates
-   - Limit to top 10 most significant
+   - Format: <li><a href="URL" target="_blank">Article Title</a> - Source Name, DATE</li>
 
 3. **Academic Research** (if research papers were mentioned)
    - List papers with authors, title, venue, year
+   - Format: <li><a href="URL" target="_blank">Paper Title</a> - Authors, Venue (Year)</li>
 
 4. **Market Data Providers** (if stock/financial data was used)
    - List providers like Yahoo Finance, Bloomberg, etc.
+   - Format: <li><a href="URL" target="_blank">Provider Name</a> (as of DATE)</li>
 
 5. **Web Sources** (if web research was conducted)
    - List key websites referenced
+   - Format: <li><a href="URL" target="_blank">Page Title</a> - Domain (Accessed: DATE)</li>
 
 Format as HTML:
 <h2>📚 Data Sources & Citations</h2>
@@ -935,7 +941,7 @@ Format as HTML:
 
     <h3>Market Data Providers</h3>
     <ul>
-        <li>Yahoo Finance (as of {datetime.now().strftime('%Y-%m-%d')})</li>
+        <li><a href="URL" target="_blank">Yahoo Finance</a> (as of {datetime.now().strftime('%Y-%m-%d')})</li>
     </ul>
 
     <p style="margin-top: 20px; font-style: italic; color: #666;">
@@ -945,8 +951,8 @@ Format as HTML:
 
 CRITICAL:
 1. Only include source categories that were actually used
-2. Extract URLs and dates where available
-3. If no specific citations found, create generic attribution
+2. YOU MUST EXTRACT AND USE THE EXACT URLs FROM THE INPUT CONTENT
+3. Do not invent new URLs
 4. HTML only, no markdown
 """
 
