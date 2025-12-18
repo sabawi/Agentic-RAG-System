@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.119"  # 🔧 CONSOLIDATION: Multiple bug fixes - WordPress long content, email without attachments, meta-task detection, dependency flexibility, placeholder detection, template simplification, Substack API fix
+VERSION = "1.0.3.120"  # 🔧 FIX: Content sanitizer for escape sequences + URL source verification rules to prevent LLM hallucination
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE

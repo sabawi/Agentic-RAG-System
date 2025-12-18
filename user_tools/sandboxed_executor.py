@@ -20,6 +20,21 @@ try:
 except ImportError:
     from base_user_tool import BaseUserTool
 
+# Import content sanitizer for escape sequence handling
+try:
+    from utils.content_sanitizer import sanitize_content
+except ImportError:
+    # Fallback if import fails
+    def sanitize_content(content: str, preserve_markdown: bool = True) -> str:
+        """Fallback sanitizer - handles basic escape sequences"""
+        if not content:
+            return content
+        content = content.replace('\\\\n', '\n')
+        content = content.replace('\\n', '\n')
+        content = content.replace('\\r', '\r')
+        content = content.replace('\\t', '\t')
+        return content
+
 
 class SandboxedExecutorTool(BaseUserTool):
     """
@@ -787,6 +802,11 @@ This is a secure sandboxed environment for code execution and system commands.
             
             filename = kwargs.get("filename", "").strip()
             content = kwargs.get("content", "")
+
+            # 🔧 FIX v1.0.3.120: Sanitize content to handle escaped sequences from JSON
+            # This fixes literal \n characters appearing in HTML/text output
+            content = sanitize_content(content)
+
             convert_to_pdf = kwargs.get("convert_to_pdf", False)
             skip_report_format = kwargs.get("skip_report_format", False)  # For raw LLM content
 

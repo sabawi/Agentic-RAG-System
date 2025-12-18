@@ -5659,6 +5659,17 @@ async def _verify_task_completion(user_prompt: str, tools_called: List[str], too
             "required_sequence": False,
             "description": "Send email with or without attachments"
         },
+        # 🔧 FIX v1.0.3.120: Pattern for "format as HTML and email as attachment" requests
+        # This catches follow-up prompts like "Email the above response in HTML attachment"
+        "html_attachment_email": {
+            "triggers": ["html attachment", "html format attachment", "formatted html", "neatly formatted html",
+                        "as html attachment", "in html attachment", "html email attachment", "html file attachment",
+                        "email the above", "email this response", "email the response", "email the full",
+                        "email verbatim", "attachment to"],
+            "required_tools": ["sandboxed_executor", "secure_email_sender"],
+            "required_sequence": True,
+            "description": "Create HTML file from content, then email as attachment"
+        },
         # 🎯 GENERALIZED CONTENT PUBLISHING - Detects ALL publishing/distribution requests
         # This pattern is EXTENSIBLE - automatically works with any social_media_* tool
         "content_publishing": {

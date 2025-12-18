@@ -9,6 +9,21 @@ from pathlib import Path
 from typing import Optional
 from bs4 import BeautifulSoup  # Requires: pip install beautifulsoup4
 
+# Import content sanitizer for escape sequence handling
+try:
+    from utils.content_sanitizer import sanitize_for_html
+except ImportError:
+    # Fallback if import fails (e.g., when running standalone)
+    def sanitize_for_html(content: str) -> str:
+        """Fallback sanitizer - handles basic escape sequences"""
+        if not content:
+            return content
+        content = content.replace('\\\\n', '\n')
+        content = content.replace('\\n', '\n')
+        content = content.replace('\\r', '\r')
+        content = content.replace('\\t', '\t')
+        return content
+
 
 class HTMLReportGenerator:
     """Unified HTML report generator using shared templates"""
@@ -339,6 +354,10 @@ th {
             Complete HTML document as string
         """
         try:
+            # 🔧 FIX v1.0.3.120: Sanitize content FIRST to handle escaped sequences
+            # This fixes literal \n characters appearing in HTML output
+            content = sanitize_for_html(content)
+
             # 🔧 FIX: If content is already complete HTML, return it as-is
             if self.is_already_html(content):
                 print(f"✅ HTML GENERATOR: Content is already complete HTML - returning as-is (no wrapping)")
