@@ -25,7 +25,7 @@ Usage:
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - ONLY MODIFY THIS LINE TO UPDATE VERSION
 # =============================================================================
-VERSION = "1.0.3.120"  # 🔧 FIX: Content sanitizer for escape sequences + URL source verification rules to prevent LLM hallucination
+VERSION = "1.0.3.121"
 
 # =============================================================================
 # DERIVED VALUES - DO NOT MODIFY THESE

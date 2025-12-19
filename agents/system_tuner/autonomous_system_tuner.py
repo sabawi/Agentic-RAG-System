@@ -20,8 +20,12 @@ SAFETY FEATURES:
 - User approval for sudo operations
 - Comprehensive logging and rollback capability
 
+CONFIGURATION:
+All configuration values are loaded from config/agents_config.yaml.
+No hardcoded configuration values per PROJECT_CONFIGURATION_DIRECTIVE.
+
 Author: Agentic-RAG Development Team
-Version: 1.0.0
+Version: 1.1.0
 """
 
 import argparse
@@ -29,21 +33,45 @@ import json
 import logging
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import openai
 
-# Configure logging
+# Add agents directory to path for common imports
+agents_dir = Path(__file__).parent.parent
+if str(agents_dir) not in sys.path:
+    sys.path.insert(0, str(agents_dir))
+
+# Import configuration loader
+from common.config_loader import get_agent_config, AgentConfigError, AgentConfig
+
+# Agent name for configuration lookup
+AGENT_NAME = "system_tuner"
+
+# Load configuration at module level (fail-fast if missing)
+try:
+    _config = get_agent_config(AGENT_NAME)
+except AgentConfigError as e:
+    print(f"FATAL: Failed to load configuration for {AGENT_NAME}: {e}", file=sys.stderr)
+    sys.exit(1)
+
+# Get log file path from config
+_log_file = _config.get_log_file() or "system_tuner.log"
+_log_level_str = _config.get_log_level()
+_log_level = getattr(logging, _log_level_str.upper(), logging.INFO)
+
+# Configure logging using config values
 logging.basicConfig(
-    level=logging.INFO,
+    level=_log_level,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('system_tuner.log'),
+        logging.FileHandler(_log_file),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -55,45 +83,73 @@ class SystemTunerAgent:
 
     def __init__(
         self,
-        server_url: str = "http://localhost:5000/v1",
-        dry_run: bool = False,
-        max_iterations: int = 10
+        config: Optional[AgentConfig] = None,
+        server_url: Optional[str] = None,
+        dry_run: Optional[bool] = None,
+        max_iterations: Optional[int] = None
     ):
         """
         Initialize the autonomous tuning agent.
 
+        All configuration is loaded from config/agents_config.yaml.
+        Command-line arguments can override config values.
+
         Args:
-            server_url: URL of the Agentic-RAG server (must be local)
-            dry_run: If True, only plan but don't execute changes
-            max_iterations: Maximum tuning iterations
+            config: AgentConfig object (uses module-level _config if not provided)
+            server_url: Override server URL from config
+            dry_run: Override dry_run setting from config
+            max_iterations: Override max_iterations from config
         """
-        self.server_url = server_url
-        self.dry_run = dry_run
-        self.max_iterations = max_iterations
+        # Use provided config or module-level config
+        self.config = config or _config
+
+        # Load values from config, allow command-line overrides
+        self.server_url = server_url or self.config.get_server_url()
+        self.dry_run = dry_run if dry_run is not None else self.config.get_safety_setting('dry_run_default', True)
+        self.max_iterations = max_iterations or self.config.get_execution_setting('max_iterations', 10)
+
+        # Load additional config values
+        self.require_user_approval = self.config.get_safety_setting('require_user_approval', True)
+        self.skip_high_risk_in_dry_run = self.config.get_safety_setting('skip_high_risk_in_dry_run', True)
+        self.allowed_risk_levels = self.config.get_safety_setting('allowed_risk_levels', ['low', 'medium'])
+        self.forbidden_patterns = self.config.get_safety_setting('forbidden_patterns', [])
+        self.pause_between_actions = self.config.get_execution_setting('pause_between_actions', 2)
+        self.command_timeout = self.config.get_execution_setting('command_timeout', 30)
+
+        # LLM settings
+        self.llm_model = self.config.get_llm_model()
+        self.llm_temperature = self.config.get_llm_setting('temperature', 0.3)
+        self.llm_max_tokens = self.config.get_llm_setting('max_tokens', 4096)
+        self.llm_timeout = self.config.get_llm_setting('timeout', 120)
 
         # State tracking
         self.system_info = {}
         self.baseline_metrics = {}
+        self.initial_baseline_metrics = {}  # Store initial baseline separately
         self.tuning_plan = []
         self.executed_changes = []
         self.performance_history = []
 
-        # Backup directory
-        self.backup_dir = Path("system_tuning_backups") / datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Backup directory from config
+        backup_base = self.config.get_backup_setting('base_directory', 'agents/system_tuner/system_tuning_backups')
+        self.backup_dir = Path(backup_base) / datetime.now().strftime("%Y%m%d_%H%M%S")
         self.backup_dir.mkdir(parents=True, exist_ok=True)
 
-        # Initialize OpenAI client
+        # Initialize OpenAI client using config values
         self.client = openai.OpenAI(
-            base_url=server_url,
-            api_key="not-required"
+            base_url=self.server_url,
+            api_key=self.config.get_api_key()
         )
 
         logger.info("=" * 80)
         logger.info("🤖 AUTONOMOUS SYSTEM PERFORMANCE TUNING AGENT")
         logger.info("=" * 80)
-        logger.info(f"Server: {server_url}")
-        logger.info(f"Dry Run: {dry_run}")
+        logger.info(f"Server: {self.server_url}")
+        logger.info(f"Model: {self.llm_model}")
+        logger.info(f"Dry Run: {self.dry_run}")
+        logger.info(f"Max Iterations: {self.max_iterations}")
         logger.info(f"Backup Dir: {self.backup_dir}")
+        logger.info(f"Config Path: {self.config._config}")
         logger.info("=" * 80)
 
     # ============================================================================
@@ -134,8 +190,12 @@ class SystemTunerAgent:
                             info['distribution'] = line.split('=')[1].strip().strip('"')
                             logger.info(f"Distribution: {info['distribution']}")
                             break
-            except:
+            except FileNotFoundError:
                 info['distribution'] = 'Unknown'
+                logger.debug("Could not read /etc/os-release - file not found")
+            except (IOError, OSError) as e:
+                info['distribution'] = 'Unknown'
+                logger.debug(f"Could not read /etc/os-release: {e}")
 
         # CPU information
         try:
@@ -143,24 +203,27 @@ class SystemTunerAgent:
             info['cpu'] = self._parse_lscpu(cpu_info)
             logger.info(f"CPU: {info['cpu'].get('Model name', 'Unknown')}")
             logger.info(f"CPU Cores: {info['cpu'].get('CPU(s)', 'Unknown')}")
-        except:
+        except (ValueError, KeyError) as e:
             info['cpu'] = {}
+            logger.debug(f"Failed to parse CPU info: {e}")
 
         # Memory information
         try:
             mem_info = self._run_command("free -h")
             info['memory'] = self._parse_free(mem_info)
             logger.info(f"Memory: {info['memory'].get('total', 'Unknown')}")
-        except:
+        except (ValueError, KeyError, IndexError) as e:
             info['memory'] = {}
+            logger.debug(f"Failed to parse memory info: {e}")
 
         # Disk information
         try:
             disk_info = self._run_command("df -h /")
             info['disk'] = self._parse_df(disk_info)
             logger.info(f"Disk: {info['disk'].get('size', 'Unknown')} (Used: {info['disk'].get('used_percent', 'Unknown')})")
-        except:
+        except (ValueError, KeyError, IndexError) as e:
             info['disk'] = {}
+            logger.debug(f"Failed to parse disk info: {e}")
 
         # Check permissions
         info['is_root'] = os.geteuid() == 0 if hasattr(os, 'geteuid') else False
@@ -181,11 +244,31 @@ class SystemTunerAgent:
         """
         Collect baseline performance metrics.
 
+        This method stores the metrics as the initial baseline for later comparison.
+        Call this once at the beginning of the tuning process.
+
         Returns:
             Dictionary with baseline metrics
         """
         logger.info("\n📊 Collecting Baseline Metrics...")
 
+        metrics = self._collect_current_metrics()
+
+        # Store as both current baseline and initial baseline
+        self.baseline_metrics = metrics
+        self.initial_baseline_metrics = metrics.copy()
+
+        return metrics
+
+    def _collect_current_metrics(self) -> Dict:
+        """
+        Collect current performance metrics without storing as baseline.
+
+        This is used for validation comparisons.
+
+        Returns:
+            Dictionary with current metrics
+        """
         metrics = {}
 
         # CPU usage
@@ -193,40 +276,39 @@ class SystemTunerAgent:
             cpu_usage = self._run_command("top -bn1 | grep 'Cpu(s)'")
             metrics['cpu_idle'] = self._parse_cpu_usage(cpu_usage)
             logger.info(f"CPU Idle: {metrics['cpu_idle']}%")
-        except:
-            pass
+        except (ValueError, IndexError) as e:
+            logger.debug(f"Failed to collect CPU metrics: {e}")
 
         # Memory usage
         try:
             mem_info = self._run_command("free -m")
             metrics['memory'] = self._parse_memory_usage(mem_info)
             logger.info(f"Memory Used: {metrics['memory'].get('used_mb', 0)} MB / {metrics['memory'].get('total_mb', 0)} MB")
-        except:
-            pass
+        except (ValueError, IndexError) as e:
+            logger.debug(f"Failed to collect memory metrics: {e}")
 
         # Disk I/O
         try:
             io_stat = self._run_command("iostat -x 1 2 | tail -n +4")
             metrics['disk_io'] = self._parse_iostat(io_stat)
-        except:
-            pass
+        except (ValueError, IndexError) as e:
+            logger.debug(f"Failed to collect disk I/O metrics: {e}")
 
         # Network stats
         try:
             net_stat = self._run_command("netstat -s | head -20")
             metrics['network'] = {'raw': net_stat[:500]}
-        except:
-            pass
+        except (ValueError, IndexError) as e:
+            logger.debug(f"Failed to collect network metrics: {e}")
 
         # Load average
         try:
             uptime = self._run_command("uptime")
             metrics['load_average'] = uptime.split('load average:')[1].strip() if 'load average' in uptime else 'N/A'
             logger.info(f"Load Average: {metrics['load_average']}")
-        except:
-            pass
+        except (ValueError, IndexError) as e:
+            logger.debug(f"Failed to collect load average: {e}")
 
-        self.baseline_metrics = metrics
         return metrics
 
     # ============================================================================
@@ -247,17 +329,17 @@ class SystemTunerAgent:
         # Build comprehensive prompt for the server
         prompt = self._build_research_prompt()
 
-        logger.info("🔍 Querying server LLM for tuning strategies...")
+        logger.info(f"🔍 Querying server LLM ({self.llm_model}) for tuning strategies...")
 
         try:
             response = self.client.chat.completions.create(
-                model="Agentic-RAG-Model1",
+                model=self.llm_model,
                 messages=[{
                     "role": "user",
                     "content": prompt
                 }],
-                temperature=0.3,  # Lower temperature for factual analysis
-                max_tokens=4096
+                temperature=self.llm_temperature,
+                max_tokens=self.llm_max_tokens
             )
 
             strategies_text = response.choices[0].message.content
@@ -429,8 +511,8 @@ CONSTRAINTS:
                 logger.error("❌ Critical failure - stopping execution")
                 break
 
-            # Pause between actions
-            time.sleep(2)
+            # Pause between actions (from config)
+            time.sleep(self.pause_between_actions)
 
         self.executed_changes = results
         return results
@@ -489,6 +571,15 @@ CONSTRAINTS:
 
     def _execute_via_server(self, command: str) -> Dict:
         """Execute command via server's sandboxed_executor tool."""
+        # Check for forbidden patterns before execution
+        for pattern in self.forbidden_patterns:
+            if pattern in command:
+                return {
+                    'success': False,
+                    'output': '',
+                    'error': f"Command contains forbidden pattern: {pattern}"
+                }
+
         try:
             # Use server to execute command safely
             prompt = f"""
@@ -500,9 +591,9 @@ Return the output and any errors.
 """
 
             response = self.client.chat.completions.create(
-                model="Agentic-RAG-Model1",
+                model=self.llm_model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
+                temperature=0.1,  # Very low for command execution
                 max_tokens=2048
             )
 
@@ -536,12 +627,12 @@ Return the output and any errors.
         logger.info("PHASE 5: VALIDATION")
         logger.info("=" * 80)
 
-        # Collect new metrics
+        # Collect new metrics (store separately, don't overwrite baseline)
         logger.info("📊 Collecting post-tuning metrics...")
-        new_metrics = self.collect_baseline_metrics()
+        new_metrics = self._collect_current_metrics()
 
-        # Compare
-        comparison = self._compare_metrics(self.baseline_metrics, new_metrics)
+        # Compare against INITIAL baseline (not the potentially overwritten one)
+        comparison = self._compare_metrics(self.initial_baseline_metrics, new_metrics)
 
         logger.info("\n📈 Performance Comparison:")
         for key, change in comparison.items():
@@ -627,11 +718,17 @@ Failed: {sum(1 for r in self.executed_changes if not r['success'])}
                 shell=True,
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=self.command_timeout
             )
             return result.stdout
-        except Exception as e:
+        except subprocess.TimeoutExpired as e:
+            logger.debug(f"Command timed out after {self.command_timeout}s: {command}")
+            return ""
+        except subprocess.SubprocessError as e:
             logger.debug(f"Command failed: {command} - {e}")
+            return ""
+        except Exception as e:
+            logger.debug(f"Unexpected error running command: {command} - {e}")
             return ""
 
     def _check_sudo(self) -> bool:
@@ -643,7 +740,11 @@ Failed: {sum(1 for r in self.executed_changes if not r['success'])}
                 timeout=5
             )
             return result.returncode == 0
-        except:
+        except subprocess.TimeoutExpired:
+            logger.debug("sudo check timed out")
+            return False
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            logger.debug(f"sudo check failed: {e}")
             return False
 
     def _detect_services(self) -> List[str]:
@@ -653,10 +754,12 @@ Failed: {sum(1 for r in self.executed_changes if not r['success'])}
             output = self._run_command("systemctl list-units --type=service --state=running --no-pager")
             for line in output.split('\n'):
                 if '.service' in line:
-                    service_name = line.split()[0].replace('.service', '')
-                    services.append(service_name)
-        except:
-            pass
+                    parts = line.split()
+                    if parts:
+                        service_name = parts[0].replace('.service', '')
+                        services.append(service_name)
+        except (ValueError, IndexError) as e:
+            logger.debug(f"Failed to detect services: {e}")
         return services[:20]  # Limit to 20
 
     def _assess_limitations(self) -> Dict:
@@ -679,11 +782,11 @@ Failed: {sum(1 for r in self.executed_changes if not r['success'])}
             backup_name = source.name + ".backup"
             backup_path = self.backup_dir / backup_name
 
-            import shutil
+            # shutil is imported at module level
             shutil.copy2(source, backup_path)
             logger.info(f"💾 Backed up: {filepath} → {backup_path}")
             return True
-        except Exception as e:
+        except (IOError, OSError, shutil.Error) as e:
             logger.error(f"Backup failed for {filepath}: {e}")
             return False
 
@@ -883,10 +986,15 @@ Failed: {sum(1 for r in self.executed_changes if not r['success'])}
 
 def main():
     """Main entry point."""
+    # Get config defaults for help text
+    default_server = _config.get_server_url()
+    default_dry_run = _config.get_safety_setting('dry_run_default', True)
+    default_max_iter = _config.get_execution_setting('max_iterations', 10)
+
     parser = argparse.ArgumentParser(
         description="Autonomous System Performance Tuning Agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
 This agent autonomously tunes system performance by:
 1. Discovering system capabilities and limitations
 2. Researching optimal tuning strategies via LLM
@@ -894,12 +1002,15 @@ This agent autonomously tunes system performance by:
 4. Executing changes with full backup capability
 5. Validating improvements and iterating
 
+Configuration is loaded from config/agents_config.yaml.
+Command-line arguments override configuration values.
+
 Examples:
-  # Dry run (plan only, no changes)
+  # Dry run (plan only, no changes) - default based on config
   %(prog)s --dry-run
 
-  # Full autonomous tuning
-  %(prog)s
+  # Full autonomous tuning (override dry-run default)
+  %(prog)s --execute
 
   # Custom server URL
   %(prog)s --server http://localhost:8000/v1
@@ -911,35 +1022,65 @@ Examples:
 
     parser.add_argument(
         '--server',
-        default='http://localhost:5000/v1',
-        help='Server URL (must be local)'
+        default=None,
+        help=f'Server URL (default from config: {default_server})'
     )
-    parser.add_argument(
+
+    # Mutually exclusive dry-run / execute
+    run_mode = parser.add_mutually_exclusive_group()
+    run_mode.add_argument(
         '--dry-run',
         action='store_true',
-        help='Plan only, do not execute changes'
+        default=None,
+        help=f'Plan only, do not execute changes (config default: {default_dry_run})'
     )
+    run_mode.add_argument(
+        '--execute',
+        action='store_true',
+        help='Execute changes (opposite of --dry-run)'
+    )
+
     parser.add_argument(
         '--max-iterations',
         type=int,
-        default=10,
-        help='Maximum tuning iterations (default: 10)'
+        default=None,
+        help=f'Maximum tuning iterations (config default: {default_max_iter})'
     )
     parser.add_argument(
         '--verbose',
         action='store_true',
         help='Enable verbose logging'
     )
+    parser.add_argument(
+        '--show-config',
+        action='store_true',
+        help='Show loaded configuration and exit'
+    )
 
     args = parser.parse_args()
+
+    # Handle --show-config
+    if args.show_config:
+        import yaml
+        print("Loaded configuration for system_tuner agent:")
+        print(yaml.dump(_config.to_dict(), default_flow_style=False))
+        sys.exit(0)
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Determine dry_run setting
+    dry_run = None
+    if args.dry_run:
+        dry_run = True
+    elif args.execute:
+        dry_run = False
+    # If neither specified, agent will use config default
+
     # Create and run agent
     agent = SystemTunerAgent(
         server_url=args.server,
-        dry_run=args.dry_run,
+        dry_run=dry_run,
         max_iterations=args.max_iterations
     )
 

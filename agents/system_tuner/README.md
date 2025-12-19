@@ -1,5 +1,7 @@
 # 🤖 Autonomous System Performance Tuning Agent
 
+**Version:** 1.1.0
+
 ## Overview
 
 This is a **truly autonomous agent** that discovers, researches, plans, and executes system performance optimizations with minimal human intervention.
@@ -10,6 +12,28 @@ Unlike traditional scripts that follow predefined rules, this agent:
 - **Plans** a safe, reversible tuning strategy
 - **Executes** changes incrementally with validation
 - **Learns** from results and iterates until optimal
+
+## Configuration
+
+All configuration is loaded from `config/agents_config.yaml`. See [Agent Configuration Guide](../../docs/AGENT_CONFIGURATION_GUIDE.md) for details.
+
+### Key Configuration Options
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `server.base_url` | `http://localhost:5000/v1` | Agentic-RAG server URL |
+| `llm.model` | `Agentic-RAG-Model1` | LLM model for research |
+| `llm.temperature` | `0.3` | Lower for factual responses |
+| `safety.dry_run_default` | `true` | Default to safe mode |
+| `safety.forbidden_patterns` | `["rm -rf", ...]` | Commands never allowed |
+| `execution.max_iterations` | `10` | Maximum tuning iterations |
+| `backup.base_directory` | `agents/system_tuner/...` | Where backups are stored |
+
+### View Current Configuration
+
+```bash
+python agents/system_tuner/autonomous_system_tuner.py --show-config
+```
 
 ---
 
@@ -84,10 +108,10 @@ The agent measures improvements:
 ## 🚀 Usage
 
 ### **Test Run (Dry Run)**
-Safe mode - plans but doesn't execute:
+Safe mode - plans but doesn't execute (this is the default from config):
 ```bash
 cd /home/sabawi/Development/flaskserver
-python autonomous_system_tuner.py --dry-run
+python agents/system_tuner/autonomous_system_tuner.py --dry-run
 ```
 
 **What happens:**
@@ -98,9 +122,9 @@ python autonomous_system_tuner.py --dry-run
 - ❌ Does NOT execute changes
 
 ### **Full Autonomous Run**
-Execute actual system tuning:
+Execute actual system tuning (overrides dry-run default):
 ```bash
-python autonomous_system_tuner.py
+python agents/system_tuner/autonomous_system_tuner.py --execute
 ```
 
 **What happens:**
@@ -112,16 +136,33 @@ python autonomous_system_tuner.py
 - Validates improvements
 - Generates report
 
+### **View Configuration**
+See merged configuration values:
+```bash
+python agents/system_tuner/autonomous_system_tuner.py --show-config
+```
+
 ### **Verbose Mode**
 See detailed debug information:
 ```bash
-python autonomous_system_tuner.py --verbose
+python agents/system_tuner/autonomous_system_tuner.py --verbose
 ```
 
 ### **Custom Server**
-If server is on different port:
+Override server URL from config:
 ```bash
-python autonomous_system_tuner.py --server http://localhost:8000/v1
+python agents/system_tuner/autonomous_system_tuner.py --server http://localhost:8000/v1
+```
+
+### **Command-Line Options**
+```
+--server URL         Override server URL from config
+--dry-run            Plan only, do not execute changes
+--execute            Execute changes (opposite of --dry-run)
+--max-iterations N   Override max iterations from config
+--verbose            Enable debug logging
+--show-config        Show merged configuration and exit
+--help               Show help message
 ```
 
 ---

@@ -1,0 +1,237 @@
+# =============================================================================
+# AGENTS CONFIGURATION FILE
+# =============================================================================
+#
+# Single source of truth for all autonomous agent configurations.
+# This file is SEPARATE from the server's llm_config.yaml to allow:
+#   - Agents to run on different hosts than the server
+#   - Independent agent deployment and configuration
+#   - Clear separation of concerns between server and agent configs
+#
+# CONFIGURATION RULES:
+#   - All agent config values MUST be defined here (no hardcoded values in code)
+#   - Secrets (API keys, passwords) go in .env file, referenced as ${VAR_NAME}
+#   - Agents MUST fail-fast if required configuration is missing
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# GLOBAL AGENT DEFAULTS
+# These apply to all agents unless overridden in agent-specific sections
+# -----------------------------------------------------------------------------
+defaults:
+  # Server connection settings
+  server:
+    base_url: "http://localhost:5000/v1"
+    health_check_timeout: 10
+    api_key: "not-required"  # For local server; use ${ENV_VAR} for remote
+
+  # LLM settings for agent queries
+  llm:
+    model: "Agentic-RAG-Model1"
+    temperature: 0.7
+    max_tokens: 4096
+    timeout: 600
+
+  # Execution settings
+  execution:
+    max_retries: 3
+    retry_base_delay: 2.0  # seconds (exponential backoff: 2, 4, 8...)
+    command_timeout: 30     # seconds per shell command
+
+  # Logging settings
+  logging:
+    level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# -----------------------------------------------------------------------------
+# AGENT-SPECIFIC CONFIGURATIONS
+# Each agent can override defaults and add its own settings
+# -----------------------------------------------------------------------------
+
+agents:
+  # ---------------------------------------------------------------------------
+  # System Tuner Agent
+  # Autonomous system performance tuning
+  # ---------------------------------------------------------------------------
+  system_tuner:
+    enabled: true
+
+    # Override LLM settings for research phase (lower temp for factual)
+    llm:
+      temperature: 0.3
+      max_tokens: 4096
+      timeout: 120
+
+    # Execution settings
+    execution:
+      max_iterations: 10
+      pause_between_actions: 2  # seconds
+      command_timeout: 30
+
+    # Safety settings
+    safety:
+      dry_run_default: true     # Default to safe mode
+      require_user_approval: true
+      skip_high_risk_in_dry_run: true
+      allowed_risk_levels:
+        - low
+        - medium
+      # Commands/patterns that are NEVER allowed
+      forbidden_patterns:
+        - "rm -rf"
+        - "mkfs"
+        - "dd if="
+        - ":(){ :|:& };:"
+        - "> /dev/sd"
+
+    # Backup settings
+    backup:
+      base_directory: "agents/system_tuner/system_tuning_backups"
+      retention_days: 30
+
+    # Output settings
+    output:
+      log_file: "agents/system_tuner/system_tuner.log"
+      report_directory: "agents/system_tuner/system_tuning_backups"
+
+  # ---------------------------------------------------------------------------
+  # Business Intelligence Agent
+  # Comprehensive market research and strategic analysis
+  # ---------------------------------------------------------------------------
+  business_intelligence:
+    enabled: true
+
+    llm:
+      temperature: 0.7
+      max_tokens: 8192
+
+    output:
+      directory: "agents/business_intelligence/intelligence_reports"
+      report_format: "html"
+
+  # ---------------------------------------------------------------------------
+  # Email Digest Agent
+  # Automated email summarization and priority management
+  # ---------------------------------------------------------------------------
+  email_digest:
+    enabled: true
+
+    llm:
+      temperature: 0.5
+      max_tokens: 4096
+
+    defaults:
+      hours_back: 24
+
+    output:
+      directory: "agents/email_digest/email_digests"
+      report_format: "html"
+
+  # ---------------------------------------------------------------------------
+  # Market Sentiment Agent
+  # Financial news aggregation and sentiment analysis
+  # ---------------------------------------------------------------------------
+  market_sentiment:
+    enabled: true
+
+    llm:
+      temperature: 0.5
+      max_tokens: 4096
+
+    output:
+      directory: "agents/market_sentiment/sentiment_reports"
+      report_format: "html"
+
+  # ---------------------------------------------------------------------------
+  # Research Assistant Agent
+  # Academic paper aggregation and literature review
+  # ---------------------------------------------------------------------------
+  research_assistant:
+    enabled: true
+
+    llm:
+      temperature: 0.7
+      max_tokens: 8192
+
+    defaults:
+      max_papers_per_topic: 10
+      citation_threshold: 50
+
+    output:
+      directory: "agents/research_assistant/research_output"
+      report_format: "html"
+
+  # ---------------------------------------------------------------------------
+  # Document Intelligence Agent
+  # Automated document processing and insight extraction
+  # ---------------------------------------------------------------------------
+  document_intelligence:
+    enabled: true
+
+    llm:
+      temperature: 0.5
+      max_tokens: 8192
+
+    output:
+      directory: "agents/document_intelligence/document_reports"
+      report_format: "html"
+
+  # ---------------------------------------------------------------------------
+  # Social Media Tracker Agent
+  # Social media monitoring and trend detection
+  # ---------------------------------------------------------------------------
+  social_media_tracker:
+    enabled: true
+
+    llm:
+      temperature: 0.5
+      max_tokens: 4096
+
+    output:
+      directory: "agents/social_media_tracker/social_reports"
+      report_format: "html"
+
+  # ---------------------------------------------------------------------------
+  # Stock Monitor Agent
+  # Portfolio monitoring and price alerts
+  # ---------------------------------------------------------------------------
+  stock_monitor:
+    enabled: true
+
+    llm:
+      temperature: 0.3
+      max_tokens: 4096
+
+    output:
+      directory: "agents/stock_monitor/stock_reports"
+      report_format: "html"
+
+  # ---------------------------------------------------------------------------
+  # News Retriever Agent
+  # News aggregation and summarization
+  # ---------------------------------------------------------------------------
+  news_retriever:
+    enabled: true
+
+    llm:
+      temperature: 0.5
+      max_tokens: 4096
+
+    output:
+      directory: "agents/news_retriever/news_output"
+      report_format: "html"
+
+  # ---------------------------------------------------------------------------
+  # Website Deployer Agent
+  # Website deployment automation
+  # ---------------------------------------------------------------------------
+  website_deployer:
+    enabled: true
+
+    llm:
+      temperature: 0.3
+      max_tokens: 4096
+
+    output:
+      directory: "agents/website_deployer/deployment_reports"
